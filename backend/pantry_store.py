@@ -6,24 +6,28 @@ from uuid import UUID
 
 from pantry import PantryItem, PantryItemCreate, PantryItemUpdate, StorageLocation
 
-DATA_DIR = Path(__file__).parent / "data"
-PANTRY_FILE = DATA_DIR / "pantry.json"
+_DEFAULT_FILE = Path(__file__).parent / "data" / "pantry.json"
 
 
 class PantryStore:
+    def __init__(self, file_path: Path = _DEFAULT_FILE) -> None:
+        self._file = file_path
+
     def _load(self) -> list[PantryItem]:
-        if not PANTRY_FILE.exists():
+        if not self._file.exists():
             return []
-        with open(PANTRY_FILE) as f:
+        with open(self._file) as f:
             data = json.load(f)
         return [PantryItem.model_validate(item) for item in data]
 
     def _save(self, items: list[PantryItem]) -> None:
-        DATA_DIR.mkdir(exist_ok=True)
-        with open(PANTRY_FILE, "w") as f:
+        self._file.parent.mkdir(parents=True, exist_ok=True)
+        with open(self._file, "w") as f:
             json.dump([item.model_dump(mode="json") for item in items], f, indent=2)
 
-    def list_items(self, location: Optional[StorageLocation] = None) -> list[PantryItem]:
+    def list_items(
+        self, location: Optional[StorageLocation] = None
+    ) -> list[PantryItem]:
         items = self._load()
         if location is not None:
             items = [i for i in items if i.storage_location == location]
@@ -39,7 +43,9 @@ class PantryStore:
         self._save(items)
         return item
 
-    def update_item(self, item_id: UUID, data: PantryItemUpdate) -> Optional[PantryItem]:
+    def update_item(
+        self, item_id: UUID, data: PantryItemUpdate
+    ) -> Optional[PantryItem]:
         items = self._load()
         for idx, item in enumerate(items):
             if item.id == item_id:
