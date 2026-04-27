@@ -1,9 +1,10 @@
 import json
 from collections.abc import AsyncGenerator
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import anthropic
+from anthropic.types import MessageParam
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -61,7 +62,7 @@ def sse(chunk: dict) -> str:
     return f"data: {json.dumps(chunk)}\n\n"
 
 
-async def ui_message_stream(messages: list[dict]) -> AsyncGenerator[str, None]:
+async def ui_message_stream(messages: list[MessageParam]) -> AsyncGenerator[str, None]:
     # AI SDK v6 expects SSE with UIMessageChunk objects
     text_id = "text-0"
     yield sse({"type": "text-start", "id": text_id})
@@ -78,11 +79,10 @@ async def ui_message_stream(messages: list[dict]) -> AsyncGenerator[str, None]:
 
 @app.post("/api/chat")
 async def chat(request: ChatRequest):
-    messages = [
-        {"role": m.role, "content": m.text()}
-        for m in request.messages
-        if m.text()
-    ]
+    messages = cast(
+        list[MessageParam],
+        [{"role": m.role, "content": m.text()} for m in request.messages if m.text()],
+    )
     return StreamingResponse(
         ui_message_stream(messages),
         media_type="text/event-stream",

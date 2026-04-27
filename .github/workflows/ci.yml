@@ -26,6 +26,9 @@ jobs:
       - name: Format check
         run: uv run --project backend ruff format --check backend
 
+      - name: Test
+        run: uv run --project backend pytest backend
+
   frontend:
     runs-on: ubuntu-latest
     steps:

@@ -28,8 +28,12 @@ backend-lint:
 backend-fmt:
     uv run --project backend ruff format --check backend
 
+# Run backend tests
+backend-test:
+    uv run --project backend pytest backend
+
 # Run all backend checks
-backend-check: backend-lint backend-fmt
+backend-check: backend-lint backend-fmt backend-test
 
 # ── Frontend ───────────────────────────────────────────────────────────────────
 
