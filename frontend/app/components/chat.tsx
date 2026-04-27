@@ -39,10 +39,10 @@ export default function Chat() {
         <span className="text-2xl">🥗</span>
         <div>
           <h1 className="text-lg font-semibold text-stone-900 dark:text-stone-50 leading-tight">
-            Kitchen AI
+            Kitchen Agent
           </h1>
           <p className="text-xs text-stone-500 dark:text-stone-400">
-            Meal planning &amp; kitchen management
+            Meal planning &amp; kitchen management agent
           </p>
         </div>
       </header>

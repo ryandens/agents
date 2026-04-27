@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Kitchen AI",
-  description: "AI-powered meal planning and kitchen management",
+  title: "Kitchen Agent",
+  description: "AI-powered meal planning and kitchen management agent",
 };
 
 export default function RootLayout({
