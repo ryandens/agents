@@ -12,8 +12,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install just
-        uses: extractions/setup-just@v4
+      - name: Setup Just
+        uses: taiki-e/install-action@just
 
       - name: Install uv
         uses: astral-sh/setup-uv@v6
@@ -31,8 +31,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install just
-        uses: extractions/setup-just@v4
+      - name: Setup Just
+        uses: taiki-e/install-action@just
 
       - name: Setup Node
         uses: actions/setup-node@v4
