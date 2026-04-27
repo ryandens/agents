@@ -2,14 +2,18 @@ import json
 from collections.abc import AsyncGenerator
 from pathlib import Path
 from typing import Any, cast
+from uuid import UUID
 
 import anthropic
 from anthropic.types import MessageParam
 from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+
+from pantry import PantryItem, PantryItemCreate, PantryItemUpdate, StorageLocation
+from pantry_store import PantryStore
 
 # Search from this file's location up through the repo root
 load_dotenv(dotenv_path=Path(__file__).parent.parent / ".env")
@@ -18,9 +22,11 @@ app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_methods=["POST"],
+    allow_methods=["*"],
     allow_headers=["*"],
 )
+
+pantry_store = PantryStore()
 
 client = anthropic.AsyncAnthropic()
 
@@ -88,6 +94,38 @@ async def chat(request: ChatRequest):
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache"},
     )
+
+
+@app.get("/api/pantry", response_model=list[PantryItem])
+def list_pantry(location: StorageLocation | None = None):
+    return pantry_store.list_items(location=location)
+
+
+@app.post("/api/pantry", response_model=PantryItem, status_code=201)
+def create_pantry_item(data: PantryItemCreate):
+    return pantry_store.create_item(data)
+
+
+@app.get("/api/pantry/{item_id}", response_model=PantryItem)
+def get_pantry_item(item_id: UUID):
+    item = pantry_store.get_item(item_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="Item not found")
+    return item
+
+
+@app.patch("/api/pantry/{item_id}", response_model=PantryItem)
+def update_pantry_item(item_id: UUID, data: PantryItemUpdate):
+    item = pantry_store.update_item(item_id, data)
+    if item is None:
+        raise HTTPException(status_code=404, detail="Item not found")
+    return item
+
+
+@app.delete("/api/pantry/{item_id}", status_code=204)
+def delete_pantry_item(item_id: UUID):
+    if not pantry_store.delete_item(item_id):
+        raise HTTPException(status_code=404, detail="Item not found")
 
 
 if __name__ == "__main__":

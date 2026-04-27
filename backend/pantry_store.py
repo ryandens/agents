@@ -1,0 +1,60 @@
+import json
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Optional
+from uuid import UUID
+
+from pantry import PantryItem, PantryItemCreate, PantryItemUpdate, StorageLocation
+
+DATA_DIR = Path(__file__).parent / "data"
+PANTRY_FILE = DATA_DIR / "pantry.json"
+
+
+class PantryStore:
+    def _load(self) -> list[PantryItem]:
+        if not PANTRY_FILE.exists():
+            return []
+        with open(PANTRY_FILE) as f:
+            data = json.load(f)
+        return [PantryItem.model_validate(item) for item in data]
+
+    def _save(self, items: list[PantryItem]) -> None:
+        DATA_DIR.mkdir(exist_ok=True)
+        with open(PANTRY_FILE, "w") as f:
+            json.dump([item.model_dump(mode="json") for item in items], f, indent=2)
+
+    def list_items(self, location: Optional[StorageLocation] = None) -> list[PantryItem]:
+        items = self._load()
+        if location is not None:
+            items = [i for i in items if i.storage_location == location]
+        return items
+
+    def get_item(self, item_id: UUID) -> Optional[PantryItem]:
+        return next((i for i in self._load() if i.id == item_id), None)
+
+    def create_item(self, data: PantryItemCreate) -> PantryItem:
+        items = self._load()
+        item = PantryItem(**data.model_dump())
+        items.append(item)
+        self._save(items)
+        return item
+
+    def update_item(self, item_id: UUID, data: PantryItemUpdate) -> Optional[PantryItem]:
+        items = self._load()
+        for idx, item in enumerate(items):
+            if item.id == item_id:
+                patch = data.model_dump(exclude_unset=True)
+                patch["updated_at"] = datetime.now(timezone.utc)
+                updated = item.model_copy(update=patch)
+                items[idx] = updated
+                self._save(items)
+                return updated
+        return None
+
+    def delete_item(self, item_id: UUID) -> bool:
+        items = self._load()
+        filtered = [i for i in items if i.id != item_id]
+        if len(filtered) == len(items):
+            return False
+        self._save(filtered)
+        return True
