@@ -1,5 +1,3 @@
-from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -55,14 +53,17 @@ def test_chat_streams_sse(client):
     assert resp.status_code == 200
     assert "text/event-stream" in resp.headers["content-type"]
 
-    lines = [l for l in resp.text.splitlines() if l]
-    data_lines = [l.removeprefix("data: ") for l in lines if l.startswith("data: ")]
+    lines = [line for line in resp.text.splitlines() if line]
+    data_lines = [
+        line.removeprefix("data: ") for line in lines if line.startswith("data: ")
+    ]
 
     assert data_lines[0] == '{"type": "text-start", "id": "text-0"}'
 
-    deltas = [l for l in data_lines if '"text-delta"' in l]
+    deltas = [line for line in data_lines if '"text-delta"' in line]
     assert len(deltas) == len(chunks)
     import json
+
     combined = "".join(json.loads(d)["delta"] for d in deltas)
     assert combined == "Hello, world!"
 
@@ -104,7 +105,11 @@ def test_chat_skips_empty_messages(client):
             json={
                 "messages": [
                     {"role": "user", "content": "", "parts": []},
-                    {"role": "user", "content": "", "parts": [{"type": "text", "text": "keep"}]},
+                    {
+                        "role": "user",
+                        "content": "",
+                        "parts": [{"type": "text", "text": "keep"}],
+                    },
                 ]
             },
         )
