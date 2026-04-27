@@ -36,6 +36,7 @@ export default function PantryPage() {
 
   useEffect(() => {
     fetchItems();
+    setCategoryFilter("all");
   }, [fetchItems]);
 
   function handleSaved(saved: PantryItem) {
@@ -95,7 +96,7 @@ export default function PantryPage() {
           {TABS.map((tab) => (
             <button
               key={tab.key}
-              onClick={() => { setActiveTab(tab.key); setCategoryFilter("all"); }}
+              onClick={() => setActiveTab(tab.key)}
               className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg font-medium transition-colors ${
                 activeTab === tab.key
                   ? "bg-emerald-600 text-white"
