@@ -1,6 +1,7 @@
 import json
 from collections.abc import AsyncGenerator
 from pathlib import Path
+from typing import Any
 
 import anthropic
 from dotenv import load_dotenv
@@ -23,14 +24,36 @@ app.add_middleware(
 client = anthropic.AsyncAnthropic()
 
 
+class Part(BaseModel):
+    model_config = {"extra": "ignore"}
+
+    type: str
+    text: str = ""
+
+
 class Message(BaseModel):
     model_config = {"extra": "ignore"}
 
     role: str
-    content: str
+    # AI SDK v6 UIMessage.content is "" with text only in parts
+    content: str | list[Any] = ""
+    parts: list[Part] = []
+
+    def text(self) -> str:
+        if isinstance(self.content, list):
+            return "".join(
+                part.get("text", "")
+                for part in self.content
+                if isinstance(part, dict) and part.get("type") == "text"
+            )
+        if self.content:
+            return self.content
+        return "".join(p.text for p in self.parts if p.type == "text")
 
 
 class ChatRequest(BaseModel):
+    model_config = {"extra": "ignore"}
+
     messages: list[Message]
 
 
@@ -49,7 +72,11 @@ async def vercel_stream(messages: list[dict]) -> AsyncGenerator[str, None]:
 
 @app.post("/api/chat")
 async def chat(request: ChatRequest):
-    messages = [{"role": m.role, "content": m.content} for m in request.messages]
+    messages = [
+        {"role": m.role, "content": m.text()}
+        for m in request.messages
+        if m.text()
+    ]
     return StreamingResponse(
         vercel_stream(messages),
         media_type="text/plain; charset=utf-8",
