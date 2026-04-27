@@ -57,17 +57,23 @@ class ChatRequest(BaseModel):
     messages: list[Message]
 
 
-async def vercel_stream(messages: list[dict]) -> AsyncGenerator[str, None]:
+def sse(chunk: dict) -> str:
+    return f"data: {json.dumps(chunk)}\n\n"
+
+
+async def ui_message_stream(messages: list[dict]) -> AsyncGenerator[str, None]:
+    # AI SDK v6 expects SSE with UIMessageChunk objects
+    text_id = "text-0"
+    yield sse({"type": "text-start", "id": text_id})
     async with client.messages.stream(
         model="claude-opus-4-7",
         max_tokens=2048,
         messages=messages,
     ) as stream:
-        async for text in stream.text_stream:
-            yield f"0:{json.dumps(text)}\n"
-        final = await stream.get_final_message()
-        usage = final.usage
-        yield f'd:{{"finishReason":"stop","usage":{{"promptTokens":{usage.input_tokens},"completionTokens":{usage.output_tokens}}}}}\n'
+        async for delta in stream.text_stream:
+            yield sse({"type": "text-delta", "id": text_id, "delta": delta})
+    yield sse({"type": "text-end", "id": text_id})
+    yield "data: [DONE]\n\n"
 
 
 @app.post("/api/chat")
@@ -78,9 +84,9 @@ async def chat(request: ChatRequest):
         if m.text()
     ]
     return StreamingResponse(
-        vercel_stream(messages),
-        media_type="text/plain; charset=utf-8",
-        headers={"X-Vercel-AI-Data-Stream": "v1"},
+        ui_message_stream(messages),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache"},
     )
 
 
