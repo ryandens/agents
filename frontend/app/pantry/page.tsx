@@ -14,9 +14,10 @@ const TABS: { key: StorageLocation; label: string; icon: string }[] = [
 ];
 
 export default function PantryPage() {
+  const [authRequired, setAuthRequired] = useState(OAUTH_ENABLED);
   const [user, setUser] = useState<AuthUser | null>(OAUTH_ENABLED ? null : { sub: "local", email: "local", name: "Local", picture: null });
   const [items, setItems] = useState<PantryItem[]>([]);
-  const [loading, setLoading] = useState(!OAUTH_ENABLED || Boolean(getAuthToken()));
+  const [loading, setLoading] = useState(!authRequired || Boolean(getAuthToken()));
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<StorageLocation>("pantry");
   const [categoryFilter, setCategoryFilter] = useState<Category | "all">("all");
@@ -25,19 +26,21 @@ export default function PantryPage() {
   const [reloadToken, setReloadToken] = useState(0);
 
   const handleAuthenticated = useCallback((nextUser: AuthUser) => {
+    setAuthRequired(true);
     setUser(nextUser);
     setLoading(true);
     setReloadToken((prev) => prev + 1);
   }, []);
 
   useEffect(() => {
-    if (OAUTH_ENABLED && !getAuthToken()) return;
+    if (authRequired && !getAuthToken()) return;
 
     let cancelled = false;
     async function loadItems() {
       try {
         const res = await fetchWithAuth(`${BACKEND}/api/pantry?location=${activeTab}`);
         if (res.status === 401) {
+          setAuthRequired(true);
           setUser(null);
           throw new Error("Please sign in again");
         }
@@ -58,9 +61,9 @@ export default function PantryPage() {
     return () => {
       cancelled = true;
     };
-  }, [activeTab, reloadToken]);
+  }, [activeTab, reloadToken, authRequired]);
 
-  if (OAUTH_ENABLED && (!user || !getAuthToken())) {
+  if (authRequired && (!user || !getAuthToken())) {
     return (
       <div className="flex h-full items-center justify-center p-6 bg-stone-50 dark:bg-stone-950">
         <GoogleAuth onAuthenticated={handleAuthenticated} />

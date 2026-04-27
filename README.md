@@ -48,7 +48,7 @@ EOF
 just dev
 ```
 
-Opens the frontend at `http://localhost:3000` and the backend at `http://localhost:8000`.
+Opens the frontend at `http://localhost:3000` and the backend at `http://localhost:8000`. Use `/login` to trigger Google sign-in.
 
 ## Features
 
