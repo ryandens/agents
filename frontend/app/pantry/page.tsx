@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import PantryForm from "./PantryForm";
 import PantryItemCard from "./PantryItemCard";
 import { BACKEND, Category, CATEGORY_LABELS, PantryItem, StorageLocation } from "./types";
@@ -19,25 +19,48 @@ export default function PantryPage() {
   const [categoryFilter, setCategoryFilter] = useState<Category | "all">("all");
   const [formOpen, setFormOpen] = useState(false);
   const [editItem, setEditItem] = useState<PantryItem | undefined>(undefined);
-
-  const fetchItems = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch(`${BACKEND}/api/pantry?location=${activeTab}`);
-      if (!res.ok) throw new Error(`Failed to load (${res.status})`);
-      setItems(await res.json());
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load items");
-    } finally {
-      setLoading(false);
-    }
-  }, [activeTab]);
+  const [reloadToken, setReloadToken] = useState(0);
 
   useEffect(() => {
-    fetchItems();
+    let cancelled = false;
+
+    async function loadItems() {
+      try {
+        const res = await fetch(`${BACKEND}/api/pantry?location=${activeTab}`);
+        if (!res.ok) throw new Error(`Failed to load (${res.status})`);
+
+        if (!cancelled) {
+          setItems(await res.json());
+          setError(null);
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setError(e instanceof Error ? e.message : "Failed to load items");
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    }
+
+    void loadItems();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, reloadToken]);
+
+  function handleTabChange(tab: StorageLocation) {
+    setLoading(true);
+    setActiveTab(tab);
     setCategoryFilter("all");
-  }, [fetchItems]);
+  }
+
+  function handleRetry() {
+    setLoading(true);
+    setReloadToken((prev) => prev + 1);
+  }
 
   function handleSaved(saved: PantryItem) {
     if (saved.storage_location !== activeTab) {
@@ -96,7 +119,7 @@ export default function PantryPage() {
           {TABS.map((tab) => (
             <button
               key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
+              onClick={() => handleTabChange(tab.key)}
               className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg font-medium transition-colors ${
                 activeTab === tab.key
                   ? "bg-emerald-600 text-white"
@@ -149,7 +172,7 @@ export default function PantryPage() {
           <div className="flex flex-col items-center justify-center h-32 gap-2">
             <p className="text-sm text-red-500">{error}</p>
             <button
-              onClick={fetchItems}
+              onClick={handleRetry}
               className="text-xs text-emerald-600 hover:underline"
             >
               Retry
