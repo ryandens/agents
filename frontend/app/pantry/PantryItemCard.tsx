@@ -1,6 +1,7 @@
 "use client";
 
-import { BACKEND, CATEGORY_LABELS, PantryItem } from "./types";
+import { CATEGORY_LABELS, PantryItem } from "./types";
+import { BACKEND, fetchWithAuth } from "../lib/auth";
 
 interface Props {
   item: PantryItem;
@@ -50,7 +51,7 @@ export default function PantryItemCard({ item, onEdit, onDeleted }: Props) {
 
   async function handleDelete() {
     if (!confirm(`Delete "${item.name}"?`)) return;
-    await fetch(`${BACKEND}/api/pantry/${item.id}`, { method: "DELETE" });
+    await fetchWithAuth(`${BACKEND}/api/pantry/${item.id}`, { method: "DELETE" });
     onDeleted(item.id);
   }
 

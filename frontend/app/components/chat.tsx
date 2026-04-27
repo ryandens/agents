@@ -2,11 +2,17 @@
 
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { BACKEND, AuthUser, OAUTH_ENABLED, clearAuthToken, getAuthHeader, getAuthToken } from '../lib/auth';
+import GoogleAuth from './google-auth';
 
 export default function Chat() {
+  const [user, setUser] = useState<AuthUser | null>(OAUTH_ENABLED ? null : { sub: "local", email: "local", name: "Local", picture: null });
   const { messages, sendMessage, status } = useChat({
-    transport: new DefaultChatTransport({ api: 'http://localhost:8000/api/chat' }),
+    transport: new DefaultChatTransport({
+      api: `${BACKEND}/api/chat`,
+      headers: () => getAuthHeader(),
+    }),
   });
 
   const [input, setInput] = useState('');
@@ -17,10 +23,19 @@ export default function Chat() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isStreaming]);
 
+  const handleAuthenticated = useCallback((nextUser: AuthUser) => {
+    setUser(nextUser);
+  }, []);
+
+  function handleSignOut() {
+    clearAuthToken();
+    setUser(null);
+  }
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const text = input.trim();
-    if (!text || isStreaming) return;
+    if (!text || isStreaming || (OAUTH_ENABLED && !getAuthToken())) return;
     setInput('');
     sendMessage({ text });
   }
@@ -32,137 +47,49 @@ export default function Chat() {
     }
   }
 
+  if (OAUTH_ENABLED && !user) {
+    return (
+      <div className="flex h-full items-center justify-center p-6 bg-stone-50 dark:bg-stone-950">
+        <GoogleAuth onAuthenticated={handleAuthenticated} />
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col h-full bg-stone-50 dark:bg-stone-950">
-      {/* Header */}
-      <header className="flex items-center gap-3 px-6 py-4 bg-white dark:bg-stone-900 border-b border-stone-200 dark:border-stone-800 shrink-0">
-        <span className="text-2xl">🥗</span>
-        <div>
-          <h1 className="text-lg font-semibold text-stone-900 dark:text-stone-50 leading-tight">
-            Kitchen Agent
-          </h1>
-          <p className="text-xs text-stone-500 dark:text-stone-400">
-            Meal planning &amp; kitchen management agent
-          </p>
+      <header className="flex items-center justify-between gap-3 px-6 py-4 bg-white dark:bg-stone-900 border-b border-stone-200 dark:border-stone-800 shrink-0">
+        <div className="flex items-center gap-3">
+          <span className="text-2xl">🥗</span>
+          <div>
+            <h1 className="text-lg font-semibold text-stone-900 dark:text-stone-50 leading-tight">
+              Kitchen Agent
+            </h1>
+            <p className="text-xs text-stone-500 dark:text-stone-400">Meal planning &amp; kitchen management agent</p>
+          </div>
         </div>
+        <button onClick={handleSignOut} className="text-xs text-stone-500 hover:text-stone-800 dark:text-stone-400 dark:hover:text-stone-200">
+          Sign out {user.email}
+        </button>
       </header>
 
-      {/* Messages */}
       <div className="flex-1 overflow-y-auto px-4 py-6 space-y-4">
-        {messages.length === 0 && (
-          <div className="flex flex-col items-center justify-center h-full gap-4 text-center">
-            <span className="text-5xl">🍳</span>
-            <h2 className="text-xl font-medium text-stone-700 dark:text-stone-300">
-              What&apos;s on the menu?
-            </h2>
-            <p className="text-sm text-stone-500 dark:text-stone-400 max-w-sm">
-              Ask me to plan meals, find recipes, build a grocery list, or use up what&apos;s in your fridge.
-            </p>
-            <div className="flex flex-wrap justify-center gap-2 mt-2">
-              {[
-                'Plan this week\'s dinners',
-                'What can I make with chicken and rice?',
-                'Build me a grocery list for 4 people',
-                'Suggest a healthy 30-minute meal',
-              ].map((prompt) => (
-                <button
-                  key={prompt}
-                  onClick={() => {
-                    setInput('');
-                    sendMessage({ text: prompt });
-                  }}
-                  className="px-3 py-1.5 text-sm rounded-full bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 text-stone-700 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-700 transition-colors"
-                >
-                  {prompt}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
+        {messages.length === 0 && <div className="text-sm text-stone-500">Start a conversation.</div>}
         {messages.map((message) => {
           const isUser = message.role === 'user';
-          const text = message.parts
-            .filter((p) => p.type === 'text')
-            .map((p) => p.text)
-            .join('');
+          const text = message.parts.filter((p) => p.type === 'text').map((p) => p.text).join('');
 
-          return (
-            <div
-              key={message.id}
-              className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}
-            >
-              {!isUser && (
-                <div className="w-7 h-7 rounded-full bg-emerald-100 dark:bg-emerald-900 flex items-center justify-center text-sm shrink-0 mr-2 mt-1">
-                  🥗
-                </div>
-              )}
-              <div
-                className={`max-w-[75%] rounded-2xl px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap ${
-                  isUser
-                    ? 'bg-emerald-600 text-white rounded-br-sm'
-                    : 'bg-white dark:bg-stone-800 text-stone-800 dark:text-stone-100 border border-stone-200 dark:border-stone-700 rounded-bl-sm'
-                }`}
-              >
-                {text}
-              </div>
-            </div>
-          );
+          return <div key={message.id} className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}><div className={`max-w-[75%] rounded-2xl px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap ${isUser ? 'bg-emerald-600 text-white rounded-br-sm' : 'bg-white dark:bg-stone-800 text-stone-800 dark:text-stone-100 border border-stone-200 dark:border-stone-700 rounded-bl-sm'}`}>{text}</div></div>;
         })}
-
-        {isStreaming && (
-          <div className="flex justify-start">
-            <div className="w-7 h-7 rounded-full bg-emerald-100 dark:bg-emerald-900 flex items-center justify-center text-sm shrink-0 mr-2 mt-1">
-              🥗
-            </div>
-            <div className="bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-2xl rounded-bl-sm px-4 py-3">
-              <span className="flex gap-1 items-center h-4">
-                <span className="w-1.5 h-1.5 rounded-full bg-stone-400 animate-bounce [animation-delay:0ms]" />
-                <span className="w-1.5 h-1.5 rounded-full bg-stone-400 animate-bounce [animation-delay:150ms]" />
-                <span className="w-1.5 h-1.5 rounded-full bg-stone-400 animate-bounce [animation-delay:300ms]" />
-              </span>
-            </div>
-          </div>
-        )}
-
         <div ref={bottomRef} />
       </div>
 
-      {/* Input */}
-      <form
-        onSubmit={handleSubmit}
-        className="shrink-0 px-4 pb-4 pt-2 bg-stone-50 dark:bg-stone-950 border-t border-stone-200 dark:border-stone-800"
-      >
+      <form onSubmit={handleSubmit} className="shrink-0 px-4 pb-4 pt-2 bg-stone-50 dark:bg-stone-950 border-t border-stone-200 dark:border-stone-800">
         <div className="flex items-end gap-2 bg-white dark:bg-stone-900 rounded-2xl border border-stone-200 dark:border-stone-700 px-4 py-2">
-          <textarea
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Ask about meals, recipes, or your kitchen…"
-            rows={1}
-            className="flex-1 resize-none bg-transparent text-sm text-stone-900 dark:text-stone-100 placeholder:text-stone-400 focus:outline-none py-1.5 max-h-40 overflow-y-auto"
-            style={{ fieldSizing: 'content' } as React.CSSProperties}
-            suppressHydrationWarning
-          />
-          <button
-            type="submit"
-            disabled={!input.trim() || isStreaming}
-            suppressHydrationWarning
-            className="shrink-0 w-8 h-8 rounded-full bg-emerald-600 disabled:bg-stone-200 dark:disabled:bg-stone-700 flex items-center justify-center transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 20 20"
-              fill="currentColor"
-              className="w-4 h-4 text-white dark:disabled:text-stone-500"
-            >
-              <path d="M3.105 2.288a.75.75 0 0 0-.826.95l1.414 4.926A1.5 1.5 0 0 0 5.135 9.25h6.115a.75.75 0 0 1 0 1.5H5.135a1.5 1.5 0 0 0-1.442 1.086l-1.414 4.926a.75.75 0 0 0 .826.95 28.897 28.897 0 0 0 15.293-7.155.75.75 0 0 0 0-1.114A28.897 28.897 0 0 0 3.105 2.288Z" />
-            </svg>
+          <textarea value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={handleKeyDown} placeholder="Ask about meals, recipes, or your kitchen…" rows={1} className="flex-1 resize-none bg-transparent text-sm text-stone-900 dark:text-stone-100 placeholder:text-stone-400 focus:outline-none py-1.5 max-h-40 overflow-y-auto" style={{ fieldSizing: 'content' } as React.CSSProperties} suppressHydrationWarning />
+          <button type="submit" disabled={!input.trim() || isStreaming} suppressHydrationWarning className="shrink-0 w-8 h-8 rounded-full bg-emerald-600 disabled:bg-stone-200 dark:disabled:bg-stone-700 flex items-center justify-center transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed">
+            <span className="text-white">➤</span>
           </button>
         </div>
-        <p className="text-center text-xs text-stone-400 mt-2">
-          Enter to send · Shift+Enter for new line
-        </p>
       </form>
     </div>
   );

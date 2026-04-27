@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import {
-  BACKEND,
   CATEGORY_LABELS,
   Category,
   PantryItem,
@@ -11,6 +10,7 @@ import {
   UNIT_GROUPS,
   Unit,
 } from "./types";
+import { BACKEND, fetchWithAuth } from "../lib/auth";
 
 interface Props {
   item?: PantryItem;
@@ -69,7 +69,7 @@ export default function PantryForm({ item, defaultLocation, onSaved, onClose }: 
     try {
       const url = item ? `${BACKEND}/api/pantry/${item.id}` : `${BACKEND}/api/pantry`;
       const method = item ? "PATCH" : "POST";
-      const res = await fetch(url, {
+      const res = await fetchWithAuth(url, {
         method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),

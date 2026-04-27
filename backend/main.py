@@ -1,17 +1,26 @@
 import json
 from collections.abc import AsyncGenerator
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Annotated, cast
 from uuid import UUID
 
 import anthropic
 from anthropic.types import MessageParam
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
+from auth import (
+    AuthResponse,
+    AuthenticatedUser,
+    GoogleCredentialRequest,
+    auth_enabled,
+    create_access_token,
+    get_current_user,
+    verify_google_credential,
+)
 from pantry import PantryItem, PantryItemCreate, PantryItemUpdate, StorageLocation
 from pantry_store import PantryStore
 
@@ -83,8 +92,33 @@ async def ui_message_stream(messages: list[MessageParam]) -> AsyncGenerator[str,
     yield "data: [DONE]\n\n"
 
 
+CurrentUser = Annotated[AuthenticatedUser | None, Depends(get_current_user)]
+
+
+@app.post("/api/auth/google", response_model=AuthResponse)
+def login_with_google(request: GoogleCredentialRequest):
+    if not auth_enabled():
+        raise HTTPException(
+            status_code=503,
+            detail="Google OAuth is not configured on this backend",
+        )
+
+    user = verify_google_credential(request.credential)
+    return AuthResponse(access_token=create_access_token(user), user=user)
+
+
+@app.get("/api/auth/me", response_model=AuthenticatedUser)
+def auth_me(user: CurrentUser):
+    if user is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Google OAuth is not configured on this backend",
+        )
+    return user
+
+
 @app.post("/api/chat")
-async def chat(request: ChatRequest):
+async def chat(request: ChatRequest, _: CurrentUser):
     messages = cast(
         list[MessageParam],
         [{"role": m.role, "content": m.text()} for m in request.messages if m.text()],
@@ -97,17 +131,17 @@ async def chat(request: ChatRequest):
 
 
 @app.get("/api/pantry", response_model=list[PantryItem])
-def list_pantry(location: StorageLocation | None = None):
+def list_pantry(_: CurrentUser, location: StorageLocation | None = None):
     return pantry_store.list_items(location=location)
 
 
 @app.post("/api/pantry", response_model=PantryItem, status_code=201)
-def create_pantry_item(data: PantryItemCreate):
+def create_pantry_item(data: PantryItemCreate, _: CurrentUser):
     return pantry_store.create_item(data)
 
 
 @app.get("/api/pantry/{item_id}", response_model=PantryItem)
-def get_pantry_item(item_id: UUID):
+def get_pantry_item(item_id: UUID, _: CurrentUser):
     item = pantry_store.get_item(item_id)
     if item is None:
         raise HTTPException(status_code=404, detail="Item not found")
@@ -115,7 +149,7 @@ def get_pantry_item(item_id: UUID):
 
 
 @app.patch("/api/pantry/{item_id}", response_model=PantryItem)
-def update_pantry_item(item_id: UUID, data: PantryItemUpdate):
+def update_pantry_item(item_id: UUID, data: PantryItemUpdate, _: CurrentUser):
     item = pantry_store.update_item(item_id, data)
     if item is None:
         raise HTTPException(status_code=404, detail="Item not found")
@@ -123,7 +157,7 @@ def update_pantry_item(item_id: UUID, data: PantryItemUpdate):
 
 
 @app.delete("/api/pantry/{item_id}", status_code=204)
-def delete_pantry_item(item_id: UUID):
+def delete_pantry_item(item_id: UUID, _: CurrentUser):
     if not pantry_store.delete_item(item_id):
         raise HTTPException(status_code=404, detail="Item not found")
 

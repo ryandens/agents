@@ -32,8 +32,15 @@ just backend-install
 just frontend-install
 
 # Create .env at the repo root
-echo "ANTHROPIC_API_KEY=sk-ant-..." > .env
+cat > .env <<'EOF'
+ANTHROPIC_API_KEY=sk-ant-...
+GOOGLE_OAUTH_CLIENT_ID=your-google-client-id.apps.googleusercontent.com
+APP_AUTH_SECRET=replace-with-a-long-random-secret
+NEXT_PUBLIC_GOOGLE_CLIENT_ID=your-google-client-id.apps.googleusercontent.com
+EOF
 ```
+
+`GOOGLE_OAUTH_CLIENT_ID` enables backend token verification. `NEXT_PUBLIC_GOOGLE_CLIENT_ID` enables the Google sign-in button in the Next.js client.
 
 ## Running
 

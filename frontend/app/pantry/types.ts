@@ -92,4 +92,3 @@ export const UNIT_GROUPS: { label: string; units: Unit[] }[] = [
   { label: "Container", units: ["can", "bottle", "box", "bag", "jar"] },
 ];
 
-export const BACKEND = "http://localhost:8000";
