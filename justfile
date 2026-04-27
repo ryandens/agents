@@ -53,8 +53,12 @@ frontend-lint:
 frontend-build:
     npm run build --prefix frontend
 
+# Run frontend tests
+frontend-test:
+    npm run test --prefix frontend
+
 # Run all frontend checks
-frontend-check: frontend-lint frontend-build
+frontend-check: frontend-lint frontend-build frontend-test
 
 # ── CI ─────────────────────────────────────────────────────────────────────────
 

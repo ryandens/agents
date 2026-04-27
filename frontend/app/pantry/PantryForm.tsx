@@ -62,7 +62,7 @@ export default function PantryForm({ item, defaultLocation, onSaved, onClose }: 
     setForm((f) => ({ ...f, [key]: value }));
   }
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent | React.MouseEvent) {
     e.preventDefault();
     setSaving(true);
     setError(null);
@@ -99,6 +99,7 @@ export default function PantryForm({ item, defaultLocation, onSaved, onClose }: 
           </h2>
           <button
             onClick={onClose}
+            aria-label="Close"
             className="w-7 h-7 rounded-full flex items-center justify-center text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors"
           >
             ✕
@@ -109,10 +110,14 @@ export default function PantryForm({ item, defaultLocation, onSaved, onClose }: 
           {/* Name + Brand */}
           <div className="grid grid-cols-2 gap-3">
             <div className="col-span-2 sm:col-span-1">
-              <label className="block text-xs font-medium text-stone-600 dark:text-stone-400 mb-1">
+              <label
+                htmlFor="pf-name"
+                className="block text-xs font-medium text-stone-600 dark:text-stone-400 mb-1"
+              >
                 Name <span className="text-red-500">*</span>
               </label>
               <input
+                id="pf-name"
                 required
                 type="text"
                 value={form.name}
@@ -122,10 +127,14 @@ export default function PantryForm({ item, defaultLocation, onSaved, onClose }: 
               />
             </div>
             <div className="col-span-2 sm:col-span-1">
-              <label className="block text-xs font-medium text-stone-600 dark:text-stone-400 mb-1">
+              <label
+                htmlFor="pf-brand"
+                className="block text-xs font-medium text-stone-600 dark:text-stone-400 mb-1"
+              >
                 Brand
               </label>
               <input
+                id="pf-brand"
                 type="text"
                 value={form.brand ?? ""}
                 onChange={(e) => set("brand", e.target.value || null)}
@@ -138,10 +147,14 @@ export default function PantryForm({ item, defaultLocation, onSaved, onClose }: 
           {/* Location + Category */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-stone-600 dark:text-stone-400 mb-1">
+              <label
+                htmlFor="pf-location"
+                className="block text-xs font-medium text-stone-600 dark:text-stone-400 mb-1"
+              >
                 Location <span className="text-red-500">*</span>
               </label>
               <select
+                id="pf-location"
                 value={form.storage_location}
                 onChange={(e) => set("storage_location", e.target.value as StorageLocation)}
                 className="w-full text-sm rounded-lg border border-stone-200 dark:border-stone-700 bg-stone-50 dark:bg-stone-800 px-3 py-2 text-stone-900 dark:text-stone-100 focus:outline-none focus:ring-2 focus:ring-emerald-500"
@@ -152,10 +165,14 @@ export default function PantryForm({ item, defaultLocation, onSaved, onClose }: 
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-stone-600 dark:text-stone-400 mb-1">
+              <label
+                htmlFor="pf-category"
+                className="block text-xs font-medium text-stone-600 dark:text-stone-400 mb-1"
+              >
                 Category <span className="text-red-500">*</span>
               </label>
               <select
+                id="pf-category"
                 value={form.category}
                 onChange={(e) => set("category", e.target.value as Category)}
                 className="w-full text-sm rounded-lg border border-stone-200 dark:border-stone-700 bg-stone-50 dark:bg-stone-800 px-3 py-2 text-stone-900 dark:text-stone-100 focus:outline-none focus:ring-2 focus:ring-emerald-500"
@@ -172,10 +189,14 @@ export default function PantryForm({ item, defaultLocation, onSaved, onClose }: 
           {/* Quantity + Unit */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-stone-600 dark:text-stone-400 mb-1">
+              <label
+                htmlFor="pf-quantity"
+                className="block text-xs font-medium text-stone-600 dark:text-stone-400 mb-1"
+              >
                 Quantity <span className="text-red-500">*</span>
               </label>
               <input
+                id="pf-quantity"
                 required
                 type="number"
                 min="0"
@@ -186,10 +207,14 @@ export default function PantryForm({ item, defaultLocation, onSaved, onClose }: 
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-stone-600 dark:text-stone-400 mb-1">
+              <label
+                htmlFor="pf-unit"
+                className="block text-xs font-medium text-stone-600 dark:text-stone-400 mb-1"
+              >
                 Unit <span className="text-red-500">*</span>
               </label>
               <select
+                id="pf-unit"
                 value={form.unit}
                 onChange={(e) => set("unit", e.target.value as Unit)}
                 className="w-full text-sm rounded-lg border border-stone-200 dark:border-stone-700 bg-stone-50 dark:bg-stone-800 px-3 py-2 text-stone-900 dark:text-stone-100 focus:outline-none focus:ring-2 focus:ring-emerald-500"
@@ -210,10 +235,14 @@ export default function PantryForm({ item, defaultLocation, onSaved, onClose }: 
           {/* Dates */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-stone-600 dark:text-stone-400 mb-1">
+              <label
+                htmlFor="pf-purchase-date"
+                className="block text-xs font-medium text-stone-600 dark:text-stone-400 mb-1"
+              >
                 Purchase date
               </label>
               <input
+                id="pf-purchase-date"
                 type="date"
                 value={form.purchase_date ?? ""}
                 onChange={(e) => set("purchase_date", e.target.value || null)}
@@ -221,10 +250,14 @@ export default function PantryForm({ item, defaultLocation, onSaved, onClose }: 
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-stone-600 dark:text-stone-400 mb-1">
+              <label
+                htmlFor="pf-expiration-date"
+                className="block text-xs font-medium text-stone-600 dark:text-stone-400 mb-1"
+              >
                 Expiration date
               </label>
               <input
+                id="pf-expiration-date"
                 type="date"
                 value={form.expiration_date ?? ""}
                 onChange={(e) => set("expiration_date", e.target.value || null)}
@@ -235,10 +268,14 @@ export default function PantryForm({ item, defaultLocation, onSaved, onClose }: 
 
           {/* Notes */}
           <div>
-            <label className="block text-xs font-medium text-stone-600 dark:text-stone-400 mb-1">
+            <label
+              htmlFor="pf-notes"
+              className="block text-xs font-medium text-stone-600 dark:text-stone-400 mb-1"
+            >
               Notes
             </label>
             <textarea
+              id="pf-notes"
               rows={2}
               value={form.notes ?? ""}
               onChange={(e) => set("notes", e.target.value || null)}
