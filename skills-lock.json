@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "skills": {
+    "conventional-gitmoji-commit": {
+      "source": "beiyanyunyi/skills",
+      "sourceType": "github",
+      "computedHash": "9cd3f29848795ce41f8a582415ccc4cc8f299f12bbaadc64e537e3397bdcef9b"
+    }
+  }
+}
