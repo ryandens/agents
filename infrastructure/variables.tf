@@ -1,0 +1,39 @@
+variable "aws_region" {
+  description = "AWS region to deploy resources"
+  type        = string
+  default     = "us-east-1"
+}
+
+variable "project_name" {
+  description = "Project name used for resource naming and tagging"
+  type        = string
+  default     = "agents"
+}
+
+variable "vpc_cidr" {
+  description = "CIDR block for the VPC"
+  type        = string
+  default     = "10.0.0.0/16"
+}
+
+variable "ec2_instance_type" {
+  description = "EC2 instance type (must be ARM/Graviton-based, e.g. t4g.*)"
+  type        = string
+  default     = "t4g.micro"
+
+  validation {
+    condition     = can(regex("^(t4g|m7g|m8g|c7g|c8g|r7g|r8g|x2g|hpc7g|im4gn|is4gen)\\.", var.ec2_instance_type))
+    error_message = "ec2_instance_type must be an ARM/Graviton family (t4g, m7g, c7g, r7g, …)."
+  }
+}
+
+variable "app_port" {
+  description = "Port the application listens on"
+  type        = number
+  default     = 8080
+
+  validation {
+    condition     = var.app_port >= 1024 && var.app_port <= 65535
+    error_message = "app_port must be an unprivileged port (1024–65535)."
+  }
+}
