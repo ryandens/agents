@@ -27,6 +27,18 @@ variable "ec2_instance_type" {
   }
 }
 
+variable "google_client_id" {
+  description = "Google OAuth client ID for ALB OIDC authentication"
+  type        = string
+  sensitive   = true
+}
+
+variable "google_client_secret" {
+  description = "Google OAuth client secret for ALB OIDC authentication"
+  type        = string
+  sensitive   = true
+}
+
 variable "app_port" {
   description = "Port the application listens on"
   type        = number

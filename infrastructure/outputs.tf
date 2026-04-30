@@ -27,8 +27,3 @@ output "github_actions_role_arn" {
   description = "IAM role ARN for GitHub Actions ECR push — set as the AWS_ROLE_ARN repository secret"
   value       = aws_iam_role.github_actions_ecr_push.arn
 }
-
-output "certificate_arn" {
-  description = "ACM certificate ARN for agents.ryandens.com — use as certificate_arn in terraform.tfvars when restoring the OIDC stash"
-  value       = aws_acm_certificate_validation.main.certificate_arn
-}

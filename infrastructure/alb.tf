@@ -40,7 +40,40 @@ resource "aws_lb_listener" "http" {
   protocol          = "HTTP"
 
   default_action {
+    type = "redirect"
+    redirect {
+      port        = "443"
+      protocol    = "HTTPS"
+      status_code = "HTTP_301"
+    }
+  }
+}
+
+resource "aws_lb_listener" "https" {
+  load_balancer_arn = aws_lb.main.arn
+  port              = 443
+  protocol          = "HTTPS"
+  ssl_policy        = "ELBSecurityPolicy-TLS13-1-2-2021-06"
+  certificate_arn   = aws_acm_certificate_validation.main.certificate_arn
+
+  default_action {
+    type  = "authenticate-oidc"
+    order = 1
+
+    authenticate_oidc {
+      issuer                     = "https://accounts.google.com"
+      authorization_endpoint     = "https://accounts.google.com/o/oauth2/v2/auth"
+      token_endpoint             = "https://oauth2.googleapis.com/token"
+      user_info_endpoint         = "https://openidconnect.googleapis.com/v1/userinfo"
+      client_id                  = var.google_client_id
+      client_secret              = var.google_client_secret
+      on_unauthenticated_request = "authenticate"
+    }
+  }
+
+  default_action {
     type             = "forward"
+    order            = 2
     target_group_arn = aws_lb_target_group.app.arn
   }
 }
