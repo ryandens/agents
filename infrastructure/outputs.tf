@@ -22,3 +22,8 @@ output "ec2_instance_id" {
   description = "EC2 instance ID — connect with: aws ssm start-session --target <id>"
   value       = aws_instance.app.id
 }
+
+output "github_actions_role_arn" {
+  description = "IAM role ARN for GitHub Actions ECR push — set as the AWS_ROLE_ARN repository secret"
+  value       = aws_iam_role.github_actions_ecr_push.arn
+}
