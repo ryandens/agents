@@ -15,15 +15,21 @@ COPY . /app
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev
 
+# Repoint venv Python symlinks to /usr/bin/python, where Chainguard places it
+RUN ln -sfn /usr/bin/python /app/.venv/bin/python && \
+    ln -sfn /usr/bin/python /app/.venv/bin/python3 && \
+    ln -sfn /usr/bin/python /app/.venv/bin/python3.14
 
-FROM python:3.14-slim-bookworm@sha256:2e256d0381371566ed96980584957ed31297f437569b79b0e5f7e17f2720e53a
+
+FROM cgr.dev/chainguard/python:latest@sha256:92fee0837e16d9a0a494f61f79ef8304031ada5186fcc7dfe24a9b91790fc16a
 
 WORKDIR /app
 
-COPY --from=builder /app /app
+COPY --from=builder --chown=nonroot:nonroot /app /app
 
 ENV PATH="/app/.venv/bin:$PATH"
 
 EXPOSE 8080
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]
+ENTRYPOINT ["/app/.venv/bin/uvicorn"]
+CMD ["main:app", "--host", "0.0.0.0", "--port", "8080"]
