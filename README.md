@@ -115,25 +115,3 @@ just frontend-test  # vitest
 just frontend-lint  # eslint
 just frontend-build # next build (type-check + compile)
 ```
-
-## Project structure
-
-```
-agents/
-├── backend/
-│   ├── main.py              # FastAPI app — chat + pantry REST endpoints
-│   ├── pantry.py            # Pydantic models and enums
-│   ├── pantry_store.py      # JSON file storage layer
-│   ├── test_main.py         # Chat API tests
-│   ├── test_pantry_api.py   # Pantry REST API tests
-│   └── test_pantry_store.py # Storage layer tests
-└── frontend/
-    └── app/
-        ├── page.tsx             # Chat page
-        ├── layout.tsx           # Root layout + nav
-        └── pantry/
-            ├── page.tsx         # Pantry list page
-            ├── PantryForm.tsx   # Create / edit modal
-            ├── PantryItemCard.tsx
-            └── types.ts
-```
