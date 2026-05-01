@@ -16,4 +16,8 @@ EOF_UNIT
 
 systemctl daemon-reload
 systemctl enable --now agents.service
+
+# Restart SSM agent after Docker has set up its iptables rules, so the agent
+# registers against the final network state rather than racing with Docker on boot.
+systemctl restart amazon-ssm-agent
 echo "DONE USER DATA"
