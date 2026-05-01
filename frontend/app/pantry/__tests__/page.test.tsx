@@ -3,6 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PantryItem } from "../types";
 
 // Mocks must be at module top level — vi.mock is hoisted before imports
+vi.mock("../../components/AuthProvider", () => ({
+  useAuth: () => ({ token: "test-token" }),
+}));
+
 vi.mock("../PantryForm", () => ({
   default: ({
     onSaved,

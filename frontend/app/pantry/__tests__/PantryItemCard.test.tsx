@@ -1,5 +1,10 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("../../components/AuthProvider", () => ({
+  useAuth: () => ({ token: "test-token" }),
+}));
+
 import PantryItemCard from "../PantryItemCard";
 import type { PantryItem } from "../types";
 

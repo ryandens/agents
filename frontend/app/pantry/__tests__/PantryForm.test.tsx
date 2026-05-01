@@ -1,6 +1,11 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("../../components/AuthProvider", () => ({
+  useAuth: () => ({ token: "test-token" }),
+}));
+
 import PantryForm from "../PantryForm";
 import type { PantryItem } from "../types";
 

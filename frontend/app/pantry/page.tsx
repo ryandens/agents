@@ -53,7 +53,7 @@ export default function PantryPage() {
     return () => {
       cancelled = true;
     };
-  }, [activeTab, reloadToken]);
+  }, [activeTab, reloadToken, token]);
 
   function handleTabChange(tab: StorageLocation) {
     setLoading(true);
