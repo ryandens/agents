@@ -1,4 +1,5 @@
 import json
+import os
 from collections.abc import AsyncGenerator
 from pathlib import Path
 from typing import Any, cast
@@ -7,9 +8,11 @@ from uuid import UUID
 import anthropic
 from anthropic.types import MessageParam
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from google.auth.transport import requests as google_requests
+from google.oauth2 import id_token
 from pydantic import BaseModel
 
 from pantry import PantryItem, PantryItemCreate, PantryItemUpdate, StorageLocation
@@ -18,13 +21,30 @@ from pantry_store import PantryStore
 # Search from this file's location up through the repo root
 load_dotenv(dotenv_path=Path(__file__).parent.parent / ".env")
 
+GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
+_auth_request = google_requests.Request()
+
 app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:3000",
+        "https://agents.ryandens.com",
+    ],
     allow_methods=["*"],
-    allow_headers=["*"],
+    allow_headers=["Authorization", "Content-Type"],
 )
+
+
+def authenticated(authorization: str | None = Header(default=None)) -> dict:
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    token = authorization.removeprefix("Bearer ")
+    try:
+        return id_token.verify_oauth2_token(token, _auth_request, GOOGLE_CLIENT_ID)
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
 
 pantry_store = PantryStore()
 
@@ -89,7 +109,7 @@ def health():
 
 
 @app.post("/api/chat")
-async def chat(request: ChatRequest):
+async def chat(request: ChatRequest, _: dict = Depends(authenticated)):
     messages = cast(
         list[MessageParam],
         [{"role": m.role, "content": m.text()} for m in request.messages if m.text()],
@@ -102,17 +122,19 @@ async def chat(request: ChatRequest):
 
 
 @app.get("/api/pantry", response_model=list[PantryItem])
-def list_pantry(location: StorageLocation | None = None):
+def list_pantry(
+    location: StorageLocation | None = None, _: dict = Depends(authenticated)
+):
     return pantry_store.list_items(location=location)
 
 
 @app.post("/api/pantry", response_model=PantryItem, status_code=201)
-def create_pantry_item(data: PantryItemCreate):
+def create_pantry_item(data: PantryItemCreate, _: dict = Depends(authenticated)):
     return pantry_store.create_item(data)
 
 
 @app.get("/api/pantry/{item_id}", response_model=PantryItem)
-def get_pantry_item(item_id: UUID):
+def get_pantry_item(item_id: UUID, _: dict = Depends(authenticated)):
     item = pantry_store.get_item(item_id)
     if item is None:
         raise HTTPException(status_code=404, detail="Item not found")
@@ -120,7 +142,9 @@ def get_pantry_item(item_id: UUID):
 
 
 @app.patch("/api/pantry/{item_id}", response_model=PantryItem)
-def update_pantry_item(item_id: UUID, data: PantryItemUpdate):
+def update_pantry_item(
+    item_id: UUID, data: PantryItemUpdate, _: dict = Depends(authenticated)
+):
     item = pantry_store.update_item(item_id, data)
     if item is None:
         raise HTTPException(status_code=404, detail="Item not found")
@@ -128,7 +152,7 @@ def update_pantry_item(item_id: UUID, data: PantryItemUpdate):
 
 
 @app.delete("/api/pantry/{item_id}", status_code=204)
-def delete_pantry_item(item_id: UUID):
+def delete_pantry_item(item_id: UUID, _: dict = Depends(authenticated)):
     if not pantry_store.delete_item(item_id):
         raise HTTPException(status_code=404, detail="Item not found")
 

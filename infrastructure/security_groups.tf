@@ -43,16 +43,6 @@ resource "aws_vpc_security_group_ingress_rule" "alb_https" {
 
 # --- ALB egress ---
 
-# Required for OIDC: ALB must reach Google's token and userinfo endpoints
-resource "aws_vpc_security_group_egress_rule" "alb_https_outbound" {
-  security_group_id = aws_security_group.alb.id
-  description       = "HTTPS outbound for OIDC token exchange with Google"
-  from_port         = 443
-  to_port           = 443
-  ip_protocol       = "tcp"
-  cidr_ipv4         = "0.0.0.0/0"
-}
-
 resource "aws_vpc_security_group_egress_rule" "alb_to_ec2" {
   security_group_id            = aws_security_group.alb.id
   description                  = "Forward to EC2 app port"

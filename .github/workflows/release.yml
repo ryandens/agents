@@ -60,6 +60,7 @@ jobs:
         run: npm run build --prefix frontend
         env:
           NEXT_PUBLIC_BACKEND: https://api.agents.ryandens.com
+          NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7

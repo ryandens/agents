@@ -39,15 +39,8 @@ variable "anthropic_api_key" {
 }
 
 variable "google_client_id" {
-  description = "Google OAuth client ID for ALB OIDC authentication"
+  description = "Google OAuth client ID for verifying ID tokens in the backend"
   type        = string
-  sensitive   = true
-}
-
-variable "google_client_secret" {
-  description = "Google OAuth client secret for ALB OIDC authentication"
-  type        = string
-  sensitive   = true
 }
 
 variable "app_port" {

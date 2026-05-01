@@ -4,6 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import main
+from main import authenticated
 from pantry_store import PantryStore
 
 OLIVE_OIL = {
@@ -34,7 +35,9 @@ MILK = {
 @pytest.fixture
 def client(tmp_path: Path) -> TestClient:
     main.pantry_store = PantryStore(file_path=tmp_path / "pantry.json")
-    return TestClient(main.app)
+    main.app.dependency_overrides[authenticated] = lambda: {"sub": "test-user"}
+    yield TestClient(main.app)
+    main.app.dependency_overrides.clear()
 
 
 # --- List ---

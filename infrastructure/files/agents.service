@@ -17,6 +17,7 @@ ExecStart=/usr/bin/docker run \
     --name agents \
     --rm \
     --env-file /run/agents.env \
+    -e GOOGLE_CLIENT_ID=${google_client_id} \
     -p 8080:8080 \
     -v /opt/agents/data:/app/data \
     ${ecr_image}

@@ -91,6 +91,7 @@ resource "aws_instance" "app" {
       ecr_registry       = split("/", aws_ecr_repository.main.repository_url)[0]
       ecr_image          = "${aws_ecr_repository.main.repository_url}:${var.app_version}"
       ssm_parameter_name = aws_ssm_parameter.anthropic_api_key.name
+      google_client_id   = var.google_client_id
     })
   })
 

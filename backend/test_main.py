@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
-from main import app
+from main import app, authenticated
 
 
 def make_stream_mock(text_chunks: list[str]):
@@ -27,7 +27,9 @@ def make_stream_mock(text_chunks: list[str]):
 
 @pytest.fixture
 def client():
-    return TestClient(app)
+    app.dependency_overrides[authenticated] = lambda: {"sub": "test-user"}
+    yield TestClient(app)
+    app.dependency_overrides.clear()
 
 
 def test_chat_streams_sse(client):

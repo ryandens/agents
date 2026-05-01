@@ -3,10 +3,15 @@
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
 import { useEffect, useRef, useState } from 'react';
+import { useAuth } from './AuthProvider';
 
 export default function Chat() {
+  const { token } = useAuth();
   const { messages, sendMessage, status } = useChat({
-    transport: new DefaultChatTransport({ api: `${process.env.NEXT_PUBLIC_BACKEND}/api/chat` }),
+    transport: new DefaultChatTransport({
+      api: `${process.env.NEXT_PUBLIC_BACKEND ?? ''}/api/chat`,
+      headers: { Authorization: `Bearer ${token}` },
+    }),
   });
 
   const [input, setInput] = useState('');
