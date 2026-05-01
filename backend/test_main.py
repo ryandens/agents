@@ -33,6 +33,8 @@ def client():
 
 
 def test_chat_streams_sse(client):
+    import json
+
     chunks = ["Hello", ", ", "world", "!"]
     mock_stream = make_stream_mock(chunks)
 
@@ -60,17 +62,24 @@ def test_chat_streams_sse(client):
         line.removeprefix("data: ") for line in lines if line.startswith("data: ")
     ]
 
-    assert data_lines[0] == '{"type": "text-start", "id": "text-0"}'
+    # Every data line must be valid JSON — the AI SDK v6 DefaultChatTransport
+    # parses each SSE line with JSON.parse and a strict schema. Non-JSON
+    # sentinels like "[DONE]" cause a parse error that cancels the stream,
+    # which over HTTP/2 (production) sends RST_STREAM and Firefox surfaces
+    # as NS_ERROR_NET_PARTIAL_TRANSFER.
+    events = []
+    for raw in data_lines:
+        events.append(json.loads(raw))
 
-    deltas = [line for line in data_lines if '"text-delta"' in line]
+    types = [e["type"] for e in events]
+    assert types[0] == "start"
+    assert types[1] == "text-start"
+    assert types[-2] == "text-end"
+    assert types[-1] == "finish"
+
+    deltas = [e for e in events if e["type"] == "text-delta"]
     assert len(deltas) == len(chunks)
-    import json
-
-    combined = "".join(json.loads(d)["delta"] for d in deltas)
-    assert combined == "Hello, world!"
-
-    assert data_lines[-2] == '{"type": "text-end", "id": "text-0"}'
-    assert data_lines[-1] == "[DONE]"
+    assert "".join(d["delta"] for d in deltas) == "Hello, world!"
 
 
 def test_chat_ignores_extra_fields(client):

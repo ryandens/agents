@@ -91,6 +91,7 @@ def sse(chunk: dict) -> str:
 async def ui_message_stream(messages: list[MessageParam]) -> AsyncGenerator[str, None]:
     # AI SDK v6 expects SSE with UIMessageChunk objects
     text_id = "text-0"
+    yield sse({"type": "start"})
     yield sse({"type": "text-start", "id": text_id})
     async with client.messages.stream(
         model="claude-opus-4-7",
@@ -100,7 +101,7 @@ async def ui_message_stream(messages: list[MessageParam]) -> AsyncGenerator[str,
         async for delta in stream.text_stream:
             yield sse({"type": "text-delta", "id": text_id, "delta": delta})
     yield sse({"type": "text-end", "id": text_id})
-    yield "data: [DONE]\n\n"
+    yield sse({"type": "finish"})
 
 
 @app.get("/health")
