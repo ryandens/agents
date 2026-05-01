@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from 'react';
 
 export default function Chat() {
   const { messages, sendMessage, status } = useChat({
-    transport: new DefaultChatTransport({ api: 'http://localhost:8000/api/chat' }),
+    transport: new DefaultChatTransport({ api: `${process.env.NEXT_PUBLIC_BACKEND ?? ""}/api/chat` }),
   });
 
   const [input, setInput] = useState('');
