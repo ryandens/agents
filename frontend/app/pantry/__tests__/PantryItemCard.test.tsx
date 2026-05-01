@@ -133,7 +133,10 @@ describe("PantryItemCard", () => {
     fireEvent.click(screen.getByTitle("Delete"));
 
     await waitFor(() => expect(onDeleted).toHaveBeenCalledWith("abc-123"));
-    expect(fetch).toHaveBeenCalledWith(expect.stringContaining("abc-123"), { method: "DELETE" });
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining("abc-123"),
+      expect.objectContaining({ method: "DELETE" })
+    );
   });
 
   it("does not call onDeleted when delete is cancelled", () => {

@@ -89,7 +89,10 @@ describe("PantryPage", () => {
     mockFetch([]);
     render(<PantryPage />);
     await waitFor(() =>
-      expect(fetch).toHaveBeenCalledWith(expect.stringContaining("location=pantry"))
+      expect(fetch).toHaveBeenCalledWith(
+        expect.stringContaining("location=pantry"),
+        expect.anything()
+      )
     );
   });
 
@@ -114,7 +117,10 @@ describe("PantryPage", () => {
     fireEvent.click(screen.getByRole("button", { name: /Fridge/ }));
 
     await waitFor(() =>
-      expect(fetch).toHaveBeenCalledWith(expect.stringContaining("location=fridge"))
+      expect(fetch).toHaveBeenCalledWith(
+        expect.stringContaining("location=fridge"),
+        expect.anything()
+      )
     );
     await waitFor(() => expect(screen.getByText("Whole Milk")).toBeInTheDocument());
   });
@@ -127,7 +133,10 @@ describe("PantryPage", () => {
     mockFetch([]);
     fireEvent.click(screen.getByRole("button", { name: /Freezer/ }));
     await waitFor(() =>
-      expect(fetch).toHaveBeenCalledWith(expect.stringContaining("location=freezer"))
+      expect(fetch).toHaveBeenCalledWith(
+        expect.stringContaining("location=freezer"),
+        expect.anything()
+      )
     );
   });
 
