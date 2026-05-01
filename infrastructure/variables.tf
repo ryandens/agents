@@ -27,6 +27,17 @@ variable "ec2_instance_type" {
   }
 }
 
+variable "app_version" {
+  description = "Image tag and digest to deploy, e.g. '0.1.0@sha256:abc123'. Tag is human-readable; digest pins the exact manifest. To upgrade: set to the new tag@digest and run terraform apply — the EC2 instance will be replaced. Note: /opt/agents/data resets on replacement until moved to EFS or a separate EBS volume."
+  type        = string
+}
+
+variable "anthropic_api_key" {
+  description = "Anthropic API key for the Kitchen Agent backend"
+  type        = string
+  sensitive   = true
+}
+
 variable "google_client_id" {
   description = "Google OAuth client ID for ALB OIDC authentication"
   type        = string

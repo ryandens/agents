@@ -36,6 +36,42 @@ resource "aws_iam_role_policy_attachment" "ssm" {
   policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
 }
 
+resource "aws_iam_role_policy" "ec2_agents" {
+  name = "ecr-pull-ssm-read"
+  role = aws_iam_role.ec2.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = "ecr:GetAuthorizationToken"
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "ecr:BatchCheckLayerAvailability",
+          "ecr:GetDownloadUrlForLayer",
+          "ecr:BatchGetImage",
+        ]
+        Resource = aws_ecr_repository.main.arn
+      },
+      {
+        Effect   = "Allow"
+        Action   = "ssm:GetParameter"
+        Resource = aws_ssm_parameter.anthropic_api_key.arn
+      },
+    ]
+  })
+}
+
+resource "aws_ssm_parameter" "anthropic_api_key" {
+  name  = "/agents/anthropic-api-key"
+  type  = "SecureString"
+  value = var.anthropic_api_key
+}
+
 resource "aws_iam_instance_profile" "ec2" {
   name = "${var.project_name}-ec2"
   role = aws_iam_role.ec2.name
@@ -48,6 +84,15 @@ resource "aws_instance" "app" {
   iam_instance_profile        = aws_iam_instance_profile.ec2.name
   vpc_security_group_ids      = [aws_security_group.ec2.id]
   associate_public_ip_address = true # needed for SSM via internet; replace with VPC endpoints to remove
+
+  user_data = templatefile("${path.module}/files/user_data.sh", {
+    service_content = templatefile("${path.module}/files/agents.service", {
+      aws_region         = var.aws_region
+      ecr_registry       = split("/", aws_ecr_repository.main.repository_url)[0]
+      ecr_image          = "${aws_ecr_repository.main.repository_url}:${var.app_version}"
+      ssm_parameter_name = aws_ssm_parameter.anthropic_api_key.name
+    })
+  })
 
   # IMDSv2 enforced: prevents SSRF attacks from stealing instance credentials via metadata API
   metadata_options {
