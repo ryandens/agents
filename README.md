@@ -69,15 +69,24 @@ The app runs on AWS at [agents.ryandens.com](https://agents.ryandens.com), behin
 
 ### Releasing a new version
 
-Releasing builds the Docker image and pushes it to ECR — it does **not** deploy it.
+Releasing builds the Docker image, pushes it to ECR, and builds the frontend static export as a GitHub Actions artifact — it does **not** deploy anything.
 
 ```sh
 gh release create 0.2.0 --title "0.2.0" --notes "..."
 ```
 
-This pushes the `0.2.0` tag, which triggers the GitHub Actions release workflow. Wait for it to go green before proceeding.
+This pushes the `0.2.0` tag, triggering the GitHub Actions release workflow. Two jobs run in parallel:
 
-### Upgrading the running instance
+- **docker** — builds a multi-arch image and pushes to ECR
+- **frontend** — runs `next build` and uploads `frontend/out/` as a versioned artifact
+
+Wait for both to go green before deploying.
+
+### Deploying a new version
+
+Deploy the backend (EC2) and frontend (S3/CloudFront) together so they stay in sync.
+
+#### Backend
 
 Terraform upgrades by replacing the EC2 instance with a new one that runs `user_data` on boot. The new instance pulls the target image, starts the systemd service, and passes ALB health checks before traffic switches over. **Pantry data stored in `/opt/agents/data` is lost on replacement** until that path is moved to a separate EBS volume or EFS.
 
@@ -100,6 +109,36 @@ terraform -chdir=infrastructure apply
 ```
 
 Terraform will show `aws_instance.app must be replaced`. Confirm. The old instance is terminated, the new one starts, and once health checks pass (~2 min) the ALB routes traffic to it.
+
+#### Frontend
+
+**Step 1 — download the artifact** from the GitHub Actions run for the release tag:
+
+```sh
+gh run download --name frontend-0.2.0 --dir /tmp/frontend-out
+```
+
+**Step 2 — sync to S3** (two passes to set correct cache headers):
+
+```sh
+# HTML and root files — no cache
+aws s3 sync /tmp/frontend-out/ s3://$(terraform -chdir=infrastructure output -raw s3_frontend_bucket)/ \
+  --exclude "_next/static/*" \
+  --cache-control "public,max-age=0,must-revalidate" \
+  --delete
+
+# Hashed static assets — cache forever
+aws s3 sync /tmp/frontend-out/_next/static/ s3://$(terraform -chdir=infrastructure output -raw s3_frontend_bucket)/_next/static/ \
+  --cache-control "public,max-age=31536000,immutable"
+```
+
+**Step 3 — invalidate CloudFront**
+
+```sh
+aws cloudfront create-invalidation \
+  --distribution-id $(terraform -chdir=infrastructure output -raw cloudfront_distribution_id) \
+  --paths "/*"
+```
 
 ## Development
 
