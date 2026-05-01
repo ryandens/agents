@@ -9,6 +9,7 @@ dnf install -y docker
 systemctl enable --now docker
 
 mkdir -p /opt/agents/data
+chown 65532:65532 /opt/agents/data
 
 cat > /etc/systemd/system/agents.service <<EOF_UNIT
 ${service_content}

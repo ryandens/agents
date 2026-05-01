@@ -85,6 +85,8 @@ resource "aws_instance" "app" {
   vpc_security_group_ids      = [aws_security_group.ec2.id]
   associate_public_ip_address = true # needed for SSM via internet; replace with VPC endpoints to remove
 
+  user_data_replace_on_change = true
+
   user_data = templatefile("${path.module}/files/user_data.sh", {
     service_content = templatefile("${path.module}/files/agents.service", {
       aws_region         = var.aws_region
