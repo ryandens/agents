@@ -83,6 +83,11 @@ async def ui_message_stream(messages: list[MessageParam]) -> AsyncGenerator[str,
     yield "data: [DONE]\n\n"
 
 
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
+
 @app.post("/api/chat")
 async def chat(request: ChatRequest):
     messages = cast(
