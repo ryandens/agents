@@ -79,6 +79,52 @@ dev:
     trap 'kill -- -$backend -$frontend 2>/dev/null || true' EXIT INT TERM
     wait
 
+# Stop dev servers left listening on :3000/:8000 (when `just dev`'s trap didn't fire)
+dev-stop:
+    #!/usr/bin/env bash
+    set -uo pipefail
+
+    # Kill by process group, not PID: uvicorn's reloader and next dev each fork workers
+    # that keep the port bound if only the parent goes. `just dev` puts each server in
+    # its own group, so the group is exactly one server and nothing else.
+    groups() {
+        local pids
+        pids="$(lsof -t -nP -iTCP:3000 -iTCP:8000 -sTCP:LISTEN 2>/dev/null)" || true
+        [ -n "$pids" ] || return 0
+        # shellcheck disable=SC2086 # deliberate word splitting: one -p flag, many pids
+        ps -o pgid= -p $pids 2>/dev/null | tr -d ' ' | sort -u
+    }
+
+    pgids="$(groups)"
+    if [ -z "$pgids" ]; then
+        echo "nothing listening on :3000 or :8000"
+        exit 0
+    fi
+
+    self="$(ps -o pgid= -p $$ | tr -d ' ')"
+    for pgid in $pgids; do
+        [ "$pgid" = "$self" ] && continue # don't take down this recipe
+        kill -TERM -- "-$pgid" 2>/dev/null || true
+    done
+
+    # Give them a moment to shut down cleanly before escalating.
+    for _ in 1 2 3 4 5 6 7 8 9 10; do
+        [ -z "$(groups)" ] && break
+        sleep 0.5
+    done
+
+    for pgid in $(groups); do
+        [ "$pgid" = "$self" ] && continue
+        kill -KILL -- "-$pgid" 2>/dev/null || true
+    done
+
+    if [ -n "$(groups)" ]; then
+        echo "still listening on :3000 or :8000:" >&2
+        lsof -nP -iTCP:3000 -iTCP:8000 -sTCP:LISTEN >&2
+        exit 1
+    fi
+    echo "stopped dev servers on :3000 and :8000"
+
 # Build the frontend into backend/static, where the app serves it from
 build: frontend-build
     rm -rf backend/static
