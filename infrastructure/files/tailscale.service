@@ -17,7 +17,7 @@ ExecStart=/usr/bin/tailscale serve --bg --https=443 http://127.0.0.1:${app_port}
 # Leave the tailnet on shutdown. Terraform terminates the old instance before creating the
 # replacement, so without this the retired node keeps the hostname and the new one is
 # renamed to ${tailscale_hostname}-1 — a silently broken URL.
-ExecStop=-/usr/bin/tailscale logout
+ExecStop=-/usr/bin/tailscale down
 
 [Install]
 WantedBy=multi-user.target
