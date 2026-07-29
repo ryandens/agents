@@ -142,6 +142,7 @@ Terraform will show `aws_instance.app must be replaced`. Confirm. The old instan
 just dev            # start both servers with hot-reload
 just serve          # build the frontend and serve everything from :8000, like production
 just docker-run     # build and run the production image on :8080
+just docker-check   # build the production image and smoke-test it (mirrors the CI docker job)
 just check          # run all checks (mirrors CI)
 
 just backend-test   # pytest
@@ -151,4 +152,13 @@ just backend-fmt    # ruff format --check
 just frontend-test  # vitest
 just frontend-lint  # eslint
 just frontend-build # next build (type-check + compile)
+```
+
+`scripts/smoke_test.py` checks a running container end to end: that `/` serves the React
+app, `/api/*` still reaches FastAPI rather than the static mount, `/pantry` redirects to
+`/pantry/`, and the Google client ID reached the browser bundle. It is stdlib-only, so CI
+runs it without installing anything. Point it at any deployment:
+
+```sh
+python3 scripts/smoke_test.py https://agents.ryandens.com
 ```

@@ -6,6 +6,7 @@
 .agents/
 .zed/
 infrastructure/
+scripts/
 README.md
 
 # Python. These need `**/` to reach backend/: a bare `.venv/` would only match one at
