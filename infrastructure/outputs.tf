@@ -13,9 +13,9 @@ output "ecr_repository_url" {
   value       = aws_ecr_repository.main.repository_url
 }
 
-output "alb_dns_name" {
-  description = "ALB DNS name — agents.ryandens.com aliases here, serving both the frontend and the API"
-  value       = aws_lb.main.dns_name
+output "app_url" {
+  description = "Where the app lives — reachable only from a device on the tailnet, serving both the frontend and the API"
+  value       = "https://${var.tailscale_hostname}.${var.tailscale_tailnet}"
 }
 
 output "ec2_instance_id" {

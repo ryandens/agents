@@ -43,6 +43,33 @@ variable "google_client_id" {
   type        = string
 }
 
+variable "tailscale_auth_key" {
+  description = "Tailscale auth key used to join the tailnet at boot. Must be reusable and pre-approved; generate at https://login.tailscale.com/admin/settings/keys. Keys expire (90 days max), so rotate this before the instance is next replaced."
+  type        = string
+  sensitive   = true
+
+  validation {
+    condition     = startswith(var.tailscale_auth_key, "tskey-auth-")
+    error_message = "tailscale_auth_key must be an auth key (starts with 'tskey-auth-'), not an API or OAuth key."
+  }
+}
+
+variable "tailscale_hostname" {
+  description = "MagicDNS hostname for the instance on the tailnet"
+  type        = string
+  default     = "agents"
+}
+
+variable "tailscale_tailnet" {
+  description = "Tailnet DNS name, e.g. 'tail1a2b3c.ts.net' — shown on the DNS page of the Tailscale admin console. Used only to compose the app_url output."
+  type        = string
+
+  validation {
+    condition     = endswith(var.tailscale_tailnet, ".ts.net")
+    error_message = "tailscale_tailnet must be the tailnet's DNS name ending in '.ts.net'."
+  }
+}
+
 variable "app_port" {
   description = "Port the application listens on"
   type        = number

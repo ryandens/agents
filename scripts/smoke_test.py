@@ -92,7 +92,7 @@ def check(fn):
 
 @check
 def health_responds(base_url):
-    """/health returns ok, so the ALB target group stays healthy"""
+    """/health returns ok, which is what user_data waits on before finishing boot"""
     status, _, body = fetch(f"{base_url}/health")
     assert status == 200, f"expected 200, got {status}"
     assert b'"ok"' in body, f"expected status ok, got {body[:200]!r}"

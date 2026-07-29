@@ -58,9 +58,12 @@ resource "aws_iam_role_policy" "ec2_agents" {
         Resource = aws_ecr_repository.main.arn
       },
       {
-        Effect   = "Allow"
-        Action   = "ssm:GetParameter"
-        Resource = aws_ssm_parameter.anthropic_api_key.arn
+        Effect = "Allow"
+        Action = "ssm:GetParameter"
+        Resource = [
+          aws_ssm_parameter.anthropic_api_key.arn,
+          aws_ssm_parameter.tailscale_auth_key.arn,
+        ]
       },
     ]
   })
@@ -70,6 +73,15 @@ resource "aws_ssm_parameter" "anthropic_api_key" {
   name  = "/agents/anthropic-api-key"
   type  = "SecureString"
   value = var.anthropic_api_key
+}
+
+# Read once at boot to join the tailnet. A reusable, pre-approved key works here; an
+# ephemeral one does not, because an ephemeral node is reaped while it is merely offline
+# and the instance would lose its identity across a reboot.
+resource "aws_ssm_parameter" "tailscale_auth_key" {
+  name  = "/agents/tailscale-auth-key"
+  type  = "SecureString"
+  value = var.tailscale_auth_key
 }
 
 resource "aws_iam_instance_profile" "ec2" {
@@ -83,17 +95,27 @@ resource "aws_instance" "app" {
   subnet_id                   = aws_subnet.public[0].id
   iam_instance_profile        = aws_iam_instance_profile.ec2.name
   vpc_security_group_ids      = [aws_security_group.ec2.id]
-  associate_public_ip_address = true # needed for SSM via internet; replace with VPC endpoints to remove
+  associate_public_ip_address = true # outbound only, for Tailscale/SSM/ECR; no inbound TCP is open
 
   user_data_replace_on_change = true
 
   user_data = templatefile("${path.module}/files/user_data.sh", {
+    app_port = var.app_port
+
     service_content = templatefile("${path.module}/files/agents.service", {
       aws_region         = var.aws_region
+      app_port           = var.app_port
       ecr_registry       = split("/", aws_ecr_repository.main.repository_url)[0]
       ecr_image          = "${aws_ecr_repository.main.repository_url}:${var.app_version}"
       ssm_parameter_name = aws_ssm_parameter.anthropic_api_key.name
       google_client_id   = var.google_client_id
+    })
+
+    tailscale_service_content = templatefile("${path.module}/files/tailscale.service", {
+      aws_region         = var.aws_region
+      app_port           = var.app_port
+      ssm_parameter_name = aws_ssm_parameter.tailscale_auth_key.name
+      tailscale_hostname = var.tailscale_hostname
     })
   })
 
