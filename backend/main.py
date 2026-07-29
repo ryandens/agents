@@ -30,7 +30,9 @@ _auth_request = google_requests.Request()
 # Populated by `just build` locally and by the frontend stage of backend/Dockerfile in
 # the image; absent when running the backend on its own against `next dev`.
 static_dir_env = os.environ.get("STATIC_DIR", "")
-STATIC_DIR = Path(static_dir_env) if static_dir_env else Path(__file__).parent / "static"
+STATIC_DIR = (
+    Path(static_dir_env) if static_dir_env else Path(__file__).parent / "static"
+)
 
 app = FastAPI()
 # Production is same-origin, so CORS only matters for `next dev` talking to a backend
