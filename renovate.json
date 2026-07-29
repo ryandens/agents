@@ -6,6 +6,11 @@
       "description": "Bump the >= floors in backend/pyproject.toml, which also regenerates uv.lock. The default rangeStrategy only edits a manifest when the new version escapes the declared range, and an open-ended '>=x' is satisfied by every release — so without this the backend gets no update PRs at all.",
       "matchManagers": ["pep621"],
       "rangeStrategy": "bump"
+    },
+    {
+      "description": "Hold eslint at 9. The plugins eslint-config-next bundles (eslint-plugin-react, -jsx-a11y, -import) all cap their peer eslint at ^9, so eslint 10 installs only because npm downgrades the nested peer conflict to a warning. Drop this rule once those plugins declare eslint 10 support.",
+      "matchPackageNames": ["eslint"],
+      "allowedVersions": "<10"
     }
   ]
 }
