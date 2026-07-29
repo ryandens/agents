@@ -43,6 +43,7 @@ for _ in $(seq 1 60); do
     fi
     sleep 2
 done
+curl -fsS "http://127.0.0.1:${app_port}/health" >/dev/null || { echo "app failed to become healthy" >&2; exit 1; }
 
 # Restart SSM agent after Docker has set up its iptables rules, so the agent
 # registers against the final network state rather than racing with Docker on boot.
