@@ -83,6 +83,30 @@ docker-build:
     docker build -f backend/Dockerfile -t agents:local \
         --build-arg NEXT_PUBLIC_GOOGLE_CLIENT_ID="${NEXT_PUBLIC_GOOGLE_CLIENT_ID:-${GOOGLE_CLIENT_ID:-}}" .
 
+# Smoke-test an already-built image (CI passes the tag it just built)
+smoke image="agents:local" port="8080":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    name="agents-smoke-{{ port }}"
+    docker rm -f "$name" >/dev/null 2>&1 || true
+
+    cleanup() {
+        rc=$?
+        if [ "$rc" -ne 0 ]; then
+            echo "--- container logs ---" >&2
+            docker logs "$name" 2>&1 | tail -40 >&2 || true
+        fi
+        docker rm -f "$name" >/dev/null 2>&1 || true
+        exit "$rc"
+    }
+    trap cleanup EXIT
+
+    docker run -d --name "$name" -p {{ port }}:8080 -e GOOGLE_CLIENT_ID=smoke-test {{ image }} >/dev/null
+    python3 scripts/smoke_test.py "http://127.0.0.1:{{ port }}"
+
+# Build the production image and smoke-test it
+docker-check: docker-build smoke
+
 # Run the production image at http://localhost:8080
 docker-run: docker-build
     docker run --rm -p 8080:8080 \
@@ -105,13 +129,13 @@ backend-install:
 backend-dev:
     uv run --project backend uvicorn main:app --app-dir backend --reload --port 8000
 
-# Run backend linter
+# Run backend linter (scripts/ holds the smoke test, held to the same standard)
 backend-lint:
-    uv run --project backend ruff check backend
+    uv run --project backend ruff check backend scripts
 
 # Run backend format check
 backend-fmt:
-    uv run --project backend ruff format --check backend
+    uv run --project backend ruff format --check backend scripts
 
 # Run backend tests
 backend-test:
