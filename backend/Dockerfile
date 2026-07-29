@@ -1,3 +1,27 @@
+# Built from the repository root, not backend/, so the frontend's static export can be
+# baked in and served by the same process as the API:
+#   docker build -f backend/Dockerfile .
+
+# Static output is platform-independent, so pin to BUILDPLATFORM and build it once
+# rather than emulating the whole Node toolchain for each target architecture.
+FROM --platform=$BUILDPLATFORM node:24.18.0-slim@sha256:6f7b03f7c2c8e2e784dcf9295400527b9b1270fd37b7e9a7285cf83b6951452d AS frontend
+
+WORKDIR /src
+
+COPY frontend/package.json frontend/package-lock.json ./
+
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci
+
+COPY frontend/ /src
+
+# Baked into the export at build time; a public client ID, not a secret.
+ARG NEXT_PUBLIC_GOOGLE_CLIENT_ID=""
+ENV NEXT_PUBLIC_GOOGLE_CLIENT_ID=$NEXT_PUBLIC_GOOGLE_CLIENT_ID
+
+RUN npm run build
+
+
 FROM ghcr.io/astral-sh/uv:python3.14-bookworm-slim@sha256:7cf77f594be8042dab6daa9fe326f90962252268b4f120a7f5dccce4d947e6c1 AS builder
 
 WORKDIR /app
@@ -6,11 +30,11 @@ ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy
 
 RUN --mount=type=cache,target=/root/.cache/uv \
-    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
-    --mount=type=bind,source=uv.lock,target=uv.lock \
+    --mount=type=bind,source=backend/pyproject.toml,target=pyproject.toml \
+    --mount=type=bind,source=backend/uv.lock,target=uv.lock \
     uv sync --frozen --no-dev --no-install-project
 
-COPY . /app
+COPY backend/ /app
 
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev
@@ -26,6 +50,9 @@ FROM cgr.dev/chainguard/python:latest@sha256:b3d3fbb8b9fe48950bab73d49bffa7496ff
 WORKDIR /app
 
 COPY --from=builder --chown=nonroot:nonroot /app /app
+
+# Where main.py's STATIC_DIR looks by default
+COPY --from=frontend --chown=nonroot:nonroot /src/out /app/static
 
 ENV PATH="/app/.venv/bin:$PATH"
 

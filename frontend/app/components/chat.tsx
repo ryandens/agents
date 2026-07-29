@@ -9,7 +9,7 @@ export default function Chat() {
   const { token } = useAuth();
   const { messages, sendMessage, status } = useChat({
     transport: new DefaultChatTransport({
-      api: `${process.env.NEXT_PUBLIC_BACKEND ?? ''}/api/chat`,
+      api: '/api/chat',
       headers: { Authorization: `Bearer ${token}` },
     }),
   });

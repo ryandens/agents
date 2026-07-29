@@ -39,12 +39,14 @@ resource "aws_lb_listener" "http" {
   port              = 80
   protocol          = "HTTP"
 
+  # The ALB now serves the browser-facing app, not just the API, so send plain-HTTP
+  # visitors to HTTPS instead of erroring at them.
   default_action {
-    type = "fixed-response"
-    fixed_response {
-      content_type = "text/plain"
-      message_body = "Use HTTPS"
-      status_code  = "403"
+    type = "redirect"
+    redirect {
+      protocol    = "HTTPS"
+      port        = "443"
+      status_code = "HTTP_301"
     }
   }
 }

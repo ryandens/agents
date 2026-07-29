@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "../components/AuthProvider";
 import {
-  BACKEND,
   CATEGORY_LABELS,
   Category,
   PantryItem,
@@ -69,7 +68,7 @@ export default function PantryForm({ item, defaultLocation, onSaved, onClose }: 
     setSaving(true);
     setError(null);
     try {
-      const url = item ? `${BACKEND}/api/pantry/${item.id}` : `${BACKEND}/api/pantry`;
+      const url = item ? `/api/pantry/${item.id}` : "/api/pantry";
       const method = item ? "PATCH" : "POST";
       const res = await fetch(url, {
         method,

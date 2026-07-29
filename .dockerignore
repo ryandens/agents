@@ -1,0 +1,31 @@
+# The build context is the repository root — see backend/Dockerfile.
+
+.git/
+.github/
+.claude/
+.agents/
+.zed/
+infrastructure/
+README.md
+
+# Python
+.venv/
+**/__pycache__/
+**/*.py[co]
+.pytest_cache/
+backend/.python-version
+backend/data/
+backend/test_*.py
+# Built inside the image by the frontend stage; a local `just build` copy would only
+# be overwritten.
+backend/static/
+
+# Node
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/coverage/
+
+# Secrets
+**/.env
+**/.env.*
