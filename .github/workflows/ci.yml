@@ -15,10 +15,9 @@ jobs:
       - name: Setup Just
         uses: taiki-e/install-action@782607f383d1c9d72a26177e2594cd8dad0f3840 # just
 
+      # Python version comes from backend/.python-version, which uv reads itself.
       - name: Install uv
         uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
-        with:
-          python-version-file: backend/.python-version
 
       - name: Install dependencies
         run: just backend-install
