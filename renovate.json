@@ -1,6 +1,11 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": ["config:recommended", "helpers:pinGitHubActionDigests"],
+  "lockFileMaintenance": {
+    "description": "Re-resolve the lockfiles weekly so transitive deps stay current. The pep621 rule below only bumps packages declared in backend/pyproject.toml; lock-only deps pulled in through extras (requests via google-auth[requests], certifi, charset-normalizer) are invisible to that manager and otherwise sit at whatever version was resolved the last time something forced a full resolve.",
+    "enabled": true,
+    "schedule": ["before 4am on monday"]
+  },
   "packageRules": [
     {
       "description": "Bump the >= floors in backend/pyproject.toml, which also regenerates uv.lock. The default rangeStrategy only edits a manifest when the new version escapes the declared range, and an open-ended '>=x' is satisfied by every release — so without this the backend gets no update PRs at all.",
