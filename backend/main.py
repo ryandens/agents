@@ -2,7 +2,7 @@ import json
 import os
 from collections.abc import AsyncGenerator
 from pathlib import Path
-from typing import Any, cast
+from typing import Annotated, Any, cast
 from uuid import UUID
 
 import anthropic
@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from google.auth.exceptions import GoogleAuthError
 from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token
 from pydantic import BaseModel
@@ -42,9 +43,12 @@ def authenticated(authorization: str | None = Header(default=None)) -> dict:
     token = authorization.removeprefix("Bearer ")
     try:
         return id_token.verify_oauth2_token(token, _auth_request, GOOGLE_CLIENT_ID)
-    except Exception:
-        raise HTTPException(status_code=401, detail="Invalid token")
+    except (GoogleAuthError, ValueError) as exc:
+        raise HTTPException(status_code=401, detail="Invalid token") from exc
 
+
+# Depends() called in an argument default trips B008, so carry it in the type.
+AuthenticatedUser = Annotated[dict, Depends(authenticated)]
 
 pantry_store = PantryStore()
 
@@ -88,7 +92,7 @@ def sse(chunk: dict) -> str:
     return f"data: {json.dumps(chunk)}\n\n"
 
 
-async def ui_message_stream(messages: list[MessageParam]) -> AsyncGenerator[str, None]:
+async def ui_message_stream(messages: list[MessageParam]) -> AsyncGenerator[str]:
     # AI SDK v6 expects SSE with UIMessageChunk objects
     text_id = "text-0"
     yield sse({"type": "start"})
@@ -110,7 +114,7 @@ def health():
 
 
 @app.post("/api/chat")
-async def chat(request: ChatRequest, _: dict = Depends(authenticated)):
+async def chat(request: ChatRequest, _: AuthenticatedUser):
     messages = cast(
         list[MessageParam],
         [{"role": m.role, "content": m.text()} for m in request.messages if m.text()],
@@ -123,19 +127,17 @@ async def chat(request: ChatRequest, _: dict = Depends(authenticated)):
 
 
 @app.get("/api/pantry", response_model=list[PantryItem])
-def list_pantry(
-    location: StorageLocation | None = None, _: dict = Depends(authenticated)
-):
+def list_pantry(_: AuthenticatedUser, location: StorageLocation | None = None):
     return pantry_store.list_items(location=location)
 
 
 @app.post("/api/pantry", response_model=PantryItem, status_code=201)
-def create_pantry_item(data: PantryItemCreate, _: dict = Depends(authenticated)):
+def create_pantry_item(data: PantryItemCreate, _: AuthenticatedUser):
     return pantry_store.create_item(data)
 
 
 @app.get("/api/pantry/{item_id}", response_model=PantryItem)
-def get_pantry_item(item_id: UUID, _: dict = Depends(authenticated)):
+def get_pantry_item(item_id: UUID, _: AuthenticatedUser):
     item = pantry_store.get_item(item_id)
     if item is None:
         raise HTTPException(status_code=404, detail="Item not found")
@@ -143,9 +145,7 @@ def get_pantry_item(item_id: UUID, _: dict = Depends(authenticated)):
 
 
 @app.patch("/api/pantry/{item_id}", response_model=PantryItem)
-def update_pantry_item(
-    item_id: UUID, data: PantryItemUpdate, _: dict = Depends(authenticated)
-):
+def update_pantry_item(item_id: UUID, data: PantryItemUpdate, _: AuthenticatedUser):
     item = pantry_store.update_item(item_id, data)
     if item is None:
         raise HTTPException(status_code=404, detail="Item not found")
@@ -153,7 +153,7 @@ def update_pantry_item(
 
 
 @app.delete("/api/pantry/{item_id}", status_code=204)
-def delete_pantry_item(item_id: UUID, _: dict = Depends(authenticated)):
+def delete_pantry_item(item_id: UUID, _: AuthenticatedUser):
     if not pantry_store.delete_item(item_id):
         raise HTTPException(status_code=404, detail="Item not found")
 
