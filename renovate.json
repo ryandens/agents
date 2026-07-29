@@ -1,4 +1,11 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["config:recommended", "helpers:pinGitHubActionDigests"]
+  "extends": ["config:recommended", "helpers:pinGitHubActionDigests"],
+  "packageRules": [
+    {
+      "description": "Bump the >= floors in backend/pyproject.toml, which also regenerates uv.lock. The default rangeStrategy only edits a manifest when the new version escapes the declared range, and an open-ended '>=x' is satisfied by every release — so without this the backend gets no update PRs at all.",
+      "matchManagers": ["pep621"],
+      "rangeStrategy": "bump"
+    }
+  ]
 }
