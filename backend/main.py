@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from google.auth.exceptions import GoogleAuthError
 from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token
@@ -25,13 +26,20 @@ load_dotenv(dotenv_path=Path(__file__).parent.parent / ".env")
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
 _auth_request = google_requests.Request()
 
+# The frontend's static export, served at "/" so the app and the API share an origin.
+# Populated by `just build` locally and by the frontend stage of backend/Dockerfile in
+# the image; absent when running the backend on its own against `next dev`.
+static_dir_env = os.environ.get("STATIC_DIR", "")
+STATIC_DIR = (
+    Path(static_dir_env) if static_dir_env else Path(__file__).parent / "static"
+)
+
 app = FastAPI()
+# Production is same-origin, so CORS only matters for `next dev` talking to a backend
+# started without the dev proxy.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "https://agents.ryandens.com",
-    ],
+    allow_origins=["http://localhost:3000"],
     allow_methods=["*"],
     allow_headers=["Authorization", "Content-Type"],
 )
@@ -156,6 +164,12 @@ def update_pantry_item(item_id: UUID, data: PantryItemUpdate, _: AuthenticatedUs
 def delete_pantry_item(item_id: UUID, _: AuthenticatedUser):
     if not pantry_store.delete_item(item_id):
         raise HTTPException(status_code=404, detail="Item not found")
+
+
+# Mounted last so it only sees paths no API route claimed. html=True resolves
+# directories to index.html, matching the export's trailingSlash layout.
+if STATIC_DIR.is_dir():
+    app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="frontend")
 
 
 if __name__ == "__main__":

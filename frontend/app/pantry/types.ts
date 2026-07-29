@@ -91,5 +91,3 @@ export const UNIT_GROUPS: { label: string; units: Unit[] }[] = [
   { label: "Count", units: ["count", "bunch", "head", "clove", "loaf"] },
   { label: "Container", units: ["can", "bottle", "box", "bag", "jar"] },
 ];
-
-export const BACKEND = process.env.NEXT_PUBLIC_BACKEND ?? "";

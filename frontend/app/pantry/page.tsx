@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "../components/AuthProvider";
 import PantryForm from "./PantryForm";
 import PantryItemCard from "./PantryItemCard";
-import { BACKEND, Category, CATEGORY_LABELS, PantryItem, StorageLocation } from "./types";
+import { Category, CATEGORY_LABELS, PantryItem, StorageLocation } from "./types";
 
 const TABS: { key: StorageLocation; label: string; icon: string }[] = [
   { key: "pantry", label: "Pantry", icon: "🫙" },
@@ -28,7 +28,7 @@ export default function PantryPage() {
 
     async function loadItems() {
       try {
-        const res = await fetch(`${BACKEND}/api/pantry?location=${activeTab}`, {
+        const res = await fetch(`/api/pantry?location=${activeTab}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (!res.ok) throw new Error(`Failed to load (${res.status})`);

@@ -1,7 +1,7 @@
 "use client";
 
 import { useAuth } from "../components/AuthProvider";
-import { BACKEND, CATEGORY_LABELS, PantryItem } from "./types";
+import { CATEGORY_LABELS, PantryItem } from "./types";
 
 interface Props {
   item: PantryItem;
@@ -52,7 +52,7 @@ export default function PantryItemCard({ item, onEdit, onDeleted }: Props) {
 
   async function handleDelete() {
     if (!confirm(`Delete "${item.name}"?`)) return;
-    await fetch(`${BACKEND}/api/pantry/${item.id}`, {
+    await fetch(`/api/pantry/${item.id}`, {
       method: "DELETE",
       headers: { Authorization: `Bearer ${token}` },
     });

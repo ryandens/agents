@@ -4,9 +4,8 @@ data "aws_route53_zone" "main" {
 }
 
 resource "aws_acm_certificate" "main" {
-  domain_name               = "agents.ryandens.com"
-  subject_alternative_names = ["api.agents.ryandens.com"]
-  validation_method         = "DNS"
+  domain_name       = "agents.ryandens.com"
+  validation_method = "DNS"
 
   lifecycle {
     create_before_destroy = true
@@ -34,23 +33,11 @@ resource "aws_acm_certificate_validation" "main" {
   validation_record_fqdns = [for r in aws_route53_record.cert_validation : r.fqdn]
 }
 
-# agents.ryandens.com → CloudFront (frontend static assets)
+# agents.ryandens.com → ALB. The app serves the React frontend at / and the API under
+# /api from a single origin, so this is the only record the app needs.
 resource "aws_route53_record" "app" {
   zone_id = data.aws_route53_zone.main.zone_id
   name    = "agents.ryandens.com"
-  type    = "A"
-
-  alias {
-    name                   = aws_cloudfront_distribution.main.domain_name
-    zone_id                = aws_cloudfront_distribution.main.hosted_zone_id
-    evaluate_target_health = false
-  }
-}
-
-# api.agents.ryandens.com → ALB (backend API, bypasses CloudFront for streaming)
-resource "aws_route53_record" "api" {
-  zone_id = data.aws_route53_zone.main.zone_id
-  name    = "api.agents.ryandens.com"
   type    = "A"
 
   alias {

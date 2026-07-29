@@ -31,9 +31,25 @@ An AI-powered meal planning and kitchen management app. Chat with the agent to p
 just backend-install
 just frontend-install
 
-# Create .env at the repo root
-echo "ANTHROPIC_API_KEY=sk-ant-..." > .env
+# Write .env at the repo root from 1Password
+just env-sync
 ```
+
+`just env-sync` reads the `agents.ryandens.com` item for the Google OAuth client ID and
+the `Claude API Key` item for the Anthropic key (override with `OP_OAUTH_ITEM` /
+`OP_API_KEY_ITEM`). Without 1Password, write the file by hand instead:
+
+```sh
+cat > .env <<'EOF'
+ANTHROPIC_API_KEY=sk-ant-...
+GOOGLE_CLIENT_ID=....apps.googleusercontent.com
+EOF
+```
+
+`GOOGLE_CLIENT_ID` is what the backend verifies ID tokens against; `just dev` and
+`just build` mirror it into `NEXT_PUBLIC_GOOGLE_CLIENT_ID` so the browser's sign-in
+button gets the same value. Sign-in also requires `http://localhost:3000` to be an
+authorized JavaScript origin on that OAuth client.
 
 ## Running
 
@@ -41,7 +57,17 @@ echo "ANTHROPIC_API_KEY=sk-ant-..." > .env
 just dev
 ```
 
-Opens the frontend at `http://localhost:3000` and the backend at `http://localhost:8000`.
+Open `http://localhost:3000`. The frontend dev server runs there with hot-reload and
+proxies `/api/*` to the backend on `http://localhost:8000`, which runs with
+`uvicorn --reload`. Both halves reload on save, and the app sees a single origin — the
+same shape as production.
+
+To run it exactly as production does, with the static export served by the backend:
+
+```sh
+just serve         # builds the frontend into backend/static, serves both on :8000
+just docker-run    # or the same thing in the production image, on :8080
+```
 
 ## Features
 
@@ -65,28 +91,28 @@ Data is stored in `backend/data/pantry.json`. The storage layer is designed to b
 
 ## Deployment
 
-The app runs on AWS at [agents.ryandens.com](https://agents.ryandens.com), behind a Google OIDC-gated ALB. Infrastructure is managed with Terraform in `infrastructure/`.
+The app runs on AWS at [agents.ryandens.com](https://agents.ryandens.com). That name is a
+Route 53 alias for the ALB, which forwards everything to the EC2 instance. One container
+serves both halves of the app: the frontend's static export at `/`, and the API under
+`/api/...`. Same origin, so there is no CORS and no CDN to invalidate. Infrastructure is
+managed with Terraform in `infrastructure/`.
 
 ### Releasing a new version
 
-Releasing builds the Docker image, pushes it to ECR, and builds the frontend static export as a GitHub Actions artifact — it does **not** deploy anything.
+Releasing builds the Docker image and pushes it to ECR — it does **not** deploy anything.
 
 ```sh
 gh release create 0.2.0 --title "0.2.0" --notes "..."
 ```
 
-This pushes the `0.2.0` tag, triggering the GitHub Actions release workflow. Two jobs run in parallel:
+This pushes the `0.2.0` tag, triggering the GitHub Actions release workflow. The image is
+built from the repository root (`-f backend/Dockerfile .`) so a Node stage can run
+`next build` and copy `frontend/out` into the image at `/app/static`. The frontend and the
+API therefore ship as one versioned artifact and cannot drift apart.
 
-- **docker** — builds a multi-arch image and pushes to ECR
-- **frontend** — runs `next build` and uploads `frontend/out/` as a versioned artifact
-
-Wait for both to go green before deploying.
+Wait for the workflow to go green before deploying.
 
 ### Deploying a new version
-
-Deploy the backend (EC2) and frontend (S3/CloudFront) together so they stay in sync.
-
-#### Backend
 
 Terraform upgrades by replacing the EC2 instance with a new one that runs `user_data` on boot. The new instance pulls the target image, starts the systemd service, and passes ALB health checks before traffic switches over. **Pantry data stored in `/opt/agents/data` is lost on replacement** until that path is moved to a separate EBS volume or EFS.
 
@@ -108,42 +134,15 @@ app_version = "0.2.0@sha256:<digest from step 1>"
 terraform -chdir=infrastructure apply
 ```
 
-Terraform will show `aws_instance.app must be replaced`. Confirm. The old instance is terminated, the new one starts, and once health checks pass (~2 min) the ALB routes traffic to it.
-
-#### Frontend
-
-**Step 1 — download the artifact** from the GitHub Actions run for the release tag:
-
-```sh
-gh run download --name frontend-0.2.0 --dir /tmp/frontend-out
-```
-
-**Step 2 — sync to S3** (two passes to set correct cache headers):
-
-```sh
-# HTML and root files — no cache
-aws s3 sync /tmp/frontend-out/ s3://$(terraform -chdir=infrastructure output -raw s3_frontend_bucket)/ \
-  --exclude "_next/static/*" \
-  --cache-control "public,max-age=0,must-revalidate" \
-  --delete
-
-# Hashed static assets — cache forever
-aws s3 sync /tmp/frontend-out/_next/static/ s3://$(terraform -chdir=infrastructure output -raw s3_frontend_bucket)/_next/static/ \
-  --cache-control "public,max-age=31536000,immutable"
-```
-
-**Step 3 — invalidate CloudFront**
-
-```sh
-aws cloudfront create-invalidation \
-  --distribution-id $(terraform -chdir=infrastructure output -raw cloudfront_distribution_id) \
-  --paths "/*"
-```
+Terraform will show `aws_instance.app must be replaced`. Confirm. The old instance is terminated, the new one starts, and once health checks pass (~2 min) the ALB routes traffic to it. The frontend ships inside that image, so there is no separate frontend deploy.
 
 ## Development
 
 ```sh
 just dev            # start both servers with hot-reload
+just serve          # build the frontend and serve everything from :8000, like production
+just docker-run     # build and run the production image on :8080
+just docker-check   # build the production image and smoke-test it (mirrors the CI docker job)
 just check          # run all checks (mirrors CI)
 
 just backend-test   # pytest
@@ -153,4 +152,13 @@ just backend-fmt    # ruff format --check
 just frontend-test  # vitest
 just frontend-lint  # eslint
 just frontend-build # next build (type-check + compile)
+```
+
+`scripts/smoke_test.py` checks a running container end to end: that `/` serves the React
+app, `/api/*` still reaches FastAPI rather than the static mount, `/pantry` redirects to
+`/pantry/`, and the Google client ID reached the browser bundle. It is stdlib-only, so CI
+runs it without installing anything. Point it at any deployment:
+
+```sh
+python3 scripts/smoke_test.py https://agents.ryandens.com
 ```

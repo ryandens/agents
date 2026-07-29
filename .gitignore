@@ -9,6 +9,9 @@ wheels/
 # Virtual environments
 .venv
 
+# frontend static export, copied here by `just build` so the backend can serve it
+backend/static/
+
 # secrets
 .env
 
