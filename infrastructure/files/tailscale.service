@@ -1,0 +1,23 @@
+[Unit]
+Description=Join the tailnet and serve the Kitchen Agent over it
+After=tailscaled.service network-online.target
+Requires=tailscaled.service
+Wants=network-online.target
+
+[Service]
+# oneshot + RemainAfterExit: both commands configure long-lived state in tailscaled and
+# return. Nothing stays in the foreground, but the unit must still count as active so
+# ExecStop runs at shutdown.
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/sh -c '/usr/bin/tailscale up --authkey="$(/usr/bin/aws ssm get-parameter --name ${ssm_parameter_name} --with-decryption --query Parameter.Value --output text --region ${aws_region})" --hostname=${tailscale_hostname} --accept-dns=false'
+# Terminates TLS with a Tailscale-issued cert for the node's MagicDNS name and proxies to
+# the app on loopback. --bg writes the config and returns rather than tailing logs.
+ExecStart=/usr/bin/tailscale serve --bg --https=443 http://127.0.0.1:${app_port}
+# Leave the tailnet on shutdown. Terraform terminates the old instance before creating the
+# replacement, so without this the retired node keeps the hostname and the new one is
+# renamed to ${tailscale_hostname}-1 — a silently broken URL.
+ExecStop=-/usr/bin/tailscale logout
+
+[Install]
+WantedBy=multi-user.target

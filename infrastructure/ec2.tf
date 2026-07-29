@@ -64,6 +64,7 @@ resource "aws_iam_role_policy" "ec2_agents" {
           aws_ssm_parameter.anthropic_api_key.arn,
           aws_ssm_parameter.google_client_secret.arn,
           aws_ssm_parameter.session_secret.arn,
+          aws_ssm_parameter.tailscale_auth_key.arn,
         ]
       },
     ]
@@ -99,6 +100,15 @@ resource "aws_ssm_parameter" "session_secret" {
   value = random_password.session_secret.result
 }
 
+# Read once at boot to join the tailnet. A reusable, pre-approved key works here; an
+# ephemeral one does not, because an ephemeral node is reaped while it is merely offline
+# and the instance would lose its identity across a reboot.
+resource "aws_ssm_parameter" "tailscale_auth_key" {
+  name  = "/agents/tailscale-auth-key"
+  type  = "SecureString"
+  value = var.tailscale_auth_key
+}
+
 resource "aws_iam_instance_profile" "ec2" {
   name = "${var.project_name}-ec2"
   role = aws_iam_role.ec2.name
@@ -110,25 +120,36 @@ resource "aws_instance" "app" {
   subnet_id                   = aws_subnet.public[0].id
   iam_instance_profile        = aws_iam_instance_profile.ec2.name
   vpc_security_group_ids      = [aws_security_group.ec2.id]
-  associate_public_ip_address = true # needed for SSM via internet; replace with VPC endpoints to remove
+  associate_public_ip_address = true # outbound only, for Tailscale/SSM/ECR; no inbound TCP is open
 
   user_data_replace_on_change = true
 
   user_data = templatefile("${path.module}/files/user_data.sh", {
+    app_port = var.app_port
+
     # Hash of secrets included to trigger instance replacement when they rotate.
     # The hash is embedded in user_data; when it changes, user_data_replace_on_change kicks in.
     google_client_secret_hash = sha256(aws_ssm_parameter.google_client_secret.value)
     session_secret_hash       = sha256(aws_ssm_parameter.session_secret.value)
+
     service_content = templatefile("${path.module}/files/agents.service", {
       aws_region                    = var.aws_region
+      app_port                      = var.app_port
       ecr_registry                  = split("/", aws_ecr_repository.main.repository_url)[0]
       ecr_image                     = "${aws_ecr_repository.main.repository_url}:${var.app_version}"
       ssm_parameter_name            = aws_ssm_parameter.anthropic_api_key.name
       client_secret_parameter_name  = aws_ssm_parameter.google_client_secret.name
       session_secret_parameter_name = aws_ssm_parameter.session_secret.name
       google_client_id              = var.google_client_id
-      app_base_url                  = var.app_base_url
+      app_base_url                  = local.app_url
       allowed_emails                = join(",", var.allowed_emails)
+    })
+
+    tailscale_service_content = templatefile("${path.module}/files/tailscale.service", {
+      aws_region         = var.aws_region
+      app_port           = var.app_port
+      ssm_parameter_name = aws_ssm_parameter.tailscale_auth_key.name
+      tailscale_hostname = var.tailscale_hostname
     })
   })
 

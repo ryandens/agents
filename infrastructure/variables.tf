@@ -63,18 +63,38 @@ variable "allowed_emails" {
   }
 }
 
-variable "app_base_url" {
-  description = "Public origin of the app. Google redirects back to <app_base_url>/api/auth/callback, which must be registered as an authorized redirect URI on the OAuth client."
+variable "tailscale_auth_key" {
+  description = "Tailscale auth key used to join the tailnet at boot. Must be reusable and pre-approved; generate at https://login.tailscale.com/admin/settings/keys. Keys expire (90 days max), so rotate this before the instance is next replaced."
   type        = string
-  default     = "https://agents.ryandens.com"
+  sensitive   = true
 
   validation {
-    # Origin only: a path would make the appended /api/auth/callback not match the
-    # registered redirect URI. Whitespace, quotes and backslashes are excluded for the
-    # same ExecStart-rendering reason as allowed_emails.
-    condition     = can(regex("^https://[^/?#\\s\"'\\\\]+$", var.app_base_url))
-    error_message = "app_base_url must be an https origin with no path, query or fragment, and no whitespace, quotes or backslashes."
+    condition     = startswith(var.tailscale_auth_key, "tskey-auth-")
+    error_message = "tailscale_auth_key must be an auth key (starts with 'tskey-auth-'), not an API or OAuth key."
   }
+}
+
+variable "tailscale_hostname" {
+  description = "MagicDNS hostname for the instance on the tailnet"
+  type        = string
+  default     = "agents"
+}
+
+variable "tailscale_tailnet" {
+  description = "Tailnet DNS name, e.g. 'tail1a2b3c.ts.net' — shown on the DNS page of the Tailscale admin console. Composes the app's only origin, so it must match the tailnet the auth key belongs to."
+  type        = string
+
+  validation {
+    condition     = endswith(var.tailscale_tailnet, ".ts.net")
+    error_message = "tailscale_tailnet must be the tailnet's DNS name ending in '.ts.net'."
+  }
+}
+
+# The app has exactly one origin now that it is reachable only over the tailnet, so it is
+# derived rather than configured: a separate app_base_url variable could silently drift
+# from the node's real MagicDNS name, and Google's redirect-URI match is exact.
+locals {
+  app_url = "https://${var.tailscale_hostname}.${var.tailscale_tailnet}"
 }
 
 variable "app_port" {

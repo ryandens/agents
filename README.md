@@ -68,8 +68,9 @@ and the frontend bundle contains no client ID.
 
 For this to work, the OAuth client needs `$APP_BASE_URL/api/auth/callback` registered as
 an **authorized redirect URI** — `http://localhost:3000/api/auth/callback` for dev and
-`https://agents.ryandens.com/api/auth/callback` for production. (The old setup needed an
-authorized *JavaScript origin* instead; that is no longer used.)
+`https://agents.<your-tailnet>.ts.net/api/auth/callback` for production, matching the
+`app_url` Terraform output. (The old setup needed an authorized *JavaScript origin*
+instead; that is no longer used.)
 
 ### Who can sign in
 
@@ -136,11 +137,37 @@ Data is stored in `backend/data/pantry.json`. The storage layer is designed to b
 
 ## Deployment
 
-The app runs on AWS at [agents.ryandens.com](https://agents.ryandens.com). That name is a
-Route 53 alias for the ALB, which forwards everything to the EC2 instance. One container
-serves both halves of the app: the frontend's static export at `/`, and the API under
-`/api/...`. Same origin, so there is no CORS and no CDN to invalidate. Infrastructure is
-managed with Terraform in `infrastructure/`.
+The app runs on AWS and is reachable **only over Tailscale**, at
+`https://agents.<your-tailnet>.ts.net` (the exact URL is the `app_url` Terraform output).
+There is no load balancer, no public DNS record, and no port open to the internet — the
+EC2 security group allows one inbound rule, Tailscale's own WireGuard port. Off the
+tailnet the instance simply does not answer.
+
+On the instance, `tailscale serve` terminates TLS with a Tailscale-issued certificate for
+the node's MagicDNS name and proxies to the app on `127.0.0.1:8080`. The container
+publishes that port on loopback only, so `tailscale serve` is the sole way in. One
+container serves both halves of the app: the frontend's static export at `/`, and the API
+under `/api/...`. Same origin, so there is no CORS and no CDN to invalidate.
+Infrastructure is managed with Terraform in `infrastructure/`.
+
+### Tailnet prerequisites
+
+Before the first apply, in the [Tailscale admin console](https://login.tailscale.com/admin):
+
+1. **Enable HTTPS certificates** (DNS → HTTPS Certificates). Without this `tailscale
+   serve --https=443` fails and the instance comes up with nothing listening.
+2. **Generate a reusable, pre-approved auth key** (Settings → Keys) and set it as
+   `tailscale_auth_key` in `terraform.tfvars`. It must be reusable rather than ephemeral:
+   an ephemeral node is reaped whenever it goes offline, so the instance would lose its
+   identity across a reboot. Auth keys expire after 90 days at most — rotate the value
+   before the instance is next replaced, or the replacement will fail to join.
+3. Note the tailnet's DNS name (DNS page, e.g. `tail1a2b3c.ts.net`) and set it as
+   `tailscale_tailnet`. Together with `tailscale_hostname` it composes the app's only
+   origin — the `app_url` output, and the `APP_BASE_URL` the instance runs with.
+
+Sign-in redirects back to that origin, so add
+`https://agents.<your-tailnet>.ts.net/api/auth/callback` to the OAuth client's authorized
+redirect URIs alongside `http://localhost:3000/api/auth/callback`.
 
 ### Releasing a new version
 
@@ -159,7 +186,7 @@ Wait for the workflow to go green before deploying.
 
 ### Deploying a new version
 
-Terraform upgrades by replacing the EC2 instance with a new one that runs `user_data` on boot. The new instance pulls the target image, starts the systemd service, and passes ALB health checks before traffic switches over. **Pantry data stored in `/opt/agents/data` is lost on replacement** until that path is moved to a separate EBS volume or EFS.
+Terraform upgrades by replacing the EC2 instance with a new one that runs `user_data` on boot. The new instance pulls the target image, starts the systemd service, joins the tailnet, and waits for `/health` to answer before finishing boot. There is no load balancer to drain, so **the app is down for the couple of minutes between the old instance shutting down and the new one joining the tailnet.** **Pantry data stored in `/opt/agents/data` is lost on replacement** until that path is moved to a separate EBS volume or EFS.
 
 **Step 1 — get the new image digest**
 
@@ -179,14 +206,19 @@ app_version = "0.2.0@sha256:<digest from step 1>"
 terraform -chdir=infrastructure apply
 ```
 
-Terraform will show `aws_instance.app must be replaced`. Confirm.
+Terraform will show `aws_instance.app must be replaced`. Confirm. The old instance is terminated — leaving the tailnet as it shuts down, so the replacement can reclaim the `agents` MagicDNS name rather than being renamed `agents-1` — and the new one takes its place after ~2 min. There is no load balancer to drain, so the app is unreachable in between. The frontend ships inside that image, so there is no separate frontend deploy.
 
 Auth-related variables live alongside `app_version` in `terraform.tfvars` — see
 `terraform.tfvars.example`. `google_client_secret` and a generated session key are stored
 as SSM `SecureString` parameters and fetched by the systemd unit at start, rather than
 being rendered into EC2 user data where anything on the box could read them.
 `allowed_emails` sets who may sign in; changing it takes effect on the next instance
-replacement. The old instance is terminated, the new one starts, and once health checks pass (~2 min) the ALB routes traffic to it. The frontend ships inside that image, so there is no separate frontend deploy.
+replacement. There is no `app_base_url` variable: the app has exactly one origin now, so
+it is derived from `tailscale_hostname` and `tailscale_tailnet` and surfaced as the
+`app_url` output.
+
+If the URL ever resolves to `agents-1.<tailnet>.ts.net`, a retired node is still holding
+the name; remove it from the admin console's machine list.
 
 ## Development
 
@@ -212,5 +244,5 @@ app, `/api/*` still reaches FastAPI rather than the static mount, `/pantry` redi
 runs it without installing anything. Point it at any deployment:
 
 ```sh
-python3 scripts/smoke_test.py https://agents.ryandens.com
+python3 scripts/smoke_test.py "$(terraform -chdir=infrastructure output -raw app_url)"
 ```
