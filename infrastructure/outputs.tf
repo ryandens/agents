@@ -13,9 +13,9 @@ output "ecr_repository_url" {
   value       = aws_ecr_repository.main.repository_url
 }
 
-output "alb_dns_name" {
-  description = "ALB DNS name — point your domain's CNAME record here"
-  value       = aws_lb.main.dns_name
+output "api_public_ip" {
+  description = "Elastic IP serving the API — the A record for the API domain resolves here"
+  value       = aws_eip.app.public_ip
 }
 
 output "ec2_instance_id" {

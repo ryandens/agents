@@ -10,15 +10,16 @@ Restart=on-failure
 RestartSec=5s
 ExecStartPre=-/usr/bin/docker stop agents
 ExecStartPre=-/usr/bin/docker rm agents
+ExecStartPre=-/usr/bin/docker network create agents-net
 ExecStartPre=/bin/sh -c '/usr/bin/aws ecr get-login-password --region ${aws_region} | /usr/bin/docker login --username AWS --password-stdin ${ecr_registry}'
 ExecStartPre=/bin/sh -c 'printf "ANTHROPIC_API_KEY=%s\n" "$(/usr/bin/aws ssm get-parameter --name ${ssm_parameter_name} --with-decryption --query Parameter.Value --output text --region ${aws_region})" > /run/agents.env && chmod 600 /run/agents.env'
 ExecStartPre=/usr/bin/docker pull ${ecr_image}
 ExecStart=/usr/bin/docker run \
     --name agents \
     --rm \
+    --network agents-net \
     --env-file /run/agents.env \
     -e GOOGLE_CLIENT_ID=${google_client_id} \
-    -p 8080:8080 \
     -v /opt/agents/data:/app/data \
     ${ecr_image}
 ExecStop=-/usr/bin/docker stop agents

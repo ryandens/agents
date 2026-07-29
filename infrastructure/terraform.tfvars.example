@@ -2,3 +2,4 @@ app_version          = "0.1.0@sha256:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 anthropic_api_key    = "sk-ant-api03-xxxxxxxx"
 google_client_id     = "xxxxxxxxxxxx-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.apps.googleusercontent.com"
 google_client_secret = "GOCSPX-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+acme_email           = "you@example.com"

@@ -12,14 +12,14 @@ check "ec2_running" {
   }
 }
 
-check "alb_active" {
-  data "aws_lb" "main_check" {
-    arn = aws_lb.main.arn
+check "eip_associated" {
+  data "aws_eip" "app_check" {
+    id = aws_eip.app.id
   }
 
   assert {
-    condition     = data.aws_lb.main_check.internal == false
-    error_message = "ALB must be internet-facing; got internal=true."
+    condition     = data.aws_eip.app_check.instance_id == aws_instance.app.id
+    error_message = "Elastic IP ${aws_eip.app.public_ip} is not associated with instance ${aws_instance.app.id}; ${var.api_domain} will not resolve to the app."
   }
 }
 

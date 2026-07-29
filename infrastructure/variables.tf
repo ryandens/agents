@@ -43,6 +43,23 @@ variable "google_client_id" {
   type        = string
 }
 
+variable "api_domain" {
+  description = "Fully qualified domain for the backend API, served by Caddy on the EC2 instance"
+  type        = string
+  default     = "api.agents.ryandens.com"
+}
+
+variable "acme_email" {
+  description = "Contact email registered with Let's Encrypt; receives certificate expiry warnings if renewal stalls"
+  type        = string
+}
+
+variable "caddy_image" {
+  description = "Caddy container image used for TLS termination. Pin by digest (caddy:2-alpine@sha256:...) to make instance replacements reproducible."
+  type        = string
+  default     = "caddy:2-alpine"
+}
+
 variable "app_port" {
   description = "Port the application listens on"
   type        = number

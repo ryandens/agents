@@ -1,0 +1,28 @@
+[Unit]
+Description=Caddy reverse proxy (TLS termination for the Kitchen Agent API)
+After=docker.service network-online.target
+Requires=docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+Restart=on-failure
+RestartSec=5s
+ExecStartPre=-/usr/bin/docker stop caddy
+ExecStartPre=-/usr/bin/docker rm caddy
+ExecStartPre=-/usr/bin/docker network create agents-net
+ExecStartPre=/usr/bin/docker pull ${caddy_image}
+ExecStart=/usr/bin/docker run \
+    --name caddy \
+    --rm \
+    --network agents-net \
+    -p 80:80 \
+    -p 443:443 \
+    -v /opt/caddy/Caddyfile:/etc/caddy/Caddyfile:ro \
+    -v /opt/caddy/data:/data \
+    -v /opt/caddy/config:/config \
+    ${caddy_image}
+ExecStop=-/usr/bin/docker stop caddy
+
+[Install]
+WantedBy=multi-user.target

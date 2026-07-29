@@ -1,0 +1,12 @@
+{
+	email ${acme_email}
+}
+
+${api_domain} {
+	# flush_interval -1 disables response buffering so streamed responses (SSE)
+	# reach the client token-by-token instead of in chunks. The ALB did this by
+	# default; Caddy needs it stated for non-text/event-stream content types.
+	reverse_proxy agents:${app_port} {
+		flush_interval -1
+	}
+}

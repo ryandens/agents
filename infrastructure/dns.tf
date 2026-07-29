@@ -47,15 +47,16 @@ resource "aws_route53_record" "app" {
   }
 }
 
-# api.agents.ryandens.com → ALB (backend API, bypasses CloudFront for streaming)
+# api.agents.ryandens.com → EC2 Elastic IP (backend API, bypasses CloudFront for
+# streaming). Caddy on the instance terminates TLS with a Let's Encrypt cert; the
+# ACM cert above covers this name only for CloudFront's benefit and is unused here.
+#
+# This record must resolve before the instance first boots, since Caddy cannot
+# complete an ACME challenge until the name points at it.
 resource "aws_route53_record" "api" {
   zone_id = data.aws_route53_zone.main.zone_id
-  name    = "api.agents.ryandens.com"
+  name    = var.api_domain
   type    = "A"
-
-  alias {
-    name                   = aws_lb.main.dns_name
-    zone_id                = aws_lb.main.zone_id
-    evaluate_target_health = true
-  }
+  ttl     = 60
+  records = [aws_eip.app.public_ip]
 }

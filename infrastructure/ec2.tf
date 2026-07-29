@@ -78,14 +78,23 @@ resource "aws_iam_instance_profile" "ec2" {
 }
 
 resource "aws_instance" "app" {
-  ami                         = data.aws_ami.al2023_arm64.id
-  instance_type               = var.ec2_instance_type
-  subnet_id                   = aws_subnet.public[0].id
-  iam_instance_profile        = aws_iam_instance_profile.ec2.name
-  vpc_security_group_ids      = [aws_security_group.ec2.id]
-  associate_public_ip_address = true # needed for SSM via internet; replace with VPC endpoints to remove
+  ami                    = data.aws_ami.al2023_arm64.id
+  instance_type          = var.ec2_instance_type
+  subnet_id              = aws_subnet.public[0].id
+  iam_instance_profile   = aws_iam_instance_profile.ec2.name
+  vpc_security_group_ids = [aws_security_group.ec2.id]
+
+  # An auto-assigned public IP is still required: user_data pulls from ECR and
+  # registers with SSM before Terraform attaches the Elastic IP below. The auto
+  # IP is released once the EIP is associated, so only one address is billed.
+  associate_public_ip_address = true
 
   user_data_replace_on_change = true
+
+  # Caddy requests a certificate as soon as it starts, and Let's Encrypt caps
+  # failed validations at 5 per hostname per hour. Creating the A record first
+  # keeps boot-time retries from burning through that budget.
+  depends_on = [aws_route53_record.api]
 
   user_data = templatefile("${path.module}/files/user_data.sh", {
     service_content = templatefile("${path.module}/files/agents.service", {
@@ -94,6 +103,16 @@ resource "aws_instance" "app" {
       ecr_image          = "${aws_ecr_repository.main.repository_url}:${var.app_version}"
       ssm_parameter_name = aws_ssm_parameter.anthropic_api_key.name
       google_client_id   = var.google_client_id
+    })
+
+    caddy_service_content = templatefile("${path.module}/files/caddy.service", {
+      caddy_image = var.caddy_image
+    })
+
+    caddyfile_content = templatefile("${path.module}/files/Caddyfile", {
+      api_domain = var.api_domain
+      acme_email = var.acme_email
+      app_port   = var.app_port
     })
   })
 
@@ -118,4 +137,16 @@ resource "aws_instance" "app" {
       error_message = "Resolved AMI architecture is '${data.aws_ami.al2023_arm64.architecture}'; expected arm64 for Graviton instance types."
     }
   }
+}
+
+# Declared separately from the instance so the address survives the instance
+# replacement that user_data_replace_on_change triggers on every version bump.
+# The A record for var.api_domain points here, so it must not change.
+resource "aws_eip" "app" {
+  domain = "vpc"
+}
+
+resource "aws_eip_association" "app" {
+  instance_id   = aws_instance.app.id
+  allocation_id = aws_eip.app.id
 }
