@@ -3,15 +3,11 @@
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
 import { useEffect, useRef, useState } from 'react';
-import { useAuth } from './AuthProvider';
 
 export default function Chat() {
-  const { token } = useAuth();
+  // No auth header: the session rides an HttpOnly cookie the browser attaches itself.
   const { messages, sendMessage, status } = useChat({
-    transport: new DefaultChatTransport({
-      api: '/api/chat',
-      headers: { Authorization: `Bearer ${token}` },
-    }),
+    transport: new DefaultChatTransport({ api: '/api/chat' }),
   });
 
   const [input, setInput] = useState('');

@@ -1,6 +1,5 @@
 "use client";
 
-import { useAuth } from "../components/AuthProvider";
 import { CATEGORY_LABELS, PantryItem } from "./types";
 
 interface Props {
@@ -47,15 +46,11 @@ function expiryLabel(dateStr: string | null, status: ExpiryStatus): string {
 }
 
 export default function PantryItemCard({ item, onEdit, onDeleted }: Props) {
-  const { token } = useAuth();
   const status = expiryStatus(item.expiration_date);
 
   async function handleDelete() {
     if (!confirm(`Delete "${item.name}"?`)) return;
-    await fetch(`/api/pantry/${item.id}`, {
-      method: "DELETE",
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    await fetch(`/api/pantry/${item.id}`, { method: "DELETE" });
     onDeleted(item.id);
   }
 

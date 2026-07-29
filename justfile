@@ -20,6 +20,36 @@ env-sync:
         exit 1
     fi
 
+    # `|| true` so a missing field reaches the check below rather than tripping `set -e`
+    # and exiting with op's error instead of this one.
+    client_secret="$(op item get "$oauth_item" --fields label=client_secret --reveal 2>/dev/null || true)"
+    if [ -z "$client_secret" ]; then
+        echo "error: no client_secret on 1Password item '$oauth_item'" >&2
+        echo "       add it as a field named 'client_secret' (Google console → OAuth client)" >&2
+        exit 1
+    fi
+
+    # Who may sign in. Google does not enforce its test-user list for openid/email/profile
+    # apps, so without this the app is open to every Google account.
+    allowed_emails="$(op item get "$oauth_item" --fields label=allowed_emails --reveal 2>/dev/null || true)"
+
+    # Reuse whatever is already in .env for the values that are not in 1Password, so
+    # re-running this does not silently sign everyone out or lock everyone out.
+    read_env() {
+        [ -f .env ] && grep -E "^$1=" .env 2>/dev/null | head -1 | sed "s/^$1=//" || true
+    }
+
+    if [ -z "$allowed_emails" ]; then
+        allowed_emails="$(read_env ALLOWED_EMAILS)"
+    fi
+
+    # Signs the session cookie. Generated once and then preserved — regenerating it
+    # invalidates every existing session.
+    session_secret="$(read_env SESSION_SECRET)"
+    if [ -z "$session_secret" ]; then
+        session_secret="$(openssl rand -base64 32)"
+    fi
+
     # The API key item's field label varies by category, so try the usual ones rather
     # than hardcoding one. Missing is not fatal — only the chat agent needs it.
     api_key=""
@@ -41,8 +71,24 @@ env-sync:
     {
         echo "# Written by \`just env-sync\` from 1Password. Gitignored — do not commit."
         echo ""
-        echo "# Verified by the backend, and mirrored to NEXT_PUBLIC_GOOGLE_CLIENT_ID for the browser."
+        echo "# The OIDC client the backend runs the authorization code flow with."
         echo "GOOGLE_CLIENT_ID=$client_id"
+        echo "GOOGLE_CLIENT_SECRET=$client_secret"
+        echo ""
+        echo "# Where Google redirects back to. Must be a registered redirect URI on the"
+        echo "# OAuth client, as \$APP_BASE_URL/api/auth/callback."
+        echo "APP_BASE_URL=http://localhost:3000"
+        echo ""
+        echo "# Signs the session cookie. Changing it signs everyone out."
+        echo "SESSION_SECRET=$session_secret"
+        echo ""
+        echo "# Comma-separated allowlist. Empty means nobody can sign in."
+        if [ -n "$allowed_emails" ]; then
+            echo "ALLOWED_EMAILS=$allowed_emails"
+        else
+            echo "# No 'allowed_emails' field on '$oauth_item' and none in the previous .env."
+            echo "ALLOWED_EMAILS="
+        fi
         echo ""
         if [ -n "$api_key" ]; then
             echo "ANTHROPIC_API_KEY=$api_key"
@@ -55,7 +101,12 @@ env-sync:
     } > .env
     chmod 600 .env
 
-    echo "wrote .env: GOOGLE_CLIENT_ID from '$oauth_item'"
+    echo "wrote .env: GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET from '$oauth_item'"
+    if [ -n "$allowed_emails" ]; then
+        echo "            ALLOWED_EMAILS=$allowed_emails"
+    else
+        echo "            ALLOWED_EMAILS empty — sign-in will reject everyone until it is set" >&2
+    fi
     if [ -n "$api_key" ]; then
         echo "            ANTHROPIC_API_KEY from '$api_key_item'"
     elif [ -n "$existing_api_key" ]; then
@@ -90,8 +141,7 @@ serve: build
 
 # Build the production image (frontend export + API in one container)
 docker-build:
-    docker build -f backend/Dockerfile -t agents:local \
-        --build-arg NEXT_PUBLIC_GOOGLE_CLIENT_ID="${NEXT_PUBLIC_GOOGLE_CLIENT_ID:-${GOOGLE_CLIENT_ID:-}}" .
+    docker build -f backend/Dockerfile -t agents:local .
 
 # Smoke-test an already-built image (CI passes the tag it just built)
 smoke image="agents:local" port="8080":
@@ -111,7 +161,11 @@ smoke image="agents:local" port="8080":
     }
     trap cleanup EXIT
 
-    docker run -d --name "$name" -p {{ port }}:8080 -e GOOGLE_CLIENT_ID=smoke-test {{ image }} >/dev/null
+    docker run -d --name "$name" -p {{ port }}:8080 \
+        -e GOOGLE_CLIENT_ID=smoke-test \
+        -e GOOGLE_CLIENT_SECRET=smoke-test \
+        -e ALLOWED_EMAILS=smoke@example.com \
+        {{ image }} >/dev/null
     python3 scripts/smoke_test.py "http://127.0.0.1:{{ port }}"
 
 # Build the production image and smoke-test it
@@ -122,6 +176,10 @@ docker-run: docker-build
     docker run --rm -p 8080:8080 \
         -e ANTHROPIC_API_KEY \
         -e GOOGLE_CLIENT_ID \
+        -e GOOGLE_CLIENT_SECRET \
+        -e SESSION_SECRET \
+        -e ALLOWED_EMAILS \
+        -e APP_BASE_URL="${APP_BASE_URL:-http://localhost:8080}" \
         -v "$PWD/backend/data:/app/data" \
         agents:local
 
@@ -162,13 +220,6 @@ frontend-install:
 
 # Start frontend dev server on :3000, proxying /api to the backend on :8000
 frontend-dev:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    # The backend reads GOOGLE_CLIENT_ID from .env; the browser needs the same value
-    # under the NEXT_PUBLIC_ prefix. Anything already set (frontend/.env.local) wins.
-    if [ -z "${NEXT_PUBLIC_GOOGLE_CLIENT_ID:-}" ] && [ -n "${GOOGLE_CLIENT_ID:-}" ]; then
-        export NEXT_PUBLIC_GOOGLE_CLIENT_ID="$GOOGLE_CLIENT_ID"
-    fi
     npm run dev --prefix frontend
 
 # Run frontend linter
@@ -177,11 +228,6 @@ frontend-lint:
 
 # Build frontend (type check + compile)
 frontend-build:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    if [ -z "${NEXT_PUBLIC_GOOGLE_CLIENT_ID:-}" ] && [ -n "${GOOGLE_CLIENT_ID:-}" ]; then
-        export NEXT_PUBLIC_GOOGLE_CLIENT_ID="$GOOGLE_CLIENT_ID"
-    fi
     npm run build --prefix frontend
 
 # Run frontend tests

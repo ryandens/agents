@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useAuth } from "../components/AuthProvider";
 import {
   CATEGORY_LABELS,
   Category,
@@ -47,7 +46,6 @@ export default function PantryForm({ item, defaultLocation, onSaved, onClose }: 
         }
       : { ...EMPTY, storage_location: defaultLocation ?? "pantry" }
   );
-  const { token } = useAuth();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -72,10 +70,7 @@ export default function PantryForm({ item, defaultLocation, onSaved, onClose }: 
       const method = item ? "PATCH" : "POST";
       const res = await fetch(url, {
         method,
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
       });
       if (!res.ok) {

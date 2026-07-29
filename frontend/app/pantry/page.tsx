@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useAuth } from "../components/AuthProvider";
 import PantryForm from "./PantryForm";
 import PantryItemCard from "./PantryItemCard";
 import { Category, CATEGORY_LABELS, PantryItem, StorageLocation } from "./types";
@@ -13,7 +12,6 @@ const TABS: { key: StorageLocation; label: string; icon: string }[] = [
 ];
 
 export default function PantryPage() {
-  const { token } = useAuth();
   const [items, setItems] = useState<PantryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -28,9 +26,7 @@ export default function PantryPage() {
 
     async function loadItems() {
       try {
-        const res = await fetch(`/api/pantry?location=${activeTab}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const res = await fetch(`/api/pantry?location=${activeTab}`);
         if (!res.ok) throw new Error(`Failed to load (${res.status})`);
 
         if (!cancelled) {
@@ -53,7 +49,7 @@ export default function PantryPage() {
     return () => {
       cancelled = true;
     };
-  }, [activeTab, reloadToken, token]);
+  }, [activeTab, reloadToken]);
 
   function handleTabChange(tab: StorageLocation) {
     setLoading(true);

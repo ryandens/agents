@@ -10,15 +10,10 @@ Deliberately stdlib-only so CI can run it without installing anything.
 
     just smoke                                    # build, run, and check
     python3 scripts/smoke_test.py http://host:8080
-
-Set SMOKE_EXPECTED_CLIENT_ID to also assert that NEXT_PUBLIC_GOOGLE_CLIENT_ID reached
-the browser bundle; the check is skipped when it is unset, since a locally built image
-is baked with whatever is in .env.
 """
 
 from __future__ import annotations
 
-import os
 import re
 import sys
 import time
@@ -170,18 +165,36 @@ def unknown_paths_return_404(base_url):
 
 
 @check
-def google_client_id_reached_the_bundle(base_url):
-    """the NEXT_PUBLIC_GOOGLE_CLIENT_ID build arg is baked into the JS"""
-    expected = os.environ.get("SMOKE_EXPECTED_CLIENT_ID")
-    if not expected:
-        raise SkipCheck("SMOKE_EXPECTED_CLIENT_ID not set")
-    _, _, index = fetch(f"{base_url}/")
-    needle = expected.encode()
-    for path in dict.fromkeys(CHUNK_PATTERN.findall(index.decode("utf-8", "replace"))):
-        _, _, chunk = fetch(f"{base_url}{path}")
-        if needle in chunk:
-            return
-    raise AssertionError(f"{expected!r} not found in any /_next/static chunk")
+def login_redirects_to_google(base_url):
+    """/api/auth/login hands off to Google's authorization endpoint"""
+    status, headers, _ = fetch(f"{base_url}/api/auth/login", follow_redirects=False)
+    assert status == 302, f"expected a 302 to Google, got {status}"
+
+    location = headers.get("Location", "")
+    assert location.startswith("https://accounts.google.com/o/oauth2/v2/auth"), (
+        f"expected Google's authorization endpoint, got {location!r}"
+    )
+    # The parts that make this the code flow rather than the old implicit ID token one.
+    for param in ("response_type=code", "code_challenge_method=S256", "state="):
+        assert param in location, f"missing {param!r} in {location!r}"
+
+    # Starlette lowercases the attribute names, so compare case-insensitively.
+    set_cookie = headers.get("Set-Cookie", "").lower()
+    assert "agents_session" in set_cookie, (
+        f"login did not set a session cookie to carry state/nonce: {set_cookie!r}"
+    )
+    assert "httponly" in set_cookie, f"session cookie is not HttpOnly: {set_cookie!r}"
+    assert "samesite=lax" in set_cookie, (
+        f"session cookie needs SameSite=Lax to survive the redirect back from Google: "
+        f"{set_cookie!r}"
+    )
+
+
+@check
+def auth_me_is_unauthorized_without_a_session(base_url):
+    """/api/auth/me refuses an anonymous caller"""
+    status, _, _ = fetch(f"{base_url}/api/auth/me", follow_redirects=False)
+    assert status == 401, f"expected 401, got {status}"
 
 
 def main(argv):
