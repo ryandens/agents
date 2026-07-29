@@ -13,7 +13,7 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Setup Just
-        uses: taiki-e/install-action@782607f383d1c9d72a26177e2594cd8dad0f3840 # just
+        uses: taiki-e/install-action@7e7e99c806b67e3f8b9b0da9fb46af4261e64584 # just
 
       # Python version comes from backend/.python-version, which uv reads itself.
       - name: Install uv
@@ -31,7 +31,7 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Setup Just
-        uses: taiki-e/install-action@782607f383d1c9d72a26177e2594cd8dad0f3840 # just
+        uses: taiki-e/install-action@7e7e99c806b67e3f8b9b0da9fb46af4261e64584 # just
 
       - name: Setup Node
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
