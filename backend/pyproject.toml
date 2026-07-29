@@ -12,6 +12,12 @@ dependencies = [
     "uvicorn[standard]>=0.51.0",
 ]
 
+[tool.ruff]
+# The linter runs as `ruff check backend` from the repo root, so tell ruff that
+# backend/ is a source root — otherwise isort files the local pantry modules
+# under third-party.
+src = ["."]
+
 [dependency-groups]
 dev = [
     "httpx>=0.28.1",

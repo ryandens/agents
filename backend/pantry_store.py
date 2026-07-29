@@ -1,7 +1,6 @@
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Optional
 from uuid import UUID
 
 from pantry import PantryItem, PantryItemCreate, PantryItemUpdate, StorageLocation
@@ -25,15 +24,13 @@ class PantryStore:
         with open(self._file, "w") as f:
             json.dump([item.model_dump(mode="json") for item in items], f, indent=2)
 
-    def list_items(
-        self, location: Optional[StorageLocation] = None
-    ) -> list[PantryItem]:
+    def list_items(self, location: StorageLocation | None = None) -> list[PantryItem]:
         items = self._load()
         if location is not None:
             items = [i for i in items if i.storage_location == location]
         return items
 
-    def get_item(self, item_id: UUID) -> Optional[PantryItem]:
+    def get_item(self, item_id: UUID) -> PantryItem | None:
         return next((i for i in self._load() if i.id == item_id), None)
 
     def create_item(self, data: PantryItemCreate) -> PantryItem:
@@ -43,14 +40,12 @@ class PantryStore:
         self._save(items)
         return item
 
-    def update_item(
-        self, item_id: UUID, data: PantryItemUpdate
-    ) -> Optional[PantryItem]:
+    def update_item(self, item_id: UUID, data: PantryItemUpdate) -> PantryItem | None:
         items = self._load()
         for idx, item in enumerate(items):
             if item.id == item_id:
                 patch = data.model_dump(exclude_unset=True)
-                patch["updated_at"] = datetime.now(timezone.utc)
+                patch["updated_at"] = datetime.now(UTC)
                 updated = item.model_copy(update=patch)
                 items[idx] = updated
                 self._save(items)
