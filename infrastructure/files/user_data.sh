@@ -22,7 +22,7 @@ cat > /etc/systemd/system/agents.service <<EOF_UNIT
 ${service_content}
 EOF_UNIT
 
-cat > /etc/systemd/system/tailscale-agents.service <<EOF_UNIT
+cat > /etc/systemd/system/tailscale-agents.service <<'EOF_UNIT'
 ${tailscale_service_content}
 EOF_UNIT
 
