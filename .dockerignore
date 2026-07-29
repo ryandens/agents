@@ -8,11 +8,13 @@
 infrastructure/
 README.md
 
-# Python
-.venv/
+# Python. These need `**/` to reach backend/: a bare `.venv/` would only match one at
+# the context root, and backend/.venv would be copied over the venv uv builds in the
+# image — with macOS binaries, when the build is from a Mac.
+**/.venv/
 **/__pycache__/
 **/*.py[co]
-.pytest_cache/
+**/.pytest_cache/
 backend/.python-version
 backend/data/
 backend/test_*.py
