@@ -3,10 +3,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PantryItem } from "../types";
 
 // Mocks must be at module top level — vi.mock is hoisted before imports
-vi.mock("../../components/AuthProvider", () => ({
-  useAuth: () => ({ token: "test-token" }),
-}));
-
 vi.mock("../PantryForm", () => ({
   default: ({
     onSaved,
@@ -90,8 +86,7 @@ describe("PantryPage", () => {
     render(<PantryPage />);
     await waitFor(() =>
       expect(fetch).toHaveBeenCalledWith(
-        expect.stringContaining("location=pantry"),
-        expect.anything()
+        expect.stringContaining("location=pantry")
       )
     );
   });
@@ -118,8 +113,7 @@ describe("PantryPage", () => {
 
     await waitFor(() =>
       expect(fetch).toHaveBeenCalledWith(
-        expect.stringContaining("location=fridge"),
-        expect.anything()
+        expect.stringContaining("location=fridge")
       )
     );
     await waitFor(() => expect(screen.getByText("Whole Milk")).toBeInTheDocument());
@@ -134,8 +128,7 @@ describe("PantryPage", () => {
     fireEvent.click(screen.getByRole("button", { name: /Freezer/ }));
     await waitFor(() =>
       expect(fetch).toHaveBeenCalledWith(
-        expect.stringContaining("location=freezer"),
-        expect.anything()
+        expect.stringContaining("location=freezer")
       )
     );
   });

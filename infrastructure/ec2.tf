@@ -58,9 +58,13 @@ resource "aws_iam_role_policy" "ec2_agents" {
         Resource = aws_ecr_repository.main.arn
       },
       {
-        Effect   = "Allow"
-        Action   = "ssm:GetParameter"
-        Resource = aws_ssm_parameter.anthropic_api_key.arn
+        Effect = "Allow"
+        Action = "ssm:GetParameter"
+        Resource = [
+          aws_ssm_parameter.anthropic_api_key.arn,
+          aws_ssm_parameter.google_client_secret.arn,
+          aws_ssm_parameter.session_secret.arn,
+        ]
       },
     ]
   })
@@ -70,6 +74,29 @@ resource "aws_ssm_parameter" "anthropic_api_key" {
   name  = "/agents/anthropic-api-key"
   type  = "SecureString"
   value = var.anthropic_api_key
+}
+
+# Secrets go through SSM rather than the systemd unit, because that unit is rendered
+# into EC2 user data — readable by anyone with ec2:DescribeInstances and by any process
+# on the box via IMDS. The client ID stays inline since it is public by design.
+resource "aws_ssm_parameter" "google_client_secret" {
+  name  = "/agents/google-client-secret"
+  type  = "SecureString"
+  value = var.google_client_secret
+}
+
+# Signs session cookies. Generated rather than supplied: nothing outside the instance
+# needs to know it, and rotating it just signs everyone out. Kept in state, so treat the
+# state file as sensitive.
+resource "random_password" "session_secret" {
+  length  = 48
+  special = false
+}
+
+resource "aws_ssm_parameter" "session_secret" {
+  name  = "/agents/session-secret"
+  type  = "SecureString"
+  value = random_password.session_secret.result
 }
 
 resource "aws_iam_instance_profile" "ec2" {
@@ -89,11 +116,15 @@ resource "aws_instance" "app" {
 
   user_data = templatefile("${path.module}/files/user_data.sh", {
     service_content = templatefile("${path.module}/files/agents.service", {
-      aws_region         = var.aws_region
-      ecr_registry       = split("/", aws_ecr_repository.main.repository_url)[0]
-      ecr_image          = "${aws_ecr_repository.main.repository_url}:${var.app_version}"
-      ssm_parameter_name = aws_ssm_parameter.anthropic_api_key.name
-      google_client_id   = var.google_client_id
+      aws_region                    = var.aws_region
+      ecr_registry                  = split("/", aws_ecr_repository.main.repository_url)[0]
+      ecr_image                     = "${aws_ecr_repository.main.repository_url}:${var.app_version}"
+      ssm_parameter_name            = aws_ssm_parameter.anthropic_api_key.name
+      client_secret_parameter_name  = aws_ssm_parameter.google_client_secret.name
+      session_secret_parameter_name = aws_ssm_parameter.session_secret.name
+      google_client_id              = var.google_client_id
+      app_base_url                  = var.app_base_url
+      allowed_emails                = join(",", var.allowed_emails)
     })
   })
 

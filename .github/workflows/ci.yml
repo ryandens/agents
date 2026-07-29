@@ -50,8 +50,6 @@ jobs:
   # nor the frontend job can see that seam on its own.
   docker:
     runs-on: ubuntu-latest
-    env:
-      SMOKE_EXPECTED_CLIENT_ID: smoke-test-client-id.apps.googleusercontent.com
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
@@ -71,8 +69,6 @@ jobs:
           load: true
           push: false
           tags: agents:ci
-          build-args: |
-            NEXT_PUBLIC_GOOGLE_CLIENT_ID=${{ env.SMOKE_EXPECTED_CLIENT_ID }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 

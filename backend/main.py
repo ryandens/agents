@@ -1,5 +1,7 @@
 import json
+import logging
 import os
+import secrets
 from collections.abc import AsyncGenerator
 from pathlib import Path
 from typing import Annotated, Any, cast
@@ -8,23 +10,35 @@ from uuid import UUID
 import anthropic
 from anthropic.types import MessageParam
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from google.auth.exceptions import GoogleAuthError
-from google.auth.transport import requests as google_requests
-from google.oauth2 import id_token
 from pydantic import BaseModel
+from starlette.middleware.sessions import SessionMiddleware
 
+import auth
+from auth import authenticated
 from pantry import PantryItem, PantryItemCreate, PantryItemUpdate, StorageLocation
 from pantry_store import PantryStore
 
 # Search from this file's location up through the repo root
 load_dotenv(dotenv_path=Path(__file__).parent.parent / ".env")
 
-GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
-_auth_request = google_requests.Request()
+logger = logging.getLogger(__name__)
+
+# Signs the session cookie. A generated fallback keeps `just dev` and the image smoke
+# test working without configuration; the cost is that every restart invalidates every
+# session, so production sets this explicitly.
+SESSION_SECRET = os.environ.get("SESSION_SECRET", "")
+if not SESSION_SECRET:
+    SESSION_SECRET = secrets.token_urlsafe(32)
+    logger.warning(
+        "SESSION_SECRET unset — using an ephemeral key; sessions reset on restart"
+    )
+
+if not auth.allowed_emails():
+    logger.warning("ALLOWED_EMAILS is empty — every sign-in will be rejected")
 
 # The frontend's static export, served at "/" so the app and the API share an origin.
 # Populated by `just build` locally and by the frontend stage of backend/Dockerfile in
@@ -36,24 +50,27 @@ STATIC_DIR = (
 
 app = FastAPI()
 # Production is same-origin, so CORS only matters for `next dev` talking to a backend
-# started without the dev proxy.
+# started without the dev proxy. allow_credentials is required for the browser to send
+# the session cookie on those cross-origin calls, and it forbids a wildcard origin.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000"],
+    allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["Authorization", "Content-Type"],
+    allow_headers=["Content-Type"],
+)
+# Outermost middleware runs first, so this must be added last to have request.session
+# populated before anything above it reads the session.
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=SESSION_SECRET,
+    session_cookie="agents_session",
+    max_age=7 * 24 * 60 * 60,
+    same_site="lax",  # "strict" would drop the cookie on the redirect back from Google
+    https_only=auth.COOKIE_SECURE,
 )
 
-
-def authenticated(authorization: str | None = Header(default=None)) -> dict:
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Unauthorized")
-    token = authorization.removeprefix("Bearer ")
-    try:
-        return id_token.verify_oauth2_token(token, _auth_request, GOOGLE_CLIENT_ID)
-    except (GoogleAuthError, ValueError) as exc:
-        raise HTTPException(status_code=401, detail="Invalid token") from exc
-
+app.include_router(auth.router)
 
 # Depends() called in an argument default trips B008, so carry it in the type.
 AuthenticatedUser = Annotated[dict, Depends(authenticated)]

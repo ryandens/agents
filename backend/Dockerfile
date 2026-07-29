@@ -15,10 +15,8 @@ RUN --mount=type=cache,target=/root/.npm \
 
 COPY frontend/ /src
 
-# Baked into the export at build time; a public client ID, not a secret.
-ARG NEXT_PUBLIC_GOOGLE_CLIENT_ID=""
-ENV NEXT_PUBLIC_GOOGLE_CLIENT_ID=$NEXT_PUBLIC_GOOGLE_CLIENT_ID
-
+# No build args: sign-in is driven entirely by the backend's /api/auth endpoints, so the
+# export carries no client ID and is identical for every environment.
 RUN npm run build
 
 
