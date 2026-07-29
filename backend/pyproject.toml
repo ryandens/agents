@@ -3,7 +3,12 @@ name = "agents"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.14.6"
+# Keep this at minor granularity. Dependabot's uv updater only ships one patch
+# release per supported minor (3.10.* through 3.14.*), so a patch-level floor
+# like ">=3.14.6" makes its dependency-graph job abort with
+# tool_version_not_supported. See renovate.json for the rule that stops the
+# floor from being bumped back to a patch version.
+requires-python = ">=3.14"
 dependencies = [
     "anthropic>=0.120.2",
     "fastapi>=0.140.13",
