@@ -30,6 +30,12 @@ env-sync:
         api_key=""
     done
 
+    # Preserve existing ANTHROPIC_API_KEY from .env if 1Password lookup failed.
+    existing_api_key=""
+    if [ -z "$api_key" ] && [ -f .env ]; then
+        existing_api_key="$(grep -E '^ANTHROPIC_API_KEY=' .env 2>/dev/null | sed 's/^ANTHROPIC_API_KEY=//' || true)"
+    fi
+
     # umask only covers a file this creates, so chmod below handles an existing .env too.
     umask 077
     {
@@ -40,6 +46,8 @@ env-sync:
         echo ""
         if [ -n "$api_key" ]; then
             echo "ANTHROPIC_API_KEY=$api_key"
+        elif [ -n "$existing_api_key" ]; then
+            echo "ANTHROPIC_API_KEY=$existing_api_key"
         else
             echo "# Not found on 1Password item '$api_key_item' — set OP_API_KEY_ITEM or fill in by hand."
             echo "# ANTHROPIC_API_KEY="
@@ -50,6 +58,8 @@ env-sync:
     echo "wrote .env: GOOGLE_CLIENT_ID from '$oauth_item'"
     if [ -n "$api_key" ]; then
         echo "            ANTHROPIC_API_KEY from '$api_key_item'"
+    elif [ -n "$existing_api_key" ]; then
+        echo "            ANTHROPIC_API_KEY preserved from existing .env"
     else
         echo "            ANTHROPIC_API_KEY missing — chat will not work until it is set" >&2
     fi
