@@ -77,7 +77,7 @@ dev:
     {{ just_executable() }} frontend-dev &
     frontend=$!
     trap 'kill -- -$backend -$frontend 2>/dev/null || true' EXIT INT TERM
-    wait
+    wait -n
 
 # Build the frontend into backend/static, where the app serves it from
 build: frontend-build
