@@ -425,6 +425,24 @@ docker-run: docker-build
 clean:
     rm -rf backend/static frontend/out frontend/.next
 
+# ── Infrastructure ─────────────────────────────────────────────────────────────
+
+# Open a shell on the deployed instance over SSM (no SSH key, no inbound port)
+ssh *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    # just runs recipes from the justfile's directory, so this works from anywhere
+    # in the repo and -chdir always resolves to the one terraform config.
+    instance="$(terraform -chdir=infrastructure output -raw ec2_instance_id 2>/dev/null || true)"
+    if [ -z "$instance" ]; then
+        echo "error: no ec2_instance_id output from infrastructure/" >&2
+        echo "       run 'terraform -chdir=infrastructure init' and apply first" >&2
+        exit 1
+    fi
+
+    exec aws ssm start-session --target "$instance" {{ args }}
+
 # ── Backend ────────────────────────────────────────────────────────────────────
 
 # Install backend dependencies
