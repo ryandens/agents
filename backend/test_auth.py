@@ -13,8 +13,8 @@ ALLOWED = "cook@example.com"
 @pytest.fixture(autouse=True)
 def oauth_config(monkeypatch):
     """Give the module the credentials and allowlist it reads at request time."""
-    monkeypatch.setattr(auth, "CLIENT_ID", "test-client-id")
-    monkeypatch.setattr(auth, "CLIENT_SECRET", "test-client-secret")
+    monkeypatch.setenv("GOOGLE_CLIENT_ID", "test-client-id")
+    monkeypatch.setenv("GOOGLE_CLIENT_SECRET", "test-client-secret")
     monkeypatch.setenv("ALLOWED_EMAILS", f" {ALLOWED.upper()} , other@example.com")
 
 
@@ -80,7 +80,7 @@ def test_login_redirects_to_google_with_pkce_and_state(client):
 
 
 def test_login_without_credentials_errors(client, monkeypatch):
-    monkeypatch.setattr(auth, "CLIENT_SECRET", "")
+    monkeypatch.setenv("GOOGLE_CLIENT_SECRET", "")
 
     assert client.get("/api/auth/login").status_code == 500
 
