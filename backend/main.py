@@ -67,7 +67,7 @@ app.add_middleware(
     session_cookie="agents_session",
     max_age=7 * 24 * 60 * 60,
     same_site="lax",  # "strict" would drop the cookie on the redirect back from Google
-    https_only=auth.COOKIE_SECURE,
+    https_only=auth.cookie_secure(),
 )
 
 app.include_router(auth.router)

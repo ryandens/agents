@@ -54,8 +54,12 @@ variable "allowed_emails" {
   type        = list(string)
 
   validation {
-    condition     = length(var.allowed_emails) > 0 && alltrue([for e in var.allowed_emails : can(regex("^[^@,\\s]+@[^@,\\s]+\\.[^@,\\s]+$", e))])
-    error_message = "allowed_emails must list at least one nonblank, valid email address, or nobody can sign in."
+    # Commas are rejected because the list is joined on them and the backend splits on
+    # them. Whitespace, quotes and backslashes are rejected because the joined value is
+    # rendered into the systemd ExecStart line, where any of those could split it into
+    # extra arguments or leave a quote unmatched — an unparseable unit that will not start.
+    condition     = length(var.allowed_emails) > 0 && alltrue([for e in var.allowed_emails : can(regex("^[^@,\\s\"'\\\\]+@[^@,\\s\"'\\\\]+\\.[^@,\\s\"'\\\\]+$", e))])
+    error_message = "allowed_emails must list at least one valid email address, containing no whitespace, commas, quotes or backslashes."
   }
 }
 
@@ -65,8 +69,11 @@ variable "app_base_url" {
   default     = "https://agents.ryandens.com"
 
   validation {
-    condition     = startswith(var.app_base_url, "https://") && can(regex("^https://[^/?#]+$", var.app_base_url))
-    error_message = "app_base_url must be an https origin with no path, query, or fragment, otherwise the session cookie's Secure flag is dropped and the redirect URI is wrong."
+    # Origin only: a path would make the appended /api/auth/callback not match the
+    # registered redirect URI. Whitespace, quotes and backslashes are excluded for the
+    # same ExecStart-rendering reason as allowed_emails.
+    condition     = can(regex("^https://[^/?#\\s\"'\\\\]+$", var.app_base_url))
+    error_message = "app_base_url must be an https origin with no path, query or fragment, and no whitespace, quotes or backslashes."
   }
 }
 

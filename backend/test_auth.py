@@ -1,3 +1,6 @@
+import base64
+import json
+import time
 from urllib.parse import parse_qs, urlparse
 
 import pytest
@@ -8,6 +11,12 @@ import auth
 from main import app
 
 ALLOWED = "cook@example.com"
+
+
+def _session_of(client) -> dict:
+    """Decode the session cookie, which is signed but not encrypted."""
+    payload = client.cookies["agents_session"].strip('"').split(".")[0]
+    return json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))
 
 
 @pytest.fixture(autouse=True)
@@ -127,14 +136,16 @@ def test_callback_rejects_unverified_email(client, monkeypatch):
     assert resp.headers["location"] == "/?error=email_unverified"
 
 
-def test_callback_rejects_mismatched_state(client, monkeypatch):
+def test_callback_ignores_a_state_it_never_issued(client, monkeypatch):
     _, nonce = start_login(client)
 
     resp = complete_callback(
         client, monkeypatch, state="forged-state", id_claims=claims(nonce=nonce)
     )
 
-    assert resp.headers["location"] == "/?error=state_mismatch"
+    # Silently back to the app: an unsolicited callback reveals nothing and, crucially,
+    # leaves the session untouched.
+    assert resp.headers["location"] == "/"
 
 
 def test_callback_rejects_replayed_token_with_wrong_nonce(client, monkeypatch):
@@ -195,10 +206,96 @@ def test_callback_passes_secret_and_verifier_to_google(client, monkeypatch):
     assert sent["data"]["code_verifier"]
 
 
-def test_google_reported_error_short_circuits(client):
-    resp = client.get("/api/auth/callback?error=access_denied&state=x")
+def test_google_reported_error_surfaces_for_a_flow_we_started(client):
+    state, _ = start_login(client)
+
+    resp = client.get(f"/api/auth/callback?error=access_denied&state={state}")
 
     assert resp.headers["location"] == "/?error=access_denied"
+
+
+def test_unsolicited_error_callback_cannot_log_a_user_out(client, monkeypatch):
+    """Regression: ?error= used to clear the session before state was checked.
+
+    SameSite=Lax sends the session cookie on a top-level GET, so linking a signed-in
+    user to this URL was a working forced-logout.
+    """
+    state, nonce = start_login(client)
+    complete_callback(client, monkeypatch, state=state, id_claims=claims(nonce=nonce))
+    assert client.get("/api/auth/me").status_code == 200
+
+    resp = client.get("/api/auth/callback?error=access_denied&state=attacker-supplied")
+
+    assert resp.headers["location"] == "/"
+    assert client.get("/api/auth/me").status_code == 200
+
+
+def test_the_earlier_of_two_concurrent_sign_ins_still_completes(client, monkeypatch):
+    """Regression: a second tab used to overwrite the first tab's state/nonce/verifier,
+    which broke both flows. Finishing the *earlier* one is the case that used to fail."""
+    first_state, first_nonce = start_login(client)
+    second_state, _ = start_login(client)
+    assert first_state != second_state
+
+    resp = complete_callback(
+        client, monkeypatch, state=first_state, id_claims=claims(nonce=first_nonce)
+    )
+
+    assert resp.headers["location"] == "/"
+    assert client.get("/api/auth/me").status_code == 200
+
+
+def test_the_later_of_two_concurrent_sign_ins_also_completes(client, monkeypatch):
+    start_login(client)
+    second_state, second_nonce = start_login(client)
+
+    resp = complete_callback(
+        client, monkeypatch, state=second_state, id_claims=claims(nonce=second_nonce)
+    )
+
+    assert resp.headers["location"] == "/"
+    assert client.get("/api/auth/me").status_code == 200
+
+
+def test_a_pending_flow_is_single_use(client, monkeypatch):
+    state, nonce = start_login(client)
+    complete_callback(client, monkeypatch, state=state, id_claims=claims(nonce=nonce))
+    client.post("/api/auth/logout")
+
+    replay = complete_callback(
+        client, monkeypatch, state=state, id_claims=claims(nonce=nonce)
+    )
+
+    assert replay.headers["location"] == "/"
+    assert client.get("/api/auth/me").status_code == 401
+
+
+def test_pending_flows_are_bounded(client):
+    for _ in range(auth.PENDING_MAX + 3):
+        start_login(client)
+
+    # Reachable because the cookie is signed, not encrypted — and the point is that an
+    # unbounded dict here would eventually blow the browser's ~4KB cookie limit.
+    session = _session_of(client)
+    assert len(session["oidc_pending"]) == auth.PENDING_MAX
+
+
+def test_expired_pending_flows_are_dropped(client, monkeypatch):
+    state, nonce = start_login(client)
+
+    # auth.time is the stdlib module, so capture the real function before patching it —
+    # calling time.time() inside the replacement would recurse into itself.
+    real_time = time.time
+    monkeypatch.setattr(
+        auth.time, "time", lambda: real_time() + auth.PENDING_TTL_SECONDS + 1
+    )
+    # Pruning happens on the next /login, so the stale entry is gone by the callback.
+    start_login(client)
+    resp = complete_callback(
+        client, monkeypatch, state=state, id_claims=claims(nonce=nonce)
+    )
+
+    assert resp.headers["location"] == "/"
 
 
 def test_logout_clears_the_session(client, monkeypatch):
