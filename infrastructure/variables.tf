@@ -63,6 +63,22 @@ variable "allowed_emails" {
   }
 }
 
+variable "allowed_service_accounts" {
+  description = "Google service accounts permitted to call the API with a bearer ID token, for callers that have no browser to sign in with. Separate from allowed_emails so machine access and human sign-in are granted independently. Empty — the default — disables bearer auth entirely."
+  type        = list(string)
+  default     = []
+
+  validation {
+    # Same shell-safety rules as allowed_emails: this is joined on commas and rendered
+    # into the systemd ExecStart line. Narrowed to the *.iam.gserviceaccount.com form on
+    # top of that, so a human address put here by mistake fails at plan time rather than
+    # silently becoming a credential that never works (only service accounts can mint a
+    # token for a target audience).
+    condition     = alltrue([for s in var.allowed_service_accounts : can(regex("^[^@,\\s\"'\\\\]+@[^@,\\s\"'\\\\]+\\.iam\\.gserviceaccount\\.com$", s))])
+    error_message = "allowed_service_accounts must list only *.iam.gserviceaccount.com addresses, containing no whitespace, commas, quotes or backslashes."
+  }
+}
+
 variable "tailscale_auth_key" {
   description = "Tailscale auth key used to join the tailnet at boot. Must be reusable, ephemeral and pre-approved; generate at https://login.tailscale.com/admin/settings/keys. Ephemeral is what lets a retired instance delete its node and free the machine name for its replacement. Keys expire (90 days max), and the instance re-registers on every boot, so rotate this before then or a reboot will leave the app unreachable."
   type        = string

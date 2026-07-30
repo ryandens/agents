@@ -320,3 +320,165 @@ def test_api_rejects_a_session_whose_email_left_the_allowlist(client, monkeypatc
 
 def test_api_requires_a_session(client):
     assert client.get("/api/pantry").status_code == 401
+
+
+# ── Service account bearer tokens ─────────────────────────────────────────────
+
+SERVICE_ACCOUNT = "batch@example-project.iam.gserviceaccount.com"
+APP_ORIGIN = "https://agents.example.ts.net"
+
+
+@pytest.fixture
+def service_account_config(monkeypatch):
+    """Turn on bearer auth and pin the origin its audience check is built from."""
+    monkeypatch.setenv("APP_BASE_URL", APP_ORIGIN)
+    monkeypatch.setenv("ALLOWED_SERVICE_ACCOUNTS", f" {SERVICE_ACCOUNT.upper()} ,")
+
+
+def sa_claims(**overrides):
+    base = {
+        "iss": "https://accounts.google.com",
+        "sub": "service-account-1",
+        "email": SERVICE_ACCOUNT,
+        "email_verified": True,
+        "aud": APP_ORIGIN,
+    }
+    base.update(overrides)
+    return base
+
+
+@pytest.fixture
+def verified(monkeypatch):
+    """Stand in for Google's verification, recording the audience it was asked for."""
+    calls = []
+
+    def install(result):
+        def fake(token, request, audience=None, *a, **k):
+            calls.append({"token": token, "audience": audience})
+            if isinstance(result, Exception):
+                raise result
+            return result
+
+        monkeypatch.setattr(auth.id_token, "verify_oauth2_token", fake)
+        return calls
+
+    return install
+
+
+def bearer(client, token="sa-token"):
+    return client.get("/api/pantry", headers={"Authorization": f"Bearer {token}"})
+
+
+def test_bearer_token_from_an_allowed_service_account_is_accepted(
+    client, service_account_config, verified
+):
+    verified(sa_claims())
+
+    assert bearer(client).status_code == 200
+
+
+def test_bearer_token_is_verified_against_the_app_origin(
+    client, service_account_config, verified
+):
+    calls = verified(sa_claims())
+
+    bearer(client, token="the-token")
+
+    # The audience is what stops a token minted for another service being replayed here,
+    # so assert the exact value rather than just that verification happened.
+    assert calls == [{"token": "the-token", "audience": APP_ORIGIN}]
+
+
+def test_bearer_token_is_ignored_when_no_service_accounts_are_configured(
+    client, monkeypatch, verified
+):
+    monkeypatch.setenv("APP_BASE_URL", APP_ORIGIN)
+    monkeypatch.delenv("ALLOWED_SERVICE_ACCOUNTS", raising=False)
+    calls = verified(sa_claims())
+
+    assert bearer(client).status_code == 401
+    # Not merely rejected — never verified at all, so the default config spends nothing
+    # and reveals nothing about which tokens are well-formed.
+    assert calls == []
+
+
+def test_bearer_token_from_an_unlisted_service_account_is_rejected(
+    client, service_account_config, verified
+):
+    verified(sa_claims(email="other@example-project.iam.gserviceaccount.com"))
+
+    assert bearer(client).status_code == 401
+
+
+def test_allowed_emails_does_not_grant_bearer_access(
+    client, service_account_config, verified
+):
+    """The two allowlists stay separate: a human sign-in address is not a machine key."""
+    verified(sa_claims(email=ALLOWED))
+
+    assert bearer(client).status_code == 401
+
+
+@pytest.mark.parametrize(
+    "result",
+    [
+        ValueError("bad token"),
+        auth.GoogleAuthError("cert fetch failed"),
+    ],
+    ids=["invalid", "auth-error"],
+)
+def test_bearer_token_that_fails_verification_is_rejected(
+    client, service_account_config, verified, result
+):
+    verified(result)
+
+    assert bearer(client).status_code == 401
+
+
+def test_bearer_token_with_an_unverified_email_is_rejected(
+    client, service_account_config, verified
+):
+    verified(sa_claims(email_verified=False))
+
+    assert bearer(client).status_code == 401
+
+
+def test_bearer_token_from_a_foreign_issuer_is_rejected(
+    client, service_account_config, verified
+):
+    verified(sa_claims(iss="https://evil.example.com"))
+
+    assert bearer(client).status_code == 401
+
+
+@pytest.mark.parametrize(
+    "header",
+    ["", "Basic abc123", "Bearer", "Bearer   "],
+    ids=["empty", "wrong-scheme", "no-token", "blank-token"],
+)
+def test_non_bearer_authorization_headers_are_rejected(
+    client, service_account_config, verified, header
+):
+    calls = verified(sa_claims())
+
+    resp = client.get(
+        "/api/pantry", headers={"Authorization": header} if header else {}
+    )
+
+    assert resp.status_code == 401
+    assert calls == []
+
+
+def test_a_session_still_wins_when_a_bearer_token_is_also_present(
+    client, monkeypatch, service_account_config, verified
+):
+    """A signed-in browser keeps its own identity even if a header rides along."""
+    state, nonce = start_login(client)
+    complete_callback(client, monkeypatch, state=state, id_claims=claims(nonce=nonce))
+    calls = verified(sa_claims())
+
+    resp = client.get("/api/auth/me", headers={"Authorization": "Bearer sa-token"})
+
+    assert resp.status_code == 200
+    assert resp.json()["email"] == ALLOWED
+    assert calls == []

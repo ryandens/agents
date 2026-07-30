@@ -33,6 +33,7 @@ ExecStart=/usr/bin/docker run \
     -e "GOOGLE_CLIENT_ID=${google_client_id}" \
     -e "APP_BASE_URL=${app_base_url}" \
     -e "ALLOWED_EMAILS=${allowed_emails}" \
+    -e "ALLOWED_SERVICE_ACCOUNTS=${allowed_service_accounts}" \
     -p 127.0.0.1:${app_port}:8080 \
     -v /opt/agents/data:/app/data \
     ${ecr_image}

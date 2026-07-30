@@ -93,6 +93,23 @@ env-sync:
     fi
     allowed_emails="$normalized_emails"
 
+    # Machine callers. Not in 1Password — this is granted by hand — so it is carried over
+    # from the previous .env, which stops a re-run from silently revoking it. .env is the
+    # only place it is preserved from: read_tfvars understands `name = "value"` and this
+    # is a list. Same whitespace stripping as above, for the same `set dotenv-load` reason.
+    allowed_service_accounts=""
+    service_accounts_hcl=""
+    previous_service_accounts="$(read_env ALLOWED_SERVICE_ACCOUNTS)"
+    if [ -n "$previous_service_accounts" ]; then
+        IFS=',' read -ra raw_service_accounts <<< "$previous_service_accounts"
+        for service_account in "${raw_service_accounts[@]}"; do
+            service_account="$(printf '%s' "$service_account" | tr -d '[:space:]')"
+            [ -n "$service_account" ] || continue
+            allowed_service_accounts="${allowed_service_accounts:+$allowed_service_accounts,}$service_account"
+            service_accounts_hcl="${service_accounts_hcl:+$service_accounts_hcl, }\"$(hcl "$service_account")\""
+        done
+    fi
+
     # Signs the session cookie. Generated once and then preserved — regenerating it
     # invalidates every existing session.
     session_secret="$(read_env SESSION_SECRET)"
@@ -188,6 +205,10 @@ env-sync:
             echo "ALLOWED_EMAILS="
         fi
         echo ""
+        echo "# Service accounts allowed to call the API with a bearer ID token, for"
+        echo "# callers with no browser. Empty means only signed-in people get in."
+        echo "ALLOWED_SERVICE_ACCOUNTS=$allowed_service_accounts"
+        echo ""
         if [ -n "$api_key" ]; then
             echo "ANTHROPIC_API_KEY=$api_key"
         elif [ -n "$existing_api_key" ]; then
@@ -236,6 +257,10 @@ env-sync:
             echo "allowed_emails = []"
         fi
         echo ""
+        echo "# Machine callers, carried over from .env. An empty list is valid and means"
+        echo "# bearer auth stays off."
+        echo "allowed_service_accounts = [$service_accounts_hcl]"
+        echo ""
         echo "# Joins the tailnet at boot. The deployed app is reachable over Tailscale and"
         echo "# nowhere else, so without this there is no way in at all."
         if [ -n "$tailscale_auth_key" ]; then
@@ -271,6 +296,9 @@ env-sync:
         echo "            ALLOWED_EMAILS=$allowed_emails"
     else
         echo "            ALLOWED_EMAILS empty — sign-in will reject everyone until it is set" >&2
+    fi
+    if [ -n "$allowed_service_accounts" ]; then
+        echo "            ALLOWED_SERVICE_ACCOUNTS=$allowed_service_accounts (preserved)"
     fi
     if [ -n "$api_key" ]; then
         echo "            ANTHROPIC_API_KEY from '$api_key_item'"
@@ -417,6 +445,7 @@ docker-run: docker-build
         -e GOOGLE_CLIENT_SECRET \
         -e SESSION_SECRET \
         -e ALLOWED_EMAILS \
+        -e ALLOWED_SERVICE_ACCOUNTS \
         -e APP_BASE_URL="${APP_BASE_URL:-http://localhost:8080}" \
         -v "$PWD/backend/data:/app/data" \
         agents:local

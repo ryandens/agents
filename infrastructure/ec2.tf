@@ -145,6 +145,7 @@ resource "aws_instance" "app" {
       google_client_id              = var.google_client_id
       app_base_url                  = local.app_url
       allowed_emails                = join(",", var.allowed_emails)
+      allowed_service_accounts      = join(",", var.allowed_service_accounts)
     })
 
     tailscale_service_content = templatefile("${path.module}/files/tailscale.service", {
