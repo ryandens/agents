@@ -157,7 +157,10 @@ def callback(request: Request) -> RedirectResponse:
     if token_response.status_code != 200:
         return _fail(request, "token_exchange_failed")
 
-    raw_id_token = token_response.json().get("id_token")
+    try:
+        raw_id_token = token_response.json().get("id_token")
+    except ValueError:
+        return _fail(request, "token_exchange_failed")
     if not raw_id_token:
         return _fail(request, "no_id_token")
 
