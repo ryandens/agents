@@ -39,8 +39,42 @@ variable "anthropic_api_key" {
 }
 
 variable "google_client_id" {
-  description = "Google OAuth client ID for verifying ID tokens in the backend"
+  description = "Google OAuth client ID for the backend's OIDC authorization code flow"
   type        = string
+}
+
+variable "google_client_secret" {
+  description = "Google OAuth client secret, used to exchange the authorization code for an ID token"
+  type        = string
+  sensitive   = true
+}
+
+variable "allowed_emails" {
+  description = "Google accounts permitted to sign in. Google does not enforce its OAuth test-user list for openid/email/profile apps, so this list is the only thing restricting access — an empty list locks everyone out."
+  type        = list(string)
+
+  validation {
+    # Commas are rejected because the list is joined on them and the backend splits on
+    # them. Whitespace, quotes and backslashes are rejected because the joined value is
+    # rendered into the systemd ExecStart line, where any of those could split it into
+    # extra arguments or leave a quote unmatched — an unparseable unit that will not start.
+    condition     = length(var.allowed_emails) > 0 && alltrue([for e in var.allowed_emails : can(regex("^[^@,\\s\"'\\\\]+@[^@,\\s\"'\\\\]+\\.[^@,\\s\"'\\\\]+$", e))])
+    error_message = "allowed_emails must list at least one valid email address, containing no whitespace, commas, quotes or backslashes."
+  }
+}
+
+variable "app_base_url" {
+  description = "Public origin of the app. Google redirects back to <app_base_url>/api/auth/callback, which must be registered as an authorized redirect URI on the OAuth client."
+  type        = string
+  default     = "https://agents.ryandens.com"
+
+  validation {
+    # Origin only: a path would make the appended /api/auth/callback not match the
+    # registered redirect URI. Whitespace, quotes and backslashes are excluded for the
+    # same ExecStart-rendering reason as allowed_emails.
+    condition     = can(regex("^https://[^/?#\\s\"'\\\\]+$", var.app_base_url))
+    error_message = "app_base_url must be an https origin with no path, query or fragment, and no whitespace, quotes or backslashes."
+  }
 }
 
 variable "app_port" {

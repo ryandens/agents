@@ -13,7 +13,9 @@ dependencies = [
     "anthropic>=0.120.2",
     "fastapi>=0.141.1",
     "google-auth[requests]>=2.56.2",
+    "itsdangerous>=2.2.0",
     "python-dotenv>=1.2.2",
+    "requests>=2.32.0",
     "uvicorn[standard]>=0.52.0",
 ]
 

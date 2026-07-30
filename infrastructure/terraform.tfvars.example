@@ -2,3 +2,12 @@ app_version          = "0.1.0@sha256:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 anthropic_api_key    = "sk-ant-api03-xxxxxxxx"
 google_client_id     = "xxxxxxxxxxxx-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.apps.googleusercontent.com"
 google_client_secret = "GOCSPX-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+
+# The only thing restricting who can use the app. Google does not enforce its OAuth
+# test-user list for apps requesting just openid/email/profile, so without this every
+# Google account could complete sign-in.
+allowed_emails = ["you@example.com"]
+
+# Must be registered on the OAuth client as an authorized redirect URI, with the
+# /api/auth/callback path appended.
+app_base_url = "https://agents.ryandens.com"

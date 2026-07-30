@@ -1,6 +1,12 @@
 #!/bin/bash
 set -euo pipefail
 
+# Secret rotation triggers: changing either hash causes user_data_replace_on_change to
+# replace the instance. They are only ever comments — the values are read from SSM at
+# runtime, so these lines exist purely to make the rendered user_data differ on rotation.
+# GOOGLE_CLIENT_SECRET_HASH=${google_client_secret_hash}
+# SESSION_SECRET_HASH=${session_secret_hash}
+
 exec > >(tee /var/log/user-data-debug.log | logger -t user-data ) 2>&1
 set -x
 echo "STARTING USER DATA"
