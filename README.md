@@ -237,6 +237,17 @@ the name. Delete it from the admin console's machine list, then replace the inst
 in the console is not enough, because the `-1` suffix sticks even after the conflict is
 gone.
 
+To get a shell on the running instance:
+
+```sh
+just ssh
+```
+
+It reads `ec2_instance_id` from the terraform state and hands it to `aws ssm
+start-session`, so it needs no SSH key and no inbound port — the instance has neither.
+Runs from anywhere in the repo. Extra arguments are passed through to `aws ssm
+start-session`, e.g. `just ssh --profile prod`.
+
 ## Development
 
 ```sh
