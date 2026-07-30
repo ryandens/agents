@@ -65,7 +65,7 @@ variable "app_base_url" {
   default     = "https://agents.ryandens.com"
 
   validation {
-    condition     = startswith(var.app_base_url, "https://") && can(regex("^https://[^/]+$", var.app_base_url))
+    condition     = startswith(var.app_base_url, "https://") && can(regex("^https://[^/?#]+$", var.app_base_url))
     error_message = "app_base_url must be an https origin with no path, query, or fragment, otherwise the session cookie's Secure flag is dropped and the redirect URI is wrong."
   }
 }
