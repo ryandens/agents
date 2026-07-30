@@ -105,9 +105,14 @@ just docker-run    # or the same thing in the production image, on :8080
 ```
 
 Both listen on a different port than `just dev`, so sign-in needs a matching
-`APP_BASE_URL` (`http://localhost:8000` or `http://localhost:8080`) that is also
-registered as a redirect URI on the OAuth client — otherwise Google bounces the callback
-back to `:3000`.
+`APP_BASE_URL` — otherwise Google bounces the callback back to `:3000`:
+
+```sh
+APP_BASE_URL=http://localhost:8080 just env-sync
+```
+
+That value sticks in `.env` for later runs, and `env-sync` prints the redirect URI to
+register for whichever base URL is in effect.
 
 ## Features
 

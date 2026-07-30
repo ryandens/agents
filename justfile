@@ -50,6 +50,15 @@ env-sync:
         session_secret="$(openssl rand -base64 32)"
     fi
 
+    # Drives the redirect URI. Overridable because `just serve` (:8000) and `just
+    # docker-run` (:8080) are not on the dev server's port, and Google matches the
+    # redirect URI exactly. An existing .env wins over the default so re-running keeps
+    # whatever was chosen.
+    app_base_url="${APP_BASE_URL:-$(read_env APP_BASE_URL)}"
+    app_base_url="${app_base_url:-http://localhost:3000}"
+    app_base_url="${app_base_url%/}"
+    redirect_uri="$app_base_url/api/auth/callback"
+
     # The API key item's field label varies by category, so try the usual ones rather
     # than hardcoding one. Missing is not fatal — only the chat agent needs it.
     api_key=""
@@ -75,9 +84,9 @@ env-sync:
         echo "GOOGLE_CLIENT_ID=$client_id"
         echo "GOOGLE_CLIENT_SECRET=$client_secret"
         echo ""
-        echo "# Where Google redirects back to. Must be a registered redirect URI on the"
-        echo "# OAuth client, as \$APP_BASE_URL/api/auth/callback."
-        echo "APP_BASE_URL=http://localhost:3000"
+        echo "# Where Google redirects back to. $redirect_uri must be"
+        echo "# registered on the OAuth client as an authorized redirect URI."
+        echo "APP_BASE_URL=$app_base_url"
         echo ""
         echo "# Signs the session cookie. Changing it signs everyone out."
         echo "SESSION_SECRET=$session_secret"
@@ -114,6 +123,16 @@ env-sync:
     else
         echo "            ANTHROPIC_API_KEY missing — chat will not work until it is set" >&2
     fi
+
+    # Sign-in dies with "Error 400: redirect_uri_mismatch" unless this exact string is
+    # registered, and it is easy to miss because the old sign-in flow used the OAuth
+    # client's *JavaScript origins* list instead, which the code flow ignores.
+    # The client ID's leading digits are the project number, so the link lands on the
+    # right project's credentials page.
+    echo ""
+    echo "Register this exact URI under 'Authorized redirect URIs' on the OAuth client:"
+    echo "    $redirect_uri"
+    echo "    https://console.cloud.google.com/apis/credentials?project=${client_id%%-*}"
 
 # Start both dev servers with live reload — open http://localhost:3000
 dev:
