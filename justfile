@@ -472,6 +472,64 @@ ssh *args:
 
     exec aws ssm start-session --target "$instance" {{ args }}
 
+# Restart the app so it re-reads its image tag and config from Parameter Store
+restart:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    instance="$(terraform -chdir=infrastructure output -raw ec2_instance_id 2>/dev/null || true)"
+    region="$(terraform -chdir=infrastructure output -raw aws_region 2>/dev/null || true)"
+    if [ -z "$instance" ] || [ -z "$region" ]; then
+        echo "error: no ec2_instance_id/aws_region output from infrastructure/" >&2
+        echo "       run 'terraform -chdir=infrastructure init' and apply first" >&2
+        exit 1
+    fi
+
+    # The unit fetches every value on start, so a plain restart is the whole rollout.
+    echo "restarting agents.service on $instance"
+    command_id="$(aws ssm send-command \
+        --instance-ids "$instance" \
+        --region "$region" \
+        --document-name AWS-RunShellScript \
+        --comment "roll out app version/config from Parameter Store" \
+        --parameters 'commands=["systemctl restart agents.service"]' \
+        --query Command.CommandId --output text)"
+
+    # Poll until the command reaches a terminal status. `systemctl restart` blocks
+    # while ExecStartPre pulls the image, which can legitimately exceed the SSM
+    # waiter's default ~100s timeout.
+    status="InProgress"
+    while [ "$status" = "InProgress" ] || [ "$status" = "Pending" ] || [ "$status" = "Delayed" ]; do
+        sleep 5
+        status="$(aws ssm get-command-invocation --command-id "$command_id" --instance-id "$instance" --region "$region" --query Status --output text)"
+    done
+    if [ "$status" != "Success" ]; then
+        echo "error: restart command finished as '$status'" >&2
+        aws ssm get-command-invocation --command-id "$command_id" --instance-id "$instance" --region "$region" \
+            --query 'StandardErrorContent' --output text >&2
+        exit 1
+    fi
+
+    # Checked from here rather than on the box, so a pass proves the whole path a user
+    # takes — tailnet, `tailscale serve`, then the app — not just that systemd is happy.
+    url="$(terraform -chdir=infrastructure output -raw app_url)"
+    echo "waiting for $url/health"
+    for _ in $(seq 1 60); do
+        if curl -fsS --max-time 5 "$url/health" >/dev/null 2>&1; then
+            echo "healthy"
+            exit 0
+        fi
+        sleep 2
+    done
+    echo "error: $url/health did not respond after the restart" >&2
+    echo "       check 'just ssh' → journalctl -u agents.service" >&2
+    exit 1
+
+# Apply infrastructure changes, then roll them out without replacing the instance
+deploy *args:
+    terraform -chdir=infrastructure apply {{ args }}
+    {{ just_executable() }} restart
+
 # ── Backend ────────────────────────────────────────────────────────────────────
 
 # Install backend dependencies

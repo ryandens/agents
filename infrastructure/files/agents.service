@@ -11,32 +11,69 @@ RestartSec=5s
 ExecStartPre=-/usr/bin/docker stop agents
 ExecStartPre=-/usr/bin/docker rm agents
 ExecStartPre=/bin/sh -c '/usr/bin/aws ecr get-login-password --region ${aws_region} | /usr/bin/docker login --username AWS --password-stdin ${ecr_registry}'
-# Secrets are fetched at start and written to a 0600 file rather than passed as -e, so
-# they never appear in `docker inspect` or this unit (which lands in EC2 user data).
+# Everything that varies — the image to run and every config value — is read from
+# Parameter Store here, at start. Only parameter *names* are baked into this unit, and
+# those never change.
+#
+# That is the whole point of the indirection: this unit is rendered into EC2 user data,
+# and user_data_replace_on_change means anything inlined here replaces the instance when
+# it changes. Holding only names keeps user data byte-identical across a release, so
+# `terraform apply` updates the parameters and `systemctl restart agents.service` rolls
+# them out — no new VM, and /opt/agents/data survives.
+#
+# Values are written to a 0600 file rather than passed as -e, so secrets never appear in
+# `docker inspect` or in this unit.
+#
+# Each fetch goes through a variable rather than straight into printf, because `set -e`
+# only aborts on a failed *assignment*: `printf "K=%%s" "$(failing-command)"` succeeds
+# with an empty value, which would quietly boot the app with no API key and an empty
+# allowlist. Assigning first turns an SSM outage into a failed start, which is what a
+# missing credential should be.
 #
 # `%%s`, not `%s`: systemd resolves specifiers in unit settings before the command runs,
 # and quoting does not protect them. A bare `%s` is the *user shell* specifier, so every
 # format string collapsed to a literal `/bin/bash` and printf silently dropped the
 # secret it was handed. `%%` is the escape that leaves a real `%s` for printf.
-ExecStartPre=/bin/bash -c 'set -e; set -o pipefail; umask 077 && { \
-    printf "ANTHROPIC_API_KEY=%%s\n" "$(/usr/bin/aws ssm get-parameter --name ${ssm_parameter_name} --with-decryption --query Parameter.Value --output text --region ${aws_region})"; \
-    printf "GOOGLE_CLIENT_SECRET=%%s\n" "$(/usr/bin/aws ssm get-parameter --name ${client_secret_parameter_name} --with-decryption --query Parameter.Value --output text --region ${aws_region})"; \
-    printf "SESSION_SECRET=%%s\n" "$(/usr/bin/aws ssm get-parameter --name ${session_secret_parameter_name} --with-decryption --query Parameter.Value --output text --region ${aws_region})"; \
-} > /run/agents.env'
-ExecStartPre=/usr/bin/docker pull ${ecr_image}
+#
+# Every shell variable below is written unbraced, as `$name`, on purpose. Terraform's
+# templatefile claims the braced dollar form for its own interpolation — including inside
+# comments, which it parses like any other line — so writing a shell variable that way
+# means escaping it. Unbraced keeps the two syntaxes from overlapping at all.
+ExecStartPre=/bin/bash -c 'set -e; set -o pipefail; \
+    ssm() { /usr/bin/aws ssm get-parameter --name "$1" --with-decryption --query Parameter.Value --output text --region ${aws_region}; }; \
+    anthropic_api_key="$(ssm ${ssm_parameter_name})"; \
+    google_client_secret="$(ssm ${client_secret_parameter_name})"; \
+    session_secret="$(ssm ${session_secret_parameter_name})"; \
+    google_client_id="$(ssm ${client_id_parameter_name})"; \
+    app_base_url="$(ssm ${app_base_url_parameter_name})"; \
+    allowed_emails="$(ssm ${allowed_emails_parameter_name})"; \
+    app_version="$(ssm ${app_version_parameter_name})"; \
+    allowed_service_accounts="$(ssm ${allowed_service_accounts_parameter_name} 2> /dev/null || case $? in 0|254) true;; *) false;; esac)"; \
+    umask 077; \
+    { \
+        printf "ANTHROPIC_API_KEY=%%s\n" "$anthropic_api_key"; \
+        printf "GOOGLE_CLIENT_SECRET=%%s\n" "$google_client_secret"; \
+        printf "SESSION_SECRET=%%s\n" "$session_secret"; \
+        printf "GOOGLE_CLIENT_ID=%%s\n" "$google_client_id"; \
+        printf "APP_BASE_URL=%%s\n" "$app_base_url"; \
+        printf "ALLOWED_EMAILS=%%s\n" "$allowed_emails"; \
+        printf "ALLOWED_SERVICE_ACCOUNTS=%%s\n" "$allowed_service_accounts"; \
+    } > /run/agents.env; \
+    printf "%%s:%%s" "${ecr_repository_url}" "$app_version" > /run/agents.image'
+ExecStartPre=/bin/bash -c 'exec /usr/bin/docker pull "$(cat /run/agents.image)"'
 # Published on loopback only: `tailscale serve` is the sole front door, so the port must
 # not be reachable on the instance's public interface.
-ExecStart=/usr/bin/docker run \
+#
+# Wrapped in bash so the image tag can come from the file written above. EnvironmentFile=
+# would not work here: systemd reads it once when the unit starts, before ExecStartPre
+# runs, so a value written by ExecStartPre is not visible to ExecStart in the same start.
+ExecStart=/bin/bash -c 'exec /usr/bin/docker run \
     --name agents \
     --rm \
     --env-file /run/agents.env \
-    -e "GOOGLE_CLIENT_ID=${google_client_id}" \
-    -e "APP_BASE_URL=${app_base_url}" \
-    -e "ALLOWED_EMAILS=${allowed_emails}" \
-    -e "ALLOWED_SERVICE_ACCOUNTS=${allowed_service_accounts}" \
     -p 127.0.0.1:${app_port}:8080 \
     -v /opt/agents/data:/app/data \
-    ${ecr_image}
+    "$(cat /run/agents.image)"'
 ExecStop=-/usr/bin/docker stop agents
 
 [Install]

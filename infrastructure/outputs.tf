@@ -23,6 +23,11 @@ output "ec2_instance_id" {
   value       = aws_instance.app.id
 }
 
+output "aws_region" {
+  description = "Region everything lives in. Exported so `just restart` targets the same one Terraform used, rather than whatever the caller's AWS CLI happens to default to."
+  value       = var.aws_region
+}
+
 output "github_actions_role_arn" {
   description = "IAM role ARN for GitHub Actions ECR push — set as the AWS_ROLE_ARN repository secret"
   value       = aws_iam_role.github_actions_ecr_push.arn
