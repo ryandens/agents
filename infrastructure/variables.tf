@@ -54,7 +54,7 @@ variable "allowed_emails" {
   type        = list(string)
 
   validation {
-    condition     = length(var.allowed_emails) > 0 && alltrue([for e in var.allowed_emails : can(regex("^[^@,\\s]+@[^@,\\s]+\\.[^@,\\s]+$", e))])
+    condition     = length(var.allowed_emails) > 0 && alltrue([for e in var.allowed_emails : can(regex("^[^@,\\s\"'\\\\]+@[^@,\\s\"'\\\\]+\\.[^@,\\s\"'\\\\]+$", e))])
     error_message = "allowed_emails must list at least one nonblank, valid email address, or nobody can sign in."
   }
 }
@@ -65,7 +65,7 @@ variable "app_base_url" {
   default     = "https://agents.ryandens.com"
 
   validation {
-    condition     = startswith(var.app_base_url, "https://") && can(regex("^https://[^/?#]+$", var.app_base_url))
+    condition     = startswith(var.app_base_url, "https://") && can(regex("^https://[^/?#\\s\"'\\\\]+$", var.app_base_url))
     error_message = "app_base_url must be an https origin with no path, query, or fragment, otherwise the session cookie's Secure flag is dropped and the redirect URI is wrong."
   }
 }
