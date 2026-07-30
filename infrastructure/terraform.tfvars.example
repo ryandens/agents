@@ -9,3 +9,7 @@ tailscale_tailnet    = "tailxxxxxx.ts.net"
 # test-user list for apps requesting just openid/email/profile, so without this every
 # Google account could complete sign-in.
 allowed_emails = ["you@example.com"]
+
+# Machine callers, which sign in with a bearer ID token instead of a browser. Optional:
+# leave it out and the API is reachable only by a signed-in person.
+# allowed_service_accounts = ["batch@your-project.iam.gserviceaccount.com"]

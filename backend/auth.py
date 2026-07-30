@@ -11,6 +11,12 @@ openid/email/profile (see https://support.google.com/cloud/answer/15549945), so 
 External OAuth client lets any Google account reach the callback. The allowlist is what
 stops them, which is why an empty ALLOWED_EMAILS denies everyone rather than allowing
 everyone.
+
+Machine callers take a second path. A service account has no browser to be redirected,
+so it never reaches the callback and never gets a cookie; instead it presents a
+Google-signed ID token as a bearer credential, checked against ALLOWED_SERVICE_ACCOUNTS.
+That list is deliberately separate from ALLOWED_EMAILS, and empty by default, so this
+path stays off until someone turns it on.
 """
 
 import base64
@@ -119,6 +125,18 @@ def allowed_emails() -> frozenset[str]:
     Read per-call rather than at import so tests can set it with monkeypatch.
     """
     raw = os.environ.get("ALLOWED_EMAILS", "")
+    return frozenset(e.strip().lower() for e in raw.split(",") if e.strip())
+
+
+def allowed_service_accounts() -> frozenset[str]:
+    """The service accounts permitted to call the API with a bearer token, lowercased.
+
+    Kept separate from ALLOWED_EMAILS rather than folded into it so the two credentials
+    stay independently grantable: adding a colleague to the sign-in list must not also
+    hand out machine access, and authorizing a batch job must not create an identity that
+    can sign in and browse. Empty — the default — turns bearer auth off entirely.
+    """
+    raw = os.environ.get("ALLOWED_SERVICE_ACCOUNTS", "")
     return frozenset(e.strip().lower() for e in raw.split(",") if e.strip())
 
 
@@ -287,14 +305,77 @@ def me(request: Request) -> dict:
     return user
 
 
-def authenticated(request: Request) -> dict:
-    """FastAPI dependency: the signed-in user, or 401.
+def _bearer_token(request: Request) -> str | None:
+    """The credential from an `Authorization: Bearer …` header, if there is one."""
+    scheme, _, token = request.headers.get("authorization", "").partition(" ")
+    if scheme.lower() != "bearer":
+        return None
+    return token.strip() or None
 
-    Verifying the session cookie is local HMAC work, so unlike verifying a Google ID
-    token per request this makes no network call.
+
+def _service_account(request: Request) -> dict | None:
+    """The service account behind this request's bearer token, or None.
+
+    Every rejection returns None rather than a distinct error. The caller turns that into
+    a flat 401, so an unauthenticated client cannot tell a token that failed verification
+    from one that verified but is not on the list — the session path can afford to
+    distinguish those (403) because reaching it already required a valid cookie.
+    """
+    allowed = allowed_service_accounts()
+    # Checked before the header so the default configuration does no verification work
+    # at all, and an unconfigured deployment cannot be probed through this path.
+    if not allowed:
+        return None
+
+    raw = _bearer_token(request)
+    if not raw:
+        return None
+
+    try:
+        # Same verification the callback does, with one difference that carries the
+        # weight here: the audience is this app's own origin, not the OAuth client. A
+        # service account token is minted for a target_audience, so requiring ours is
+        # what stops a token issued for some other service from being replayed at us.
+        #
+        # Unlike the session path this runs per request, against Google's certs. The
+        # library caches them, so the steady-state cost is a signature check, not a fetch.
+        claims = id_token.verify_oauth2_token(raw, _auth_request, app_base_url())
+    except GoogleAuthError, ValueError:
+        return None
+
+    if claims.get("iss") not in GOOGLE_ISSUERS:
+        return None
+
+    email = str(claims.get("email", "")).lower()
+    if not email or not claims.get("email_verified"):
+        return None
+    if email not in allowed:
+        return None
+
+    # Shaped like the session user so downstream code cannot accidentally depend on which
+    # credential got it here. Nothing reads `service_account`; it is there for logging and
+    # for the day some route needs to refuse a machine caller.
+    return {
+        "sub": claims["sub"],
+        "email": email,
+        "name": email,
+        "picture": "",
+        "service_account": True,
+    }
+
+
+def authenticated(request: Request) -> dict:
+    """FastAPI dependency: the caller's identity, or 401.
+
+    Two credentials are accepted. The session cookie covers every browser request and is
+    local HMAC work, so it is tried first and costs nothing. A bearer ID token is the
+    fallback, for callers that have no browser to complete the OIDC redirect with.
     """
     user = request.session.get("user")
     if not user:
+        service_account = _service_account(request)
+        if service_account is not None:
+            return service_account
         raise HTTPException(status_code=401, detail="Unauthorized")
     # Re-checked on every request so that removing someone from ALLOWED_EMAILS locks
     # them out on their next call instead of whenever their cookie happens to expire.

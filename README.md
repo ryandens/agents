@@ -97,6 +97,37 @@ External client on a personal account.
 
 [audience]: https://support.google.com/cloud/answer/15549945
 
+### Machine access
+
+A script or service account has no browser, so it can never complete the redirect flow
+above and never gets a session cookie. `ALLOWED_SERVICE_ACCOUNTS` — also comma-separated,
+and **empty by default** — opens a second door for those callers: a Google-signed ID
+token presented as `Authorization: Bearer <token>`.
+
+The token must be minted for this app's origin as its audience. That audience check is
+what keeps a token issued for some other service from being replayed here:
+
+```python
+from google.auth.transport.requests import Request
+from google.oauth2 import service_account
+
+creds = service_account.IDTokenCredentials.from_service_account_file(
+    "key.json", target_audience="https://agents.<your-tailnet>.ts.net"
+)
+creds.refresh(Request())
+print(creds.token)   # send as: Authorization: Bearer <token>
+```
+
+The two lists are kept separate on purpose. `ALLOWED_EMAILS` decides who may *sign in*;
+`ALLOWED_SERVICE_ACCOUNTS` decides who may *call the API without signing in*. Putting a
+service account in `ALLOWED_EMAILS` grants it nothing, since it will never reach the
+callback that consults that list — and adding a colleague to `ALLOWED_EMAILS` does not
+quietly mint them a machine credential.
+
+Set it in `.env` for local runs and in `allowed_service_accounts` (a list) for
+Terraform. `just env-sync` does not read it from 1Password; it carries whatever is
+already in `.env` through to both files, so a hand-set value survives a re-run.
+
 ## Running
 
 ```sh

@@ -40,6 +40,14 @@ if not SESSION_SECRET:
 if not auth.allowed_emails():
     logger.warning("ALLOWED_EMAILS is empty — every sign-in will be rejected")
 
+# Off by default and security-relevant, so say so at startup: this is the one setting
+# that lets the API be reached without a browser session behind it.
+if service_accounts := auth.allowed_service_accounts():
+    logger.info(
+        "ALLOWED_SERVICE_ACCOUNTS set — bearer auth enabled for %d account(s)",
+        len(service_accounts),
+    )
+
 # The frontend's static export, served at "/" so the app and the API share an origin.
 # Populated by `just build` locally and by the frontend stage of backend/Dockerfile in
 # the image; absent when running the backend on its own against `next dev`.
