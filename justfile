@@ -33,6 +33,21 @@ env-sync:
     # apps, so without this the app is open to every Google account.
     allowed_emails="$(op item get "$oauth_item" --fields label=allowed_emails --reveal 2>/dev/null || true)"
 
+    # First non-empty field among several candidate labels. Fields inside a 1Password
+    # section are addressed by label like any other, so this does not need to know which
+    # section holds them — only what the label might be called.
+    op_field() {
+        local item="$1" label value
+        shift
+        for label in "$@"; do
+            if value="$(op item get "$item" --fields "label=$label" --reveal 2>/dev/null)" && [ -n "$value" ]; then
+                printf '%s' "$value"
+                return 0
+            fi
+        done
+        return 1
+    }
+
     # Reuse whatever is already in .env for the values that are not in 1Password, so
     # re-running this does not silently sign everyone out or lock everyone out.
     read_env() {
@@ -44,7 +59,8 @@ env-sync:
     # Same idea as read_env, for the deploy-side values that are not in 1Password.
     # Only handles `name = "value"` — every string variable this recipe writes — and
     # returns the literal source text, so a value carrying HCL escapes would come back
-    # still escaped. None of the three it reads (a tag@digest, a URL, an API key) can.
+    # still escaped. None of what it reads (a tag@digest, an API key, a tailnet name, a
+    # hostname, a tskey-auth-… key) can.
     read_tfvars() {
         [ -f "$tfvars" ] && sed -n "s/^[[:space:]]*$1[[:space:]]*=[[:space:]]*\"\\(.*\\)\"[[:space:]]*\$/\\1/p" "$tfvars" | head -1 || true
     }
@@ -116,10 +132,30 @@ env-sync:
     # prompt — terraform has no default for it.
     app_version="$(read_tfvars app_version)"
 
-    # The .env one points at localhost; the deployed app needs its public origin. Left
-    # out entirely when there is nothing to carry over, so terraform's default applies
-    # rather than this recipe guessing an origin and pinning it.
-    tf_app_base_url="$(read_tfvars app_base_url)"
+    # Tailscale is the deployed app's only way in, so these are deploy-side only — none
+    # of them belong in .env, where nothing reads them.
+    #
+    # The labels are guesses across the plausible spellings, because 1Password does not
+    # constrain what a field in the tailscale section is called. A miss is not fatal: the
+    # value falls back to the previous terraform.tfvars and then to a commented-out line,
+    # the same way a missing API key does, rather than blanking out a working config.
+    ts_key_labels="tailscale_auth_key, auth_key, authkey, 'tailscale auth key'"
+    ts_net_labels="tailscale_tailnet, tailnet, tailnet_name, 'tailscale tailnet'"
+    tailscale_auth_key="$(op_field "$oauth_item" tailscale_auth_key auth_key authkey "tailscale auth key" || true)"
+    tailscale_tailnet="$(op_field "$oauth_item" tailscale_tailnet tailnet tailnet_name "tailscale tailnet" || true)"
+    # No label loop worth widening here: tailscale_hostname is the one tailscale variable
+    # terraform defaults ("agents"), so an unfound value is the normal case, not a miss.
+    tailscale_hostname="$(op_field "$oauth_item" tailscale_hostname || true)"
+
+    if [ -z "$tailscale_auth_key" ]; then
+        tailscale_auth_key="$(read_tfvars tailscale_auth_key)"
+    fi
+    if [ -z "$tailscale_tailnet" ]; then
+        tailscale_tailnet="$(read_tfvars tailscale_tailnet)"
+    fi
+    if [ -z "$tailscale_hostname" ]; then
+        tailscale_hostname="$(read_tfvars tailscale_hostname)"
+    fi
 
     # Third place the key may already be, after 1Password and .env — also no default in
     # terraform, so a failed lookup must not blank it out.
@@ -199,16 +235,33 @@ env-sync:
             echo "# An empty list fails validation, so fill this in before applying."
             echo "allowed_emails = []"
         fi
-        if [ -n "$tf_app_base_url" ]; then
-            echo ""
-            echo "# Public origin of the deployed app, carried over from the previous"
-            echo "# terraform.tfvars. <app_base_url>/api/auth/callback must be registered on"
-            echo "# the OAuth client as an authorized redirect URI."
-            echo "app_base_url = \"$(hcl "$tf_app_base_url")\""
+        echo ""
+        echo "# Joins the tailnet at boot. The deployed app is reachable over Tailscale and"
+        echo "# nowhere else, so without this there is no way in at all."
+        if [ -n "$tailscale_auth_key" ]; then
+            echo "tailscale_auth_key = \"$(hcl "$tailscale_auth_key")\""
         else
-            echo ""
-            echo "# app_base_url left unset — terraform's default applies. It is the deployed"
-            echo "# origin, not APP_BASE_URL from .env, which points at localhost."
+            echo "# Not found on '$oauth_item' (tried $ts_key_labels) or in the previous"
+            echo "# terraform.tfvars — terraform prompts for it until it is set. Generate a"
+            echo "# reusable, ephemeral, pre-approved key at"
+            echo "# https://login.tailscale.com/admin/settings/keys."
+            echo "# tailscale_auth_key = \"\""
+        fi
+        echo ""
+        echo "# Composes the app's only origin, https://<hostname>.<tailnet> — which is also"
+        echo "# the OAuth redirect origin, so it has to match the real MagicDNS name."
+        if [ -n "$tailscale_tailnet" ]; then
+            echo "tailscale_tailnet = \"$(hcl "$tailscale_tailnet")\""
+        else
+            echo "# Not found on '$oauth_item' (tried $ts_net_labels) or in the previous"
+            echo "# terraform.tfvars — terraform prompts for it until it is set. It is on the"
+            echo "# DNS page of the Tailscale admin console, e.g. \"tail1a2b3c.ts.net\"."
+            echo "# tailscale_tailnet = \"\""
+        fi
+        if [ -n "$tailscale_hostname" ]; then
+            echo "tailscale_hostname = \"$(hcl "$tailscale_hostname")\""
+        else
+            echo "# tailscale_hostname left unset — terraform defaults it to \"agents\"."
         fi
     } > "$tfvars"
     chmod 600 "$tfvars"
@@ -225,6 +278,16 @@ env-sync:
         echo "            ANTHROPIC_API_KEY preserved from existing .env"
     else
         echo "            ANTHROPIC_API_KEY missing — chat will not work until it is set" >&2
+    fi
+
+    echo "wrote $tfvars"
+    if [ -n "$tailscale_auth_key" ] && [ -n "$tailscale_tailnet" ]; then
+        echo "            tailscale_auth_key + tailscale_tailnet=$tailscale_tailnet"
+        echo "            deployed app will be at https://${tailscale_hostname:-agents}.$tailscale_tailnet"
+        echo "            register https://${tailscale_hostname:-agents}.$tailscale_tailnet/api/auth/callback on the OAuth client"
+    else
+        [ -n "$tailscale_auth_key" ] || echo "            tailscale_auth_key missing — terraform apply cannot reach the tailnet" >&2
+        [ -n "$tailscale_tailnet" ] || echo "            tailscale_tailnet missing — terraform apply will prompt for it" >&2
     fi
 
     echo "wrote $tfvars: same client ID/secret, allowed_emails and API key, HCL-shaped"

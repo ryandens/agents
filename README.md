@@ -39,7 +39,17 @@ just env-sync
 `client_secret`, and (optionally) `allowed_emails`, and the `Claude API Key` item for
 the Anthropic key (override with `OP_OAUTH_ITEM` / `OP_API_KEY_ITEM`). It generates a
 `SESSION_SECRET` on first run and preserves it afterwards, so re-running does not sign
-you out. Without 1Password, write the file by hand instead:
+you out.
+
+It also writes `infrastructure/terraform.tfvars`, which needs two values `.env` has no
+use for: `tailscale_auth_key` and `tailscale_tailnet`. Those come from the same 1Password
+item — any field labelled `tailscale_auth_key` / `auth_key` / `authkey` for the key, and
+`tailscale_tailnet` / `tailnet` / `tailnet_name` for the tailnet, in a section or not.
+Add `tailscale_hostname` too if the node should not be called `agents`. Anything it
+cannot find is carried over from the previous `terraform.tfvars` and otherwise written as
+a commented-out line, so a rename never silently blanks a working config.
+
+Without 1Password, write the file by hand instead:
 
 ```sh
 # Generate a random session secret
