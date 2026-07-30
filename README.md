@@ -42,12 +42,16 @@ the Anthropic key (override with `OP_OAUTH_ITEM` / `OP_API_KEY_ITEM`). It genera
 you out. Without 1Password, write the file by hand instead:
 
 ```sh
-cat > .env <<'EOF'
+# Generate a random session secret
+SESSION_SECRET=$(openssl rand -base64 32)
+
+# Write .env file
+cat > .env <<EOF
 ANTHROPIC_API_KEY=sk-ant-...
 GOOGLE_CLIENT_ID=....apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=GOCSPX-...
 APP_BASE_URL=http://localhost:3000
-SESSION_SECRET=$(openssl rand -base64 32)
+SESSION_SECRET=$SESSION_SECRET
 ALLOWED_EMAILS=you@example.com
 EOF
 ```

@@ -13,7 +13,7 @@ ExecStartPre=-/usr/bin/docker rm agents
 ExecStartPre=/bin/sh -c '/usr/bin/aws ecr get-login-password --region ${aws_region} | /usr/bin/docker login --username AWS --password-stdin ${ecr_registry}'
 # Secrets are fetched at start and written to a 0600 file rather than passed as -e, so
 # they never appear in `docker inspect` or this unit (which lands in EC2 user data).
-ExecStartPre=/bin/sh -c 'umask 077 && { \
+ExecStartPre=/bin/bash -c 'set -e; set -o pipefail; umask 077 && { \
     printf "ANTHROPIC_API_KEY=%s\n" "$(/usr/bin/aws ssm get-parameter --name ${ssm_parameter_name} --with-decryption --query Parameter.Value --output text --region ${aws_region})"; \
     printf "GOOGLE_CLIENT_SECRET=%s\n" "$(/usr/bin/aws ssm get-parameter --name ${client_secret_parameter_name} --with-decryption --query Parameter.Value --output text --region ${aws_region})"; \
     printf "SESSION_SECRET=%s\n" "$(/usr/bin/aws ssm get-parameter --name ${session_secret_parameter_name} --with-decryption --query Parameter.Value --output text --region ${aws_region})"; \

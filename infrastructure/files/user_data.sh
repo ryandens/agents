@@ -1,6 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
+# Secret rotation trigger: changing this hash causes user_data_replace_on_change to replace the instance.
+# GOOGLE_CLIENT_SECRET_HASH=${google_client_secret_hash}
+
 exec > >(tee /var/log/user-data-debug.log | logger -t user-data ) 2>&1
 set -x
 echo "STARTING USER DATA"
