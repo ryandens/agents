@@ -126,25 +126,44 @@ def _fail(request: Request, reason: str) -> RedirectResponse:
     return RedirectResponse(f"/?error={reason}", status_code=302)
 
 
+def _clear_oidc_session(request: Request) -> None:
+    """Remove OIDC flow state without touching an authenticated user's session."""
+    request.session.pop("oidc_state", None)
+    request.session.pop("oidc_nonce", None)
+    request.session.pop("oidc_verifier", None)
+
+
 @router.get("/callback")
 def callback(request: Request) -> RedirectResponse:
     """Complete the flow: verify state, exchange the code, verify the ID token."""
+    state = request.query_params.get("state")
+    expected_state = request.session.get("oidc_state")
+
+    # Unsolicited callback: no OIDC flow was started from this session. Reject without
+    # clearing any authenticated user's session — this prevents a forced-logout attack
+    # where an attacker links a signed-in user to /api/auth/callback?error=x.
+    if not expected_state:
+        return RedirectResponse("/?error=invalid_request", status_code=302)
+
+    # State mismatch: the callback does not match the flow this session started. Clear
+    # OIDC state but preserve any authenticated user's session.
+    if not state or not secrets.compare_digest(state, expected_state):
+        _clear_oidc_session(request)
+        return RedirectResponse("/?error=state_mismatch", status_code=302)
+
+    # State validated — this is a legitimate OIDC callback from a flow this session
+    # started. Pop OIDC state now and allow _fail() to clear the full session on errors.
+    nonce = request.session.pop("oidc_nonce", None)
+    verifier = request.session.pop("oidc_verifier", None)
+    _clear_oidc_session(request)
+
     # Google reports user-facing refusals (consent denied, org_internal) as ?error=.
     if request.query_params.get("error"):
         return _fail(request, "access_denied")
 
     code = request.query_params.get("code")
-    state = request.query_params.get("state")
-    expected_state = request.session.pop("oidc_state", None)
-    nonce = request.session.pop("oidc_nonce", None)
-    verifier = request.session.pop("oidc_verifier", None)
-
-    # compare_digest keeps the state check off the timing side channel, and the None
-    # guard stops a callback replayed without a session from comparing None to None.
-    if not code or not state or not expected_state:
+    if not code:
         return _fail(request, "invalid_request")
-    if not secrets.compare_digest(state, expected_state):
-        return _fail(request, "state_mismatch")
 
     try:
         token_response = requests.post(

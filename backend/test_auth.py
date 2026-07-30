@@ -196,9 +196,51 @@ def test_callback_passes_secret_and_verifier_to_google(client, monkeypatch):
 
 
 def test_google_reported_error_short_circuits(client):
-    resp = client.get("/api/auth/callback?error=access_denied&state=x")
+    state, _ = start_login(client)
+
+    resp = client.get(f"/api/auth/callback?error=access_denied&state={state}")
 
     assert resp.headers["location"] == "/?error=access_denied"
+
+
+def test_unsolicited_callback_does_not_clear_authenticated_session(client, monkeypatch):
+    """An attacker linking a signed-in user to /api/auth/callback?error=x should not log them out."""
+    # Complete a legitimate sign-in first.
+    state, nonce = start_login(client)
+    complete_callback(client, monkeypatch, state=state, id_claims=claims(nonce=nonce))
+    assert client.get("/api/auth/me").status_code == 200
+
+    # Attacker tricks the user into visiting an unsolicited callback.
+    resp = client.get("/api/auth/callback?error=access_denied")
+
+    # The callback should be rejected without clearing the authenticated session.
+    assert resp.headers["location"] == "/?error=invalid_request"
+    assert client.get("/api/auth/me").status_code == 200  # Still logged in
+
+
+def test_unsolicited_callback_without_state_rejects(client):
+    """A callback with no OIDC flow in session is rejected."""
+    resp = client.get("/api/auth/callback?error=access_denied&state=x")
+
+    assert resp.headers["location"] == "/?error=invalid_request"
+
+
+def test_state_mismatch_does_not_clear_authenticated_session(client, monkeypatch):
+    """A state mismatch during re-authentication should not log out the user."""
+    # Complete a legitimate sign-in first.
+    state, nonce = start_login(client)
+    complete_callback(client, monkeypatch, state=state, id_claims=claims(nonce=nonce))
+    assert client.get("/api/auth/me").status_code == 200
+
+    # User starts another login flow.
+    start_login(client)
+
+    # Callback arrives with wrong state (e.g., attacker crafted link).
+    resp = client.get("/api/auth/callback?code=abc&state=forged-state")
+
+    # The callback should be rejected without clearing the authenticated session.
+    assert resp.headers["location"] == "/?error=state_mismatch"
+    assert client.get("/api/auth/me").status_code == 200  # Still logged in
 
 
 def test_logout_clears_the_session(client, monkeypatch):
