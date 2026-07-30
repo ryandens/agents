@@ -14,10 +14,14 @@ ExecStart=/bin/sh -c '/usr/bin/tailscale up --authkey="$(/usr/bin/aws ssm get-pa
 # Terminates TLS with a Tailscale-issued cert for the node's MagicDNS name and proxies to
 # the app on loopback. --bg writes the config and returns rather than tailing logs.
 ExecStart=/usr/bin/tailscale serve --bg --https=443 http://127.0.0.1:${app_port}
-# Leave the tailnet on shutdown. Terraform terminates the old instance before creating the
-# replacement, so without this the retired node keeps the hostname and the new one is
-# renamed to ${tailscale_hostname}-1 — a silently broken URL.
-ExecStop=-/usr/bin/tailscale down
+# Delete the node on shutdown, not merely disconnect it. Terraform terminates the old
+# instance before creating the replacement, and a machine name stays reserved by whatever
+# still holds it: `tailscale down` would leave the retired node registered as
+# ${tailscale_hostname}, so the replacement would join as ${tailscale_hostname}-1 and the
+# app_url would point at nothing. `logout` removes the node outright, but only because the
+# auth key is ephemeral — on a non-ephemeral node it expires the key and keeps the name
+# (tailscale/tailscale#2076). Re-registering on the next boot is the intended cost.
+ExecStop=-/usr/bin/tailscale logout
 
 [Install]
 WantedBy=multi-user.target

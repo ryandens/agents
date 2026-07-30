@@ -64,7 +64,7 @@ variable "allowed_emails" {
 }
 
 variable "tailscale_auth_key" {
-  description = "Tailscale auth key used to join the tailnet at boot. Must be reusable and pre-approved; generate at https://login.tailscale.com/admin/settings/keys. Keys expire (90 days max), so rotate this before the instance is next replaced."
+  description = "Tailscale auth key used to join the tailnet at boot. Must be reusable, ephemeral and pre-approved; generate at https://login.tailscale.com/admin/settings/keys. Ephemeral is what lets a retired instance delete its node and free the machine name for its replacement. Keys expire (90 days max), and the instance re-registers on every boot, so rotate this before then or a reboot will leave the app unreachable."
   type        = string
   sensitive   = true
 
@@ -78,6 +78,15 @@ variable "tailscale_hostname" {
   description = "MagicDNS hostname for the instance on the tailnet"
   type        = string
   default     = "agents"
+
+  validation {
+    # A single DNS label, which is stricter than it looks like it needs to be. The value
+    # is interpolated into local.app_url, where a '/' would silently move the OAuth
+    # redirect to a different origin, and into an unquoted --hostname= argument in the
+    # systemd unit, where whitespace would split it into a second argument.
+    condition     = can(regex("^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$", var.tailscale_hostname))
+    error_message = "tailscale_hostname must be a single lowercase DNS label (letters, digits and hyphens, starting and ending alphanumeric, at most 63 characters)."
+  }
 }
 
 variable "tailscale_tailnet" {
@@ -85,8 +94,10 @@ variable "tailscale_tailnet" {
   type        = string
 
   validation {
-    condition     = endswith(var.tailscale_tailnet, ".ts.net")
-    error_message = "tailscale_tailnet must be the tailnet's DNS name ending in '.ts.net'."
+    # Bare DNS name, not a URL: a suffix check alone would accept
+    # 'https://example.ts.net' and yield 'https://agents.https://example.ts.net'.
+    condition     = can(regex("^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*\\.ts\\.net$", var.tailscale_tailnet))
+    error_message = "tailscale_tailnet must be a bare DNS name ending in '.ts.net' (e.g. 'tail1a2b3c.ts.net') — no scheme, path or trailing dot."
   }
 }
 

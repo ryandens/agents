@@ -100,9 +100,11 @@ resource "aws_ssm_parameter" "session_secret" {
   value = random_password.session_secret.result
 }
 
-# Read once at boot to join the tailnet. A reusable, pre-approved key works here; an
-# ephemeral one does not, because an ephemeral node is reaped while it is merely offline
-# and the instance would lose its identity across a reboot.
+# Read at every boot to join the tailnet, so the key must be reusable, ephemeral and
+# pre-approved. Ephemeral is what lets the unit's ExecStop delete the node instead of just
+# disconnecting it, which is the only way the replacement instance can reclaim the machine
+# name. The instance therefore has no durable tailnet identity — it re-registers each boot,
+# and the key has to still be valid when it does.
 resource "aws_ssm_parameter" "tailscale_auth_key" {
   name  = "/agents/tailscale-auth-key"
   type  = "SecureString"

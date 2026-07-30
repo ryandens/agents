@@ -156,11 +156,13 @@ Before the first apply, in the [Tailscale admin console](https://login.tailscale
 
 1. **Enable HTTPS certificates** (DNS → HTTPS Certificates). Without this `tailscale
    serve --https=443` fails and the instance comes up with nothing listening.
-2. **Generate a reusable, pre-approved auth key** (Settings → Keys) and set it as
-   `tailscale_auth_key` in `terraform.tfvars`. It must be reusable rather than ephemeral:
-   an ephemeral node is reaped whenever it goes offline, so the instance would lose its
-   identity across a reboot. Auth keys expire after 90 days at most — rotate the value
-   before the instance is next replaced, or the replacement will fail to join.
+2. **Generate a reusable, ephemeral, pre-approved auth key** (Settings → Keys) and set it
+   as `tailscale_auth_key` in `terraform.tfvars`. All three matter: *reusable* because
+   every boot registers afresh, *pre-approved* so the node needs no manual click to become
+   reachable, and *ephemeral* because only an ephemeral node can delete itself on shutdown
+   and hand the `agents` machine name to its replacement. The instance keeps no durable
+   tailnet identity, so an expired key breaks the next **boot**, not just the next
+   replacement — auth keys last 90 days at most, so rotate before then.
 3. Note the tailnet's DNS name (DNS page, e.g. `tail1a2b3c.ts.net`) and set it as
    `tailscale_tailnet`. Together with `tailscale_hostname` it composes the app's only
    origin — the `app_url` output, and the `APP_BASE_URL` the instance runs with.
@@ -206,7 +208,9 @@ app_version = "0.2.0@sha256:<digest from step 1>"
 terraform -chdir=infrastructure apply
 ```
 
-Terraform will show `aws_instance.app must be replaced`. Confirm. The old instance is terminated — leaving the tailnet as it shuts down, so the replacement can reclaim the `agents` MagicDNS name rather than being renamed `agents-1` — and the new one takes its place after ~2 min. There is no load balancer to drain, so the app is unreachable in between. The frontend ships inside that image, so there is no separate frontend deploy.
+Terraform will show `aws_instance.app must be replaced`. Confirm. The old instance is terminated and the new one takes its place after ~2 min. There is no load balancer to drain, so the app is unreachable in between. The frontend ships inside that image, so there is no separate frontend deploy.
+
+A machine name in Tailscale stays reserved by whatever still holds it, so the shutdown has to *delete* the retired node, not just disconnect it — otherwise the replacement joins as `agents-1` while `app_url` and the OAuth redirect URI still point at `agents`, and the deploy silently lands nowhere. That is what the ephemeral auth key buys: `tailscale logout` in the unit's `ExecStop` removes the node outright, and only works because the node is ephemeral. It depends on a graceful shutdown, so it does **not** cover an instance that is killed rather than stopped — Tailscale reaps an idle ephemeral node on its own, but [only after 30–60 minutes](https://tailscale.com/kb/1111/ephemeral-nodes). Replace inside that window and the name is still taken.
 
 Auth-related variables live alongside `app_version` in `terraform.tfvars` — see
 `terraform.tfvars.example`. `google_client_secret` and a generated session key are stored
@@ -217,8 +221,11 @@ replacement. There is no `app_base_url` variable: the app has exactly one origin
 it is derived from `tailscale_hostname` and `tailscale_tailnet` and surfaced as the
 `app_url` output.
 
-If the URL ever resolves to `agents-1.<tailnet>.ts.net`, a retired node is still holding
-the name; remove it from the admin console's machine list.
+If the app ever comes up as `agents-1.<tailnet>.ts.net`, a retired node is still holding
+the name. Delete it from the admin console's machine list, then replace the instance again
+(`terraform -chdir=infrastructure apply -replace=aws_instance.app`) — renaming the new node
+in the console is not enough, because the `-1` suffix sticks even after the conflict is
+gone.
 
 ## Development
 
