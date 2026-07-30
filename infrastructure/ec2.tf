@@ -60,12 +60,18 @@ resource "aws_iam_role_policy" "ec2_agents" {
       {
         Effect = "Allow"
         Action = "ssm:GetParameter"
-        Resource = [
+        # The service-account list is conditional, so it is appended by splat rather than
+        # named — an empty list contributes nothing instead of a dangling reference.
+        Resource = concat([
           aws_ssm_parameter.anthropic_api_key.arn,
           aws_ssm_parameter.google_client_secret.arn,
           aws_ssm_parameter.session_secret.arn,
           aws_ssm_parameter.tailscale_auth_key.arn,
-        ]
+          aws_ssm_parameter.app_version.arn,
+          aws_ssm_parameter.google_client_id.arn,
+          aws_ssm_parameter.app_base_url.arn,
+          aws_ssm_parameter.allowed_emails.arn,
+        ], aws_ssm_parameter.allowed_service_accounts[*].arn)
       },
     ]
   })
@@ -111,6 +117,56 @@ resource "aws_ssm_parameter" "tailscale_auth_key" {
   value = var.tailscale_auth_key
 }
 
+# ── Runtime configuration ─────────────────────────────────────────────────────
+#
+# These are not secrets; they live in Parameter Store for a different reason. Anything
+# rendered into the systemd unit lands in user_data, and user_data_replace_on_change
+# turns every edit into a new EC2 instance. Held here instead, the unit references only
+# the (fixed) parameter names, so changing a value is an in-place SSM update followed by
+# `systemctl restart agents.service` — no replacement, and /opt/agents/data survives.
+
+resource "aws_ssm_parameter" "app_version" {
+  name        = "/agents/app-version"
+  description = "Image tag@digest the unit pulls on start. Restart agents.service to roll out a change."
+  type        = "String"
+  value       = var.app_version
+}
+
+# Public by design — it ships in the OAuth redirect — so String, not SecureString. Its
+# partner secret stays in google_client_secret above.
+resource "aws_ssm_parameter" "google_client_id" {
+  name  = "/agents/google-client-id"
+  type  = "String"
+  value = var.google_client_id
+}
+
+resource "aws_ssm_parameter" "app_base_url" {
+  name        = "/agents/app-base-url"
+  description = "Public origin, and the audience a service account must mint its ID token for."
+  type        = "String"
+  value       = local.app_url
+}
+
+resource "aws_ssm_parameter" "allowed_emails" {
+  name        = "/agents/allowed-emails"
+  description = "Comma-separated addresses permitted to sign in. The only thing restricting access."
+  type        = "String"
+  value       = join(",", var.allowed_emails)
+}
+
+# Created only when non-empty: SSM rejects a zero-length value, and empty is both the
+# default and the meaningful "bearer auth is off" state. The unit tolerates the parameter
+# being absent and treats that as empty, so deleting every entry here turns machine
+# access off on the next restart rather than failing the start.
+resource "aws_ssm_parameter" "allowed_service_accounts" {
+  count = length(var.allowed_service_accounts) > 0 ? 1 : 0
+
+  name        = local.allowed_service_accounts_parameter
+  description = "Comma-separated service accounts permitted to call the API with a bearer ID token."
+  type        = "String"
+  value       = join(",", var.allowed_service_accounts)
+}
+
 resource "aws_iam_instance_profile" "ec2" {
   name = "${var.project_name}-ec2"
   role = aws_iam_role.ec2.name
@@ -134,18 +190,24 @@ resource "aws_instance" "app" {
     google_client_secret_hash = sha256(aws_ssm_parameter.google_client_secret.value)
     session_secret_hash       = sha256(aws_ssm_parameter.session_secret.value)
 
+    # Parameter *names* only. Every value the unit needs is fetched at start, so this
+    # block — and therefore user_data — stays byte-identical across a release. The
+    # service-account name comes from a local rather than the resource, because that
+    # resource is conditional: referencing it would make user_data change (and replace
+    # the instance) the first time someone adds or removes a service account.
     service_content = templatefile("${path.module}/files/agents.service", {
-      aws_region                    = var.aws_region
-      app_port                      = var.app_port
-      ecr_registry                  = split("/", aws_ecr_repository.main.repository_url)[0]
-      ecr_image                     = "${aws_ecr_repository.main.repository_url}:${var.app_version}"
-      ssm_parameter_name            = aws_ssm_parameter.anthropic_api_key.name
-      client_secret_parameter_name  = aws_ssm_parameter.google_client_secret.name
-      session_secret_parameter_name = aws_ssm_parameter.session_secret.name
-      google_client_id              = var.google_client_id
-      app_base_url                  = local.app_url
-      allowed_emails                = join(",", var.allowed_emails)
-      allowed_service_accounts      = join(",", var.allowed_service_accounts)
+      aws_region                              = var.aws_region
+      app_port                                = var.app_port
+      ecr_registry                            = split("/", aws_ecr_repository.main.repository_url)[0]
+      ecr_repository_url                      = aws_ecr_repository.main.repository_url
+      ssm_parameter_name                      = aws_ssm_parameter.anthropic_api_key.name
+      client_secret_parameter_name            = aws_ssm_parameter.google_client_secret.name
+      session_secret_parameter_name           = aws_ssm_parameter.session_secret.name
+      app_version_parameter_name              = aws_ssm_parameter.app_version.name
+      client_id_parameter_name                = aws_ssm_parameter.google_client_id.name
+      app_base_url_parameter_name             = aws_ssm_parameter.app_base_url.name
+      allowed_emails_parameter_name           = aws_ssm_parameter.allowed_emails.name
+      allowed_service_accounts_parameter_name = local.allowed_service_accounts_parameter
     })
 
     tailscale_service_content = templatefile("${path.module}/files/tailscale.service", {

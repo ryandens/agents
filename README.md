@@ -229,7 +229,11 @@ Wait for the workflow to go green before deploying.
 
 ### Deploying a new version
 
-Terraform upgrades by replacing the EC2 instance with a new one that runs `user_data` on boot. The new instance pulls the target image, starts the systemd service, joins the tailnet, and waits for `/health` to answer before finishing boot. There is no load balancer to drain, so **the app is down for the couple of minutes between the old instance shutting down and the new one joining the tailnet.** **Pantry data stored in `/opt/agents/data` is lost on replacement** until that path is moved to a separate EBS volume or EFS.
+Deploying does **not** replace the EC2 instance. The image tag and every config value live
+in SSM Parameter Store; the systemd unit reads them on start, so a release is an in-place
+parameter update followed by a restart of `agents.service`. The app is down only for the
+few seconds the container takes to come back, and **`/opt/agents/data` survives** — pantry
+data is no longer lost on every deploy.
 
 **Step 1 — get the new image digest**
 
@@ -243,24 +247,46 @@ crane digest 749549498353.dkr.ecr.us-east-1.amazonaws.com/agents:0.2.0
 app_version = "0.2.0@sha256:<digest from step 1>"
 ```
 
-**Step 3 — apply**
+**Step 3 — apply and roll out**
 
 ```sh
-terraform -chdir=infrastructure apply
+just deploy
 ```
 
-Terraform will show `aws_instance.app must be replaced`. Confirm. The old instance is terminated and the new one takes its place after ~2 min. There is no load balancer to drain, so the app is unreachable in between. The frontend ships inside that image, so there is no separate frontend deploy.
+That runs `terraform apply` and then `just restart`. Terraform should show only
+`aws_ssm_parameter.app_version` being updated in place — if the plan wants to replace
+`aws_instance.app`, something changed `user_data`, which is worth understanding before
+confirming. `just restart` then restarts the unit over SSM (no SSH, no open port) and
+polls `app_url/health` from your machine until it answers, so a green run has exercised
+the whole path a user takes: tailnet, `tailscale serve`, then the app.
 
-A machine name in Tailscale stays reserved by whatever still holds it, so the shutdown has to *delete* the retired node, not just disconnect it — otherwise the replacement joins as `agents-1` while `app_url` and the OAuth redirect URI still point at `agents`, and the deploy silently lands nowhere. That is what the ephemeral auth key buys: `tailscale logout` in the unit's `ExecStop` removes the node outright, and only works because the node is ephemeral. It depends on a graceful shutdown, so it does **not** cover an instance that is killed rather than stopped — Tailscale reaps an idle ephemeral node on its own, but [only after 30–60 minutes](https://tailscale.com/kb/1111/ephemeral-nodes). Replace inside that window and the name is still taken.
+The frontend ships inside that image, so there is no separate frontend deploy.
+
+Changing config works exactly the same way. `allowed_emails`, `allowed_service_accounts`,
+`google_client_id` and the derived `app_base_url` are all parameters now, so editing one
+in `terraform.tfvars` and running `just deploy` takes effect on the restart.
+
+**What still replaces the instance:** rotating `google_client_secret` or the session
+secret, and changing the AMI, instance type or the Tailscale settings. Secret rotation is
+deliberate — a hash of each secret is embedded in `user_data` so the instance is rebuilt
+rather than relying on someone remembering to restart it. Those are the cases the
+paragraph below applies to.
+
+When the instance *is* replaced: a machine name in Tailscale stays reserved by whatever still holds it, so the shutdown has to *delete* the retired node, not just disconnect it — otherwise the replacement joins as `agents-1` while `app_url` and the OAuth redirect URI still point at `agents`, and the deploy silently lands nowhere. That is what the ephemeral auth key buys: `tailscale logout` in the unit's `ExecStop` removes the node outright, and only works because the node is ephemeral. It depends on a graceful shutdown, so it does **not** cover an instance that is killed rather than stopped — Tailscale reaps an idle ephemeral node on its own, but [only after 30–60 minutes](https://tailscale.com/kb/1111/ephemeral-nodes). Replace inside that window and the name is still taken.
 
 Auth-related variables live alongside `app_version` in `terraform.tfvars` — see
 `terraform.tfvars.example`. `google_client_secret` and a generated session key are stored
-as SSM `SecureString` parameters and fetched by the systemd unit at start, rather than
-being rendered into EC2 user data where anything on the box could read them.
-`allowed_emails` sets who may sign in; changing it takes effect on the next instance
-replacement. There is no `app_base_url` variable: the app has exactly one origin now, so
-it is derived from `tailscale_hostname` and `tailscale_tailnet` and surfaced as the
-`app_url` output.
+as SSM `SecureString` parameters, and the non-secret config as plain `String` parameters;
+all of them are fetched by the systemd unit at start rather than rendered into EC2 user
+data, where anything on the box could read them and where every edit would cost a new
+instance. There is no `app_base_url` variable: the app has exactly one origin now, so it
+is derived from `tailscale_hostname` and `tailscale_tailnet` and surfaced as the `app_url`
+output.
+
+If a restart fails, the unit fails loudly rather than starting with half a configuration —
+a required parameter that cannot be fetched aborts the start, leaving the previous
+container's environment file untouched. `just ssh` then `journalctl -u agents.service` has
+the detail.
 
 If the app ever comes up as `agents-1.<tailnet>.ts.net`, a retired node is still holding
 the name. Delete it from the admin console's machine list, then replace the instance again

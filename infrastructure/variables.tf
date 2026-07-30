@@ -28,7 +28,7 @@ variable "ec2_instance_type" {
 }
 
 variable "app_version" {
-  description = "Image tag and digest to deploy, e.g. '0.1.0@sha256:abc123'. Tag is human-readable; digest pins the exact manifest. To upgrade: set to the new tag@digest and run terraform apply — the EC2 instance will be replaced. Note: /opt/agents/data resets on replacement until moved to EFS or a separate EBS volume."
+  description = "Image tag and digest to deploy, e.g. '0.1.0@sha256:abc123'. Tag is human-readable; digest pins the exact manifest. To upgrade: set the new tag@digest, run terraform apply (which updates the SSM parameter in place), then restart agents.service — `just deploy` does both. The instance is not replaced and /opt/agents/data survives."
   type        = string
 }
 
@@ -55,9 +55,11 @@ variable "allowed_emails" {
 
   validation {
     # Commas are rejected because the list is joined on them and the backend splits on
-    # them. Whitespace, quotes and backslashes are rejected because the joined value is
-    # rendered into the systemd ExecStart line, where any of those could split it into
-    # extra arguments or leave a quote unmatched — an unparseable unit that will not start.
+    # them. Whitespace is rejected because the joined value becomes one line of a docker
+    # --env-file, where an embedded newline would inject a second variable outright.
+    # Quotes and backslashes stopped being load-bearing when this moved out of the unit's
+    # ExecStart line into Parameter Store, but they have no business in an address and
+    # excluding them keeps the value safe to pass through a shell.
     condition     = length(var.allowed_emails) > 0 && alltrue([for e in var.allowed_emails : can(regex("^[^@,\\s\"'\\\\]+@[^@,\\s\"'\\\\]+\\.[^@,\\s\"'\\\\]+$", e))])
     error_message = "allowed_emails must list at least one valid email address, containing no whitespace, commas, quotes or backslashes."
   }
@@ -69,11 +71,10 @@ variable "allowed_service_accounts" {
   default     = []
 
   validation {
-    # Same shell-safety rules as allowed_emails: this is joined on commas and rendered
-    # into the systemd ExecStart line. Narrowed to the *.iam.gserviceaccount.com form on
-    # top of that, so a human address put here by mistake fails at plan time rather than
-    # silently becoming a credential that never works (only service accounts can mint a
-    # token for a target audience).
+    # Same formatting rules as allowed_emails, for the same --env-file reason, narrowed
+    # further to the *.iam.gserviceaccount.com form. A human address put here by mistake
+    # therefore fails at plan time rather than silently becoming a credential that never
+    # works — only a service account can mint a token for a target audience.
     condition     = alltrue([for s in var.allowed_service_accounts : can(regex("^[^@,\\s\"'\\\\]+@[^@,\\s\"'\\\\]+\\.iam\\.gserviceaccount\\.com$", s))])
     error_message = "allowed_service_accounts must list only *.iam.gserviceaccount.com addresses, containing no whitespace, commas, quotes or backslashes."
   }
@@ -122,6 +123,11 @@ variable "tailscale_tailnet" {
 # from the node's real MagicDNS name, and Google's redirect-URI match is exact.
 locals {
   app_url = "https://${var.tailscale_hostname}.${var.tailscale_tailnet}"
+
+  # Fixed name for a parameter that is only sometimes created. The systemd unit is
+  # rendered with this rather than with the resource's attribute so that adding the first
+  # service account — or removing the last — leaves user_data untouched.
+  allowed_service_accounts_parameter = "/agents/allowed-service-accounts"
 }
 
 variable "app_port" {
