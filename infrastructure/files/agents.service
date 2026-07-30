@@ -48,7 +48,7 @@ ExecStartPre=/bin/bash -c 'set -e; set -o pipefail; \
     app_base_url="$(ssm ${app_base_url_parameter_name})"; \
     allowed_emails="$(ssm ${allowed_emails_parameter_name})"; \
     app_version="$(ssm ${app_version_parameter_name})"; \
-    allowed_service_accounts="$(ssm ${allowed_service_accounts_parameter_name} 2>/dev/null || true)"; \
+    allowed_service_accounts="$(ssm ${allowed_service_accounts_parameter_name} 2> /dev/null || case $? in 0|254) true;; *) false;; esac)"; \
     umask 077; \
     { \
         printf "ANTHROPIC_API_KEY=%%s\n" "$anthropic_api_key"; \
