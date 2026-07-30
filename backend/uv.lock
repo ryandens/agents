@@ -31,7 +31,7 @@ requires-dist = [
     { name = "google-auth", extras = ["requests"], specifier = ">=2.56.2" },
     { name = "itsdangerous", specifier = ">=2.2.0" },
     { name = "python-dotenv", specifier = ">=1.2.2" },
-    { name = "requests", specifier = ">=2.32.0" },
+    { name = "requests", specifier = ">=2.34.2" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.52.0" },
 ]
 
