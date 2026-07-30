@@ -48,6 +48,7 @@ def client_secret() -> str:
     """The Google OAuth client secret. Read per-call rather than at import so load_dotenv() can run first."""
     return os.environ.get("GOOGLE_CLIENT_SECRET", "")
 
+
 # Where Google sends the user back. Must match a registered redirect URI on the OAuth
 # client exactly, including scheme and port.
 APP_BASE_URL = os.environ.get("APP_BASE_URL", "http://localhost:3000").rstrip("/")
