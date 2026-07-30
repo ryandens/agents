@@ -13,10 +13,15 @@ ExecStartPre=-/usr/bin/docker rm agents
 ExecStartPre=/bin/sh -c '/usr/bin/aws ecr get-login-password --region ${aws_region} | /usr/bin/docker login --username AWS --password-stdin ${ecr_registry}'
 # Secrets are fetched at start and written to a 0600 file rather than passed as -e, so
 # they never appear in `docker inspect` or this unit (which lands in EC2 user data).
+#
+# `%%s`, not `%s`: systemd resolves specifiers in unit settings before the command runs,
+# and quoting does not protect them. A bare `%s` is the *user shell* specifier, so every
+# format string collapsed to a literal `/bin/bash` and printf silently dropped the
+# secret it was handed. `%%` is the escape that leaves a real `%s` for printf.
 ExecStartPre=/bin/bash -c 'set -e; set -o pipefail; umask 077 && { \
-    printf "ANTHROPIC_API_KEY=%s\n" "$(/usr/bin/aws ssm get-parameter --name ${ssm_parameter_name} --with-decryption --query Parameter.Value --output text --region ${aws_region})"; \
-    printf "GOOGLE_CLIENT_SECRET=%s\n" "$(/usr/bin/aws ssm get-parameter --name ${client_secret_parameter_name} --with-decryption --query Parameter.Value --output text --region ${aws_region})"; \
-    printf "SESSION_SECRET=%s\n" "$(/usr/bin/aws ssm get-parameter --name ${session_secret_parameter_name} --with-decryption --query Parameter.Value --output text --region ${aws_region})"; \
+    printf "ANTHROPIC_API_KEY=%%s\n" "$(/usr/bin/aws ssm get-parameter --name ${ssm_parameter_name} --with-decryption --query Parameter.Value --output text --region ${aws_region})"; \
+    printf "GOOGLE_CLIENT_SECRET=%%s\n" "$(/usr/bin/aws ssm get-parameter --name ${client_secret_parameter_name} --with-decryption --query Parameter.Value --output text --region ${aws_region})"; \
+    printf "SESSION_SECRET=%%s\n" "$(/usr/bin/aws ssm get-parameter --name ${session_secret_parameter_name} --with-decryption --query Parameter.Value --output text --region ${aws_region})"; \
 } > /run/agents.env'
 ExecStartPre=/usr/bin/docker pull ${ecr_image}
 # Published on loopback only: `tailscale serve` is the sole front door, so the port must

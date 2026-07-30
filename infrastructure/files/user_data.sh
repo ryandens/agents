@@ -24,7 +24,13 @@ systemctl enable --now tailscaled
 mkdir -p /opt/agents/data
 chown 65532:65532 /opt/agents/data
 
-cat > /etc/systemd/system/agents.service <<EOF_UNIT
+# Quoted delimiter, like the unit below it. Terraform interpolates $${service_content}
+# before this script ever runs, so the unit's text is inlined here — and an unquoted
+# delimiter would leave bash to command-substitute the `$(aws ssm get-parameter ...)`
+# calls while *writing* the file, baking plaintext secrets into a world-readable unit.
+# Fetching them at start, which is what the unit documents, needs the `$(...)` to survive
+# into the file verbatim.
+cat > /etc/systemd/system/agents.service <<'EOF_UNIT'
 ${service_content}
 EOF_UNIT
 
