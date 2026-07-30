@@ -38,6 +38,7 @@ GOOGLE_ISSUERS = ("accounts.google.com", "https://accounts.google.com")
 # test-user and verification requirements, which is a deliberate reason to keep it here.
 SCOPES = "openid email profile"
 
+
 def client_id() -> str:
     """The Google OAuth client ID. Read per-call rather than at import so load_dotenv() can run first."""
     return os.environ.get("GOOGLE_CLIENT_ID", "")
