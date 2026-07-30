@@ -38,8 +38,14 @@ GOOGLE_ISSUERS = ("accounts.google.com", "https://accounts.google.com")
 # test-user and verification requirements, which is a deliberate reason to keep it here.
 SCOPES = "openid email profile"
 
-CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
-CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
+def client_id() -> str:
+    """The Google OAuth client ID. Read per-call rather than at import so load_dotenv() can run first."""
+    return os.environ.get("GOOGLE_CLIENT_ID", "")
+
+
+def client_secret() -> str:
+    """The Google OAuth client secret. Read per-call rather than at import so load_dotenv() can run first."""
+    return os.environ.get("GOOGLE_CLIENT_SECRET", "")
 
 # Where Google sends the user back. Must match a registered redirect URI on the OAuth
 # client exactly, including scheme and port.
@@ -69,7 +75,7 @@ router = APIRouter(prefix="/api/auth")
 @router.get("/login")
 def login(request: Request) -> RedirectResponse:
     """Kick off the code flow: stash PKCE/CSRF material, then bounce to Google."""
-    if not CLIENT_ID or not CLIENT_SECRET:
+    if not client_id() or not client_secret():
         raise HTTPException(
             status_code=500,
             detail="Sign-in is not configured: set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET",
@@ -95,7 +101,7 @@ def login(request: Request) -> RedirectResponse:
     )
 
     params = {
-        "client_id": CLIENT_ID,
+        "client_id": client_id(),
         "redirect_uri": REDIRECT_URI,
         "response_type": "code",
         "scope": SCOPES,
@@ -143,8 +149,8 @@ def callback(request: Request) -> RedirectResponse:
             GOOGLE_TOKEN_ENDPOINT,
             data={
                 "code": code,
-                "client_id": CLIENT_ID,
-                "client_secret": CLIENT_SECRET,
+                "client_id": client_id(),
+                "client_secret": client_secret(),
                 "redirect_uri": REDIRECT_URI,
                 "grant_type": "authorization_code",
                 "code_verifier": verifier or "",
@@ -167,7 +173,7 @@ def callback(request: Request) -> RedirectResponse:
     try:
         # Checks the RS256 signature against Google's published certs, the issuer, the
         # expiry, and that `aud` is this client. Everything below is what it leaves out.
-        claims = id_token.verify_oauth2_token(raw_id_token, _auth_request, CLIENT_ID)
+        claims = id_token.verify_oauth2_token(raw_id_token, _auth_request, client_id())
     except GoogleAuthError, ValueError:
         return _fail(request, "invalid_token")
 
