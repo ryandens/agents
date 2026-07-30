@@ -54,7 +54,7 @@ variable "allowed_emails" {
   type        = list(string)
 
   validation {
-    condition     = length(var.allowed_emails) > 0 && alltrue([for e in var.allowed_emails : can(regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$", e))])
+    condition     = length(var.allowed_emails) > 0 && alltrue([for e in var.allowed_emails : can(regex("^[^@,\\s]+@[^@,\\s]+\\.[^@,\\s]+$", e))])
     error_message = "allowed_emails must list at least one nonblank, valid email address, or nobody can sign in."
   }
 }
