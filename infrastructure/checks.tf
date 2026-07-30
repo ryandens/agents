@@ -12,14 +12,38 @@ check "ec2_running" {
   }
 }
 
-check "alb_active" {
-  data "aws_lb" "main_check" {
-    arn = aws_lb.main.arn
+# The instance sits in a public subnet for outbound reachability, so nothing structural
+# stops someone opening a port on it by hand. A plan will not catch that — an
+# out-of-band rule is not in state, so there is no managed resource to show as drifted.
+#
+# Two assertions, because there are two ways to open a hole and each is blind to the
+# other. The first compares the group's live rule IDs against the exact pair Terraform
+# manages, so an added rule fails even if someone deletes one of ours to keep the count
+# at two. The second pins what the surviving ingress rule actually permits, since editing
+# a rule in place changes neither its ID nor the count.
+check "no_public_app_ingress" {
+  data "aws_vpc_security_group_rules" "ec2_check" {
+    filter {
+      name   = "group-id"
+      values = [aws_security_group.ec2.id]
+    }
   }
 
   assert {
-    condition     = data.aws_lb.main_check.internal == false
-    error_message = "ALB must be internet-facing; got internal=true."
+    condition = toset(data.aws_vpc_security_group_rules.ec2_check.ids) == toset([
+      aws_vpc_security_group_ingress_rule.ec2_tailscale_wireguard.security_group_rule_id,
+      aws_vpc_security_group_egress_rule.ec2_all_outbound.security_group_rule_id,
+    ])
+    error_message = "EC2 security group holds rules Terraform does not manage: found ${jsonencode(data.aws_vpc_security_group_rules.ec2_check.ids)}, expected exactly the Tailscale WireGuard ingress and the all-traffic egress. The app must not be reachable off the tailnet."
+  }
+
+  assert {
+    condition = alltrue([
+      aws_vpc_security_group_ingress_rule.ec2_tailscale_wireguard.ip_protocol == "udp",
+      aws_vpc_security_group_ingress_rule.ec2_tailscale_wireguard.from_port == 41641,
+      aws_vpc_security_group_ingress_rule.ec2_tailscale_wireguard.to_port == 41641,
+    ])
+    error_message = "The only ingress rule must stay udp/41641 (Tailscale WireGuard); it is now ${aws_vpc_security_group_ingress_rule.ec2_tailscale_wireguard.ip_protocol}/${aws_vpc_security_group_ingress_rule.ec2_tailscale_wireguard.from_port}-${aws_vpc_security_group_ingress_rule.ec2_tailscale_wireguard.to_port}. Any TCP port here is a public entry point to the app."
   }
 }
 

@@ -19,6 +19,8 @@ ExecStartPre=/bin/bash -c 'set -e; set -o pipefail; umask 077 && { \
     printf "SESSION_SECRET=%s\n" "$(/usr/bin/aws ssm get-parameter --name ${session_secret_parameter_name} --with-decryption --query Parameter.Value --output text --region ${aws_region})"; \
 } > /run/agents.env'
 ExecStartPre=/usr/bin/docker pull ${ecr_image}
+# Published on loopback only: `tailscale serve` is the sole front door, so the port must
+# not be reachable on the instance's public interface.
 ExecStart=/usr/bin/docker run \
     --name agents \
     --rm \
@@ -26,7 +28,7 @@ ExecStart=/usr/bin/docker run \
     -e "GOOGLE_CLIENT_ID=${google_client_id}" \
     -e "APP_BASE_URL=${app_base_url}" \
     -e "ALLOWED_EMAILS=${allowed_emails}" \
-    -p 8080:8080 \
+    -p 127.0.0.1:${app_port}:8080 \
     -v /opt/agents/data:/app/data \
     ${ecr_image}
 ExecStop=-/usr/bin/docker stop agents

@@ -3,8 +3,10 @@ data "aws_availability_zones" "available" {
 }
 
 locals {
-  azs            = slice(data.aws_availability_zones.available.names, 0, 2)
-  public_subnets = ["10.0.1.0/24", "10.0.2.0/24"]
+  # One AZ. The ALB was the only thing that needed two, and a single EC2 instance cannot
+  # span them; the second subnet sat empty. Widen the slice and add a CIDR to go back.
+  azs            = slice(data.aws_availability_zones.available.names, 0, 1)
+  public_subnets = ["10.0.1.0/24"]
 }
 
 resource "aws_vpc" "main" {
