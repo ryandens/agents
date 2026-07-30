@@ -118,6 +118,7 @@ resource "aws_instance" "app" {
     # Hash of secrets included to trigger instance replacement when they rotate.
     # The hash is embedded in user_data; when it changes, user_data_replace_on_change kicks in.
     google_client_secret_hash = sha256(aws_ssm_parameter.google_client_secret.value)
+    session_secret_hash       = sha256(aws_ssm_parameter.session_secret.value)
     service_content = templatefile("${path.module}/files/agents.service", {
       aws_region                    = var.aws_region
       ecr_registry                  = split("/", aws_ecr_repository.main.repository_url)[0]
