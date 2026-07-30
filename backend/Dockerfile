@@ -4,7 +4,7 @@
 
 # Static output is platform-independent, so pin to BUILDPLATFORM and build it once
 # rather than emulating the whole Node toolchain for each target architecture.
-FROM --platform=$BUILDPLATFORM node:24.18.0-slim@sha256:6f7b03f7c2c8e2e784dcf9295400527b9b1270fd37b7e9a7285cf83b6951452d AS frontend
+FROM --platform=$BUILDPLATFORM node:24.18.1-slim@sha256:235600a8101ab264e117b1768e925532262668dc9b581ef1dd7d96ced463b8e7 AS frontend
 
 WORKDIR /src
 
