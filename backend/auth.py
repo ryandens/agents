@@ -16,6 +16,7 @@ everyone.
 import base64
 import os
 import secrets
+import time
 from hashlib import sha256
 from urllib.parse import urlencode
 
@@ -98,9 +99,29 @@ def login(request: Request) -> RedirectResponse:
     # The session cookie is signed, so the browser can read these but cannot forge them.
     # That is the property state and nonce need; the PKCE verifier is the client's own
     # secret by design, so holding it client-side is what RFC 7636 intends.
-    request.session.update(
-        {"oidc_state": state, "oidc_nonce": nonce, "oidc_verifier": verifier}
-    )
+    #
+    # Store pending flows in a dict keyed by state to support multiple concurrent login
+    # flows (e.g., user opens sign-in in two tabs). Each flow is self-contained.
+    pending_flows: dict = request.session.get("pending_flows", {})
+
+    # Clean up flows older than 10 minutes to prevent stale entries from accumulating.
+    max_age_seconds = 600
+    now = time.time()
+    pending_flows = {
+        s: flow
+        for s, flow in pending_flows.items()
+        if now - flow.get("created_at", 0) < max_age_seconds
+    }
+
+    # Limit to max 3 pending flows to prevent session bloat. If at the limit, remove the
+    # oldest flow to make room for the new one.
+    max_pending_flows = 3
+    if len(pending_flows) >= max_pending_flows:
+        oldest_state = min(pending_flows, key=lambda s: pending_flows[s].get("created_at", 0))
+        del pending_flows[oldest_state]
+
+    pending_flows[state] = {"nonce": nonce, "verifier": verifier, "created_at": now}
+    request.session["pending_flows"] = pending_flows
 
     params = {
         "client_id": client_id(),
@@ -128,34 +149,33 @@ def _fail(request: Request, reason: str) -> RedirectResponse:
 
 def _clear_oidc_session(request: Request) -> None:
     """Remove OIDC flow state without touching an authenticated user's session."""
-    request.session.pop("oidc_state", None)
-    request.session.pop("oidc_nonce", None)
-    request.session.pop("oidc_verifier", None)
+    request.session.pop("pending_flows", None)
 
 
 @router.get("/callback")
 def callback(request: Request) -> RedirectResponse:
     """Complete the flow: verify state, exchange the code, verify the ID token."""
     state = request.query_params.get("state")
-    expected_state = request.session.get("oidc_state")
+    pending_flows: dict = request.session.get("pending_flows", {})
 
     # Unsolicited callback: no OIDC flow was started from this session. Reject without
     # clearing any authenticated user's session — this prevents a forced-logout attack
     # where an attacker links a signed-in user to /api/auth/callback?error=x.
-    if not expected_state:
+    if not pending_flows:
         return RedirectResponse("/?error=invalid_request", status_code=302)
 
-    # State mismatch: the callback does not match the flow this session started. Clear
+    # State mismatch: the callback does not match any flow this session started. Clear
     # OIDC state but preserve any authenticated user's session.
-    if not state or not secrets.compare_digest(state, expected_state):
+    if not state or state not in pending_flows:
         _clear_oidc_session(request)
         return RedirectResponse("/?error=state_mismatch", status_code=302)
 
     # State validated — this is a legitimate OIDC callback from a flow this session
-    # started. Pop OIDC state now and allow _fail() to clear the full session on errors.
-    nonce = request.session.pop("oidc_nonce", None)
-    verifier = request.session.pop("oidc_verifier", None)
-    _clear_oidc_session(request)
+    # started. Extract and remove this specific flow, preserving other pending flows.
+    flow = pending_flows.pop(state)
+    nonce = flow.get("nonce")
+    verifier = flow.get("verifier")
+    request.session["pending_flows"] = pending_flows
 
     # Google reports user-facing refusals (consent denied, org_internal) as ?error=.
     if request.query_params.get("error"):
