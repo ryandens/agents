@@ -6,7 +6,7 @@ default:
 
 # ── Dev ────────────────────────────────────────────────────────────────────────
 
-# Write .env from 1Password (needs the `op` CLI, signed in)
+# Write .env and infrastructure/terraform.tfvars from 1Password (needs the `op` CLI, signed in)
 env-sync:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -39,9 +39,43 @@ env-sync:
         [ -f .env ] && grep -E "^$1=" .env 2>/dev/null | head -1 | sed "s/^$1=//" || true
     }
 
+    tfvars="infrastructure/terraform.tfvars"
+
+    # Same idea as read_env, for the deploy-side values that are not in 1Password.
+    # Only handles `name = "value"` — every string variable this recipe writes — and
+    # returns the literal source text, so a value carrying HCL escapes would come back
+    # still escaped. None of the three it reads (a tag@digest, a URL, an API key) can.
+    read_tfvars() {
+        [ -f "$tfvars" ] && sed -n "s/^[[:space:]]*$1[[:space:]]*=[[:space:]]*\"\\(.*\\)\"[[:space:]]*\$/\\1/p" "$tfvars" | head -1 || true
+    }
+
+    # Escape a value for an HCL double-quoted string. Terraform evaluates ${...} and
+    # %{...} inside one, so those markers are doubled rather than passed through.
+    hcl() {
+        printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/\${/$${/g' -e 's/%{/%%{/g'
+    }
+
     if [ -z "$allowed_emails" ]; then
         allowed_emails="$(read_env ALLOWED_EMAILS)"
     fi
+
+    # Normalize to a bare comma-separated list, and build the list(string) form the
+    # terraform variable wants from the same entries. The backend strips whitespace
+    # itself, but `set dotenv-load` does not: a space in the .env value makes just
+    # refuse to run *any* recipe, so a spaced 1Password field would leave the next
+    # `just env-sync` unable to start and the allowlist unfixable through this recipe.
+    allowed_emails_hcl=""
+    normalized_emails=""
+    if [ -n "$allowed_emails" ]; then
+        IFS=',' read -ra raw_emails <<< "$allowed_emails"
+        for email in "${raw_emails[@]}"; do
+            email="$(printf '%s' "$email" | tr -d '[:space:]')"
+            [ -n "$email" ] || continue
+            normalized_emails="${normalized_emails:+$normalized_emails,}$email"
+            allowed_emails_hcl="${allowed_emails_hcl:+$allowed_emails_hcl, }\"$(hcl "$email")\""
+        done
+    fi
+    allowed_emails="$normalized_emails"
 
     # Signs the session cookie. Generated once and then preserved — regenerating it
     # invalidates every existing session.
@@ -73,6 +107,25 @@ env-sync:
     existing_api_key=""
     if [ -z "$api_key" ] && [ -f .env ]; then
         existing_api_key="$(grep -E '^ANTHROPIC_API_KEY=' .env 2>/dev/null | sed 's/^ANTHROPIC_API_KEY=//' || true)"
+    fi
+
+    # ── Deploy-side values, for infrastructure/terraform.tfvars ────────────────
+
+    # Names the image to deploy and changes every release, so it lives nowhere but the
+    # tfvars file. Carried over so re-running this does not roll production back to a
+    # prompt — terraform has no default for it.
+    app_version="$(read_tfvars app_version)"
+
+    # The .env one points at localhost; the deployed app needs its public origin. Left
+    # out entirely when there is nothing to carry over, so terraform's default applies
+    # rather than this recipe guessing an origin and pinning it.
+    tf_app_base_url="$(read_tfvars app_base_url)"
+
+    # Third place the key may already be, after 1Password and .env — also no default in
+    # terraform, so a failed lookup must not blank it out.
+    tf_api_key="$api_key"
+    if [ -z "$tf_api_key" ]; then
+        tf_api_key="${existing_api_key:-$(read_tfvars anthropic_api_key)}"
     fi
 
     # umask only covers a file this creates, so chmod below handles an existing .env too.
@@ -110,6 +163,56 @@ env-sync:
     } > .env
     chmod 600 .env
 
+    # Same values, HCL-shaped, for `terraform apply`. Gitignored by
+    # infrastructure/.gitignore (*.tfvars), and holds the same secrets as .env.
+    {
+        echo "# Written by \`just env-sync\` from 1Password. Gitignored — do not commit."
+        echo ""
+        if [ -n "$app_version" ]; then
+            echo "# Carried over from the previous terraform.tfvars — 1Password does not track it."
+            echo "# Bump it by hand to deploy a new build; the instance is replaced on change."
+            echo "app_version = \"$(hcl "$app_version")\""
+        else
+            echo "# No previous terraform.tfvars to carry app_version over from. Set it to the"
+            echo "# tag@digest you want deployed, e.g. \"0.1.0@sha256:…\" — terraform prompts"
+            echo "# for it on every apply until you do."
+            echo "# app_version = \"\""
+        fi
+        echo ""
+        echo "# The OIDC client the backend runs the authorization code flow with."
+        echo "google_client_id     = \"$(hcl "$client_id")\""
+        echo "google_client_secret = \"$(hcl "$client_secret")\""
+        echo ""
+        if [ -n "$tf_api_key" ]; then
+            echo "anthropic_api_key = \"$(hcl "$tf_api_key")\""
+        else
+            echo "# Not found on 1Password item '$api_key_item', in .env, or in the previous"
+            echo "# terraform.tfvars — terraform prompts for it until it is set."
+            echo "# anthropic_api_key = \"\""
+        fi
+        echo ""
+        echo "# The only thing restricting who can use the deployed app."
+        if [ -n "$allowed_emails_hcl" ]; then
+            echo "allowed_emails = [$allowed_emails_hcl]"
+        else
+            echo "# No 'allowed_emails' field on '$oauth_item' and none in the previous .env."
+            echo "# An empty list fails validation, so fill this in before applying."
+            echo "allowed_emails = []"
+        fi
+        if [ -n "$tf_app_base_url" ]; then
+            echo ""
+            echo "# Public origin of the deployed app, carried over from the previous"
+            echo "# terraform.tfvars. <app_base_url>/api/auth/callback must be registered on"
+            echo "# the OAuth client as an authorized redirect URI."
+            echo "app_base_url = \"$(hcl "$tf_app_base_url")\""
+        else
+            echo ""
+            echo "# app_base_url left unset — terraform's default applies. It is the deployed"
+            echo "# origin, not APP_BASE_URL from .env, which points at localhost."
+        fi
+    } > "$tfvars"
+    chmod 600 "$tfvars"
+
     echo "wrote .env: GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET from '$oauth_item'"
     if [ -n "$allowed_emails" ]; then
         echo "            ALLOWED_EMAILS=$allowed_emails"
@@ -122,6 +225,13 @@ env-sync:
         echo "            ANTHROPIC_API_KEY preserved from existing .env"
     else
         echo "            ANTHROPIC_API_KEY missing — chat will not work until it is set" >&2
+    fi
+
+    echo "wrote $tfvars: same client ID/secret, allowed_emails and API key, HCL-shaped"
+    if [ -n "$app_version" ]; then
+        echo "            app_version = $app_version (preserved)"
+    else
+        echo "            app_version unset — terraform will prompt on apply" >&2
     fi
 
     # Sign-in dies with "Error 400: redirect_uri_mismatch" unless this exact string is
