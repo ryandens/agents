@@ -495,10 +495,14 @@ restart:
         --parameters 'commands=["systemctl restart agents.service"]' \
         --query Command.CommandId --output text)"
 
-    # `wait` exits non-zero on a failed command, which is a result here, not an error —
-    # the invocation is fetched either way so the failure is shown rather than swallowed.
-    aws ssm wait command-executed --command-id "$command_id" --instance-id "$instance" --region "$region" 2>/dev/null || true
-    status="$(aws ssm get-command-invocation --command-id "$command_id" --instance-id "$instance" --region "$region" --query Status --output text)"
+    # Poll until the command reaches a terminal status. `systemctl restart` blocks
+    # while ExecStartPre pulls the image, which can legitimately exceed the SSM
+    # waiter's default ~100s timeout.
+    status="InProgress"
+    while [ "$status" = "InProgress" ] || [ "$status" = "Pending" ] || [ "$status" = "Delayed" ]; do
+        sleep 5
+        status="$(aws ssm get-command-invocation --command-id "$command_id" --instance-id "$instance" --region "$region" --query Status --output text)"
+    done
     if [ "$status" != "Success" ]; then
         echo "error: restart command finished as '$status'" >&2
         aws ssm get-command-invocation --command-id "$command_id" --instance-id "$instance" --region "$region" \
