@@ -1,6 +1,5 @@
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from enum import Enum
-from typing import Any
 from uuid import UUID
 
 from psycopg import sql
@@ -33,7 +32,14 @@ _COLUMN_LIST = sql.SQL(", ").join(sql.Identifier(c) for c in _COLUMNS)
 _ORDER_BY = sql.SQL("ORDER BY created_at, id")
 
 
-def _param(value: Any) -> Any:
+# What a PantryItem field can hold, and — once the enums are mapped to their values —
+# what psycopg is handed as a query parameter. Spelled out rather than left as Any so
+# adding a field of some type this cannot carry is a visible change here.
+type FieldValue = str | float | UUID | date | datetime | Enum | None
+type QueryParam = str | float | UUID | date | datetime | None
+
+
+def _param(value: FieldValue) -> QueryParam:
     """Adapt a model value to something psycopg can send.
 
     Only the enums need help: Category/Unit/StorageLocation subclass str, but psycopg
@@ -48,7 +54,7 @@ class PantryStore:
 
     def list_items(self, location: StorageLocation | None = None) -> list[PantryItem]:
         query = sql.SQL("SELECT {cols} FROM pantry_items").format(cols=_COLUMN_LIST)
-        params: tuple[Any, ...] = ()
+        params: tuple[QueryParam, ...] = ()
         if location is not None:
             query = sql.SQL("{q} WHERE storage_location = %s").format(q=query)
             params = (location.value,)
