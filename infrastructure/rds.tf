@@ -14,6 +14,13 @@ resource "aws_db_subnet_group" "main" {
   subnet_ids  = aws_subnet.private[*].id
 }
 
+resource "random_id" "final_snapshot_suffix" {
+  byte_length = 4
+  keepers = {
+    cluster_identifier = var.project_name
+  }
+}
+
 resource "aws_rds_cluster" "main" {
   cluster_identifier = var.project_name
   engine             = "aurora-postgresql"
@@ -57,7 +64,7 @@ resource "aws_rds_cluster" "main" {
   # taking the pantry with it — clear the flag by hand first if that is really intended.
   deletion_protection       = true
   skip_final_snapshot       = false
-  final_snapshot_identifier = "${var.project_name}-final"
+  final_snapshot_identifier = "${var.project_name}-final-${random_id.final_snapshot_suffix.hex}"
 
   # Postgres server logs to CloudWatch, which is the only way to see a connection being
   # refused or a query erroring — there is no other window into the cluster.
