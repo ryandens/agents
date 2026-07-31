@@ -60,6 +60,8 @@ ExecStartPre=/bin/bash -c 'set -e; set -o pipefail; \
         printf "ALLOWED_EMAILS=%%s\n" "$allowed_emails"; \
         printf "ALLOWED_SERVICE_ACCOUNTS=%%s\n" "$allowed_service_accounts"; \
         printf "DATABASE_URL=%%s\n" "$database_url"; \
+        printf "DATABASE_IAM_AUTH=true\n"; \
+        printf "AWS_REGION=%%s\n" "${aws_region}"; \
     } > /run/agents.env; \
     printf "%%s:%%s" "${ecr_repository_url}" "$app_version" > /run/agents.image'
 ExecStartPre=/bin/bash -c 'exec /usr/bin/docker pull "$(cat /run/agents.image)"'

@@ -22,3 +22,8 @@ allowed_emails = ["you@example.com"]
 # db_max_capacity = 4
 # db_seconds_until_auto_pause = 3600
 # db_engine_version = "17.4"
+#
+# The app authenticates with an RDS IAM token, so there is no database password to set
+# here or anywhere else. `db_app_username` names the role it connects as; changing it
+# means re-running `just db-bootstrap`.
+# db_app_username = "agents_app"

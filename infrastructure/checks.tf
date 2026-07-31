@@ -91,3 +91,18 @@ check "database_not_publicly_accessible" {
     error_message = "Aurora instance ${aws_rds_cluster_instance.main.identifier} is publicly accessible. It must be reachable only from the app instance's security group."
   }
 }
+
+# IAM authentication is the app's only way in — no password is issued to it — so this
+# being switched off does not degrade to a password login, it locks the app out. Worth
+# asserting rather than assuming, since it is a cluster-level toggle a console click
+# can clear.
+check "database_iam_auth_enabled" {
+  data "aws_rds_cluster" "iam_check" {
+    cluster_identifier = aws_rds_cluster.main.cluster_identifier
+  }
+
+  assert {
+    condition     = data.aws_rds_cluster.iam_check.iam_database_authentication_enabled
+    error_message = "IAM database authentication is disabled on ${aws_rds_cluster.main.cluster_identifier}; the app authenticates with tokens only and cannot connect without it."
+  }
+}

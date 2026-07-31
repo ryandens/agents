@@ -14,14 +14,6 @@ resource "aws_db_subnet_group" "main" {
   subnet_ids  = aws_subnet.private[*].id
 }
 
-# No `special` characters, so the password can be dropped into the DATABASE_URL below
-# without percent-encoding. 48 characters of alphanumeric is far more entropy than the
-# punctuation would have added.
-resource "random_password" "db" {
-  length  = 48
-  special = false
-}
-
 resource "aws_rds_cluster" "main" {
   cluster_identifier = var.project_name
   engine             = "aurora-postgresql"
@@ -30,8 +22,18 @@ resource "aws_rds_cluster" "main" {
 
   database_name   = var.db_name
   master_username = var.db_username
-  master_password = random_password.db.result
   port            = 5432
+
+  # The app never uses this password — it authenticates with IAM (below), so the master
+  # user exists only for administration. Handing it to RDS to manage means it is
+  # generated in Secrets Manager, rotated by AWS on a schedule, and never passes through
+  # Terraform: it is absent from the plan, from state, and from Parameter Store. The
+  # instance role is not granted access to it, so nothing on the box can read it either.
+  manage_master_user_password = true
+
+  # What lets the instance connect with a signed token instead of a stored password.
+  # Turning this off would leave the app with no way in at all.
+  iam_database_authentication_enabled = true
 
   db_subnet_group_name   = aws_db_subnet_group.main.name
   vpc_security_group_ids = [aws_security_group.rds.id]
@@ -87,23 +89,47 @@ resource "aws_rds_cluster_instance" "main" {
 }
 
 # The connection string, assembled once here rather than in the systemd unit, so the
-# unit does not have to know how Aurora names its endpoint. SecureString because it
-# carries the password.
+# unit does not have to know how Aurora names its endpoint.
 #
-# sslmode=require encrypts the connection but does not verify the server certificate.
-# verify-full would be better and needs the RDS CA bundle inside the image; until then
-# the exposure is limited by the fact that the only path to the cluster is a private
-# subnet with no internet route, reachable from one security group.
+# A plain String, not a SecureString, and that is the point: it carries no password.
+# The app authenticates as db_app_username with a token it signs at connect time from
+# the instance profile, so this value is no more sensitive than a hostname.
+#
+# sslmode=require is mandatory for IAM auth — RDS rejects a token over a plaintext
+# connection. It encrypts without verifying the server certificate; verify-full would
+# be better and needs the RDS CA bundle inside the image. Until then the exposure is
+# bounded by the only path to the cluster being a private subnet with no internet route,
+# reachable from one security group.
 resource "aws_ssm_parameter" "database_url" {
   name        = "/agents/database-url"
-  description = "Postgres DSN for the pantry. Read by agents.service at start."
-  type        = "SecureString"
+  description = "Passwordless Postgres DSN for the pantry. The app authenticates with an RDS IAM token."
+  type        = "String"
   value = format(
-    "postgresql://%s:%s@%s:%s/%s?sslmode=require",
-    var.db_username,
-    random_password.db.result,
+    "postgresql://%s@%s:%s/%s?sslmode=require",
+    var.db_app_username,
     aws_rds_cluster.main.endpoint,
     aws_rds_cluster.main.port,
     var.db_name,
   )
+}
+
+# Lets the instance role mint a token for exactly one database user on exactly one
+# cluster. The resource path uses the cluster's *resource* id (cluster-ABC…), not its
+# name, so the grant does not survive the cluster being destroyed and recreated — a
+# replacement gets a new id, and this policy follows it.
+#
+# This is the whole of the credential story: no password is issued, stored or rotated,
+# and revoking the app's access is deleting this statement.
+resource "aws_iam_role_policy" "ec2_rds_connect" {
+  name = "rds-iam-connect"
+  role = aws_iam_role.ec2.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = "rds-db:connect"
+      Resource = "arn:aws:rds-db:${var.aws_region}:${data.aws_caller_identity.current.account_id}:dbuser:${aws_rds_cluster.main.cluster_resource_id}/${var.db_app_username}"
+    }]
+  })
 }

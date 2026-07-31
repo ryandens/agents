@@ -486,6 +486,103 @@ db-psql *args:
     [ -t 0 ] && tty_flags+=(-t)
     exec docker exec "${tty_flags[@]}" {{ db_container }} psql -U agents -d agents {{ args }}
 
+# Forward a local port to Aurora through the instance over SSM (Ctrl-C to close)
+db-tunnel local_port="15432":
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    # Aurora sits in a private subnet with no route off the VPC, so the instance is the
+    # only thing that can reach it. Session Manager forwards a port through that instance
+    # without opening one on it — same trust path as `just ssh`, no inbound rule, no key.
+    instance="$(terraform -chdir=infrastructure output -raw ec2_instance_id 2>/dev/null || true)"
+    region="$(terraform -chdir=infrastructure output -raw aws_region 2>/dev/null || true)"
+    endpoint="$(terraform -chdir=infrastructure output -raw db_cluster_endpoint 2>/dev/null || true)"
+    if [ -z "$instance" ] || [ -z "$region" ] || [ -z "$endpoint" ]; then
+        echo "error: missing terraform outputs — run 'terraform -chdir=infrastructure apply' first" >&2
+        exit 1
+    fi
+
+    echo "forwarding 127.0.0.1:{{ local_port }} -> $endpoint:5432 via $instance"
+    exec aws ssm start-session \
+        --target "$instance" \
+        --region "$region" \
+        --document-name AWS-StartPortForwardingSessionToRemoteHost \
+        --parameters "host=$endpoint,portNumber=5432,localPortNumber={{ local_port }}"
+
+# One-time: create the IAM-authenticated database role the deployed app connects as
+db-bootstrap local_port="15433":
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    # Run once after the first apply, and again only if db_app_username changes. The app
+    # cannot create this role itself: it has no password anywhere, and a role that can
+    # grant rds_iam is exactly what we are avoiding giving it.
+    #
+    # The master password is read here, on your machine, from the Secrets Manager secret
+    # AWS generates and rotates. It is never given to the instance — the instance role
+    # has no secretsmanager permission — so this is the one operation that needs your
+    # own AWS credentials rather than the instance's.
+    region="$(terraform -chdir=infrastructure output -raw aws_region)"
+    endpoint="$(terraform -chdir=infrastructure output -raw db_cluster_endpoint)"
+    database="$(terraform -chdir=infrastructure output -raw db_name)"
+    master="$(terraform -chdir=infrastructure output -raw db_master_secret_arn)"
+    app_user="$(terraform -chdir=infrastructure output -raw db_app_username)"
+    instance="$(terraform -chdir=infrastructure output -raw ec2_instance_id)"
+
+    password="$(aws secretsmanager get-secret-value --secret-id "$master" --region "$region" \
+        --query SecretString --output text | python3 -c 'import json,sys; print(json.load(sys.stdin)["password"])')"
+    username="$(aws secretsmanager get-secret-value --secret-id "$master" --region "$region" \
+        --query SecretString --output text | python3 -c 'import json,sys; print(json.load(sys.stdin)["username"])')"
+
+    echo "opening a tunnel to $endpoint"
+    aws ssm start-session \
+        --target "$instance" \
+        --region "$region" \
+        --document-name AWS-StartPortForwardingSessionToRemoteHost \
+        --parameters "host=$endpoint,portNumber=5432,localPortNumber={{ local_port }}" \
+        >/dev/null 2>&1 &
+    tunnel=$!
+    trap 'kill $tunnel 2>/dev/null || true' EXIT INT TERM
+
+    for _ in $(seq 1 30); do
+        nc -z 127.0.0.1 {{ local_port }} 2>/dev/null && break
+        sleep 1
+    done
+    nc -z 127.0.0.1 {{ local_port }} 2>/dev/null || {
+        echo "error: port forward to $endpoint never opened" >&2
+        exit 1
+    }
+
+    # psql comes from the postgres image rather than the host, which already has to have
+    # Docker for `just db-up`. sslmode=require, not verify-full: through the tunnel the
+    # certificate names the Aurora endpoint, not localhost, so verification would fail
+    # on a hostname mismatch that means nothing here.
+    #
+    # GRANT rds_iam is what makes the role token-authenticated; a role holding it cannot
+    # log in with a password at all, which is the property being bought. The grants on
+    # the schema are needed because the app creates its own table on first start, and
+    # Postgres 15 stopped letting PUBLIC create in `public`.
+    docker run --rm -i \
+        --add-host=host.docker.internal:host-gateway \
+        -e PGPASSWORD="$password" \
+        {{ postgres_image }} \
+        psql -v ON_ERROR_STOP=1 \
+            "host=host.docker.internal port={{ local_port }} dbname=$database user=$username sslmode=require" <<SQL
+    DO \$\$
+    BEGIN
+        IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '$app_user') THEN
+            CREATE ROLE $app_user WITH LOGIN;
+        END IF;
+    END
+    \$\$;
+
+    GRANT rds_iam TO $app_user;
+    GRANT CONNECT ON DATABASE $database TO $app_user;
+    GRANT USAGE, CREATE ON SCHEMA public TO $app_user;
+    SQL
+
+    echo "'$app_user' can now sign in with an IAM token — restart the app with 'just restart'"
+
 # Build the frontend into backend/static, where the app serves it from
 build: frontend-build
     rm -rf backend/static

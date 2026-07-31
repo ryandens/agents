@@ -42,3 +42,13 @@ output "db_name" {
   description = "Database the app connects to on that cluster."
   value       = aws_rds_cluster.main.database_name
 }
+
+output "db_app_username" {
+  description = "Role the app authenticates as with an RDS IAM token. `just db-bootstrap` creates it; the instance role may mint tokens for this name and no other."
+  value       = var.db_app_username
+}
+
+output "db_master_secret_arn" {
+  description = "Secrets Manager secret holding the master password, generated and rotated by AWS. Terraform never sees the value. Needed only to run `just db-bootstrap`; the app never reads it."
+  value       = aws_rds_cluster.main.master_user_secret[0].secret_arn
+}

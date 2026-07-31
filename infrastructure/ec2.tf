@@ -227,9 +227,18 @@ resource "aws_instance" "app" {
 
   # IMDSv2 enforced: prevents SSRF attacks from stealing instance credentials via metadata API
   metadata_options {
-    http_endpoint               = "enabled"
-    http_tokens                 = "required"
-    http_put_response_hop_limit = 1
+    http_endpoint = "enabled"
+    http_tokens   = "required"
+
+    # 2, not 1, because the app runs in a container and mints its own RDS IAM tokens.
+    # Docker's bridge network puts one extra hop between the process and IMDS, so a
+    # limit of 1 silently blocks the container from ever reading instance credentials —
+    # the app would come up and fail every database connection.
+    #
+    # The cost is that any container on this host can reach IMDS, not just this one.
+    # That is acceptable here because the host runs exactly one workload; it would not
+    # be on a box running untrusted or multi-tenant containers.
+    http_put_response_hop_limit = 2
   }
 
   root_block_device {

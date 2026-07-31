@@ -156,8 +156,21 @@ variable "db_name" {
   }
 }
 
+variable "db_app_username" {
+  description = "Database role the app connects as, using an RDS IAM token rather than a password. Separate from the master user because a role granted rds_iam can only authenticate by token — keeping the two apart leaves the master usable for administration. Created by `just db-bootstrap`, which is a one-time step after the first apply; the IAM policy grants rds-db:connect for this name specifically, so changing it means re-running that bootstrap."
+  type        = string
+  default     = "agents_app"
+
+  validation {
+    # Postgres identifier rules. Also interpolated into an IAM resource ARN, where a
+    # '/' or a wildcard character would widen the grant beyond the single user intended.
+    condition     = can(regex("^[a-z_][a-z0-9_]{0,62}$", var.db_app_username))
+    error_message = "db_app_username must be a lowercase Postgres identifier: letters, digits and underscores, not starting with a digit."
+  }
+}
+
 variable "db_username" {
-  description = "Master username on the Aurora cluster. The app connects as this user; there is one application and one schema, so it is not worth a second role."
+  description = "Master username on the Aurora cluster, for administration only — the app connects as db_app_username with an IAM token. Its password is generated and rotated by AWS in Secrets Manager and never passes through Terraform."
   type        = string
   default     = "agents"
 
