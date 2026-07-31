@@ -199,8 +199,8 @@ variable "db_min_capacity" {
   default     = 0
 
   validation {
-    condition     = var.db_min_capacity == 0 || (var.db_min_capacity >= 0.5 && var.db_min_capacity <= 256)
-    error_message = "db_min_capacity must be 0 (auto-pause) or between 0.5 and 256 ACUs."
+    condition     = var.db_min_capacity == 0 || (var.db_min_capacity >= 0.5 && var.db_min_capacity <= 256 && var.db_min_capacity * 2 == floor(var.db_min_capacity * 2))
+    error_message = "db_min_capacity must be 0 (auto-pause) or between 0.5 and 256 ACUs in 0.5 ACU increments."
   }
 }
 
@@ -210,8 +210,8 @@ variable "db_max_capacity" {
   default     = 4
 
   validation {
-    condition     = var.db_max_capacity >= 1 && var.db_max_capacity <= 256 && var.db_max_capacity >= var.db_min_capacity
-    error_message = "db_max_capacity must be between 1 and 256 ACUs, and not below db_min_capacity."
+    condition     = var.db_max_capacity >= 1 && var.db_max_capacity <= 256 && var.db_max_capacity >= var.db_min_capacity && var.db_max_capacity * 2 == floor(var.db_max_capacity * 2)
+    error_message = "db_max_capacity must be between 1 and 256 ACUs in 0.5 ACU increments, and not below db_min_capacity."
   }
 }
 
