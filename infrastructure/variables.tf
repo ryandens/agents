@@ -151,8 +151,8 @@ variable "db_name" {
   validation {
     # Postgres identifier rules, and the value is interpolated into a DSN where a '/' or
     # '?' would silently move the path or start a query string.
-    condition     = can(regex("^[a-z_][a-z0-9_]{0,62}$", var.db_name))
-    error_message = "db_name must be a lowercase Postgres identifier: letters, digits and underscores, not starting with a digit."
+    condition     = can(regex("^[a-zA-Z][a-zA-Z0-9]{0,63}$", var.db_name))
+    error_message = "db_name must start with a letter and contain only alphanumeric characters (1-64 characters)."
   }
 }
 
