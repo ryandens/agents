@@ -157,6 +157,12 @@ just db-psql    # psql shell — or pipe SQL in: echo 'select * from pantry_item
 `DATABASE_URL` in `.env` selects the database; unset, the backend falls back to the same
 local container, so nothing has to be configured to get started.
 
+The container publishes Postgres on `127.0.0.1` only. If you have an `agents-postgres`
+container from before that change, it kept the port binding it was created with — which
+was every interface, with the password `agents` — because `docker start` cannot rebind a
+port. Run `just db-reset` once to recreate it, or check with `docker port
+agents-postgres` that it says `127.0.0.1:5432` rather than `0.0.0.0:5432`.
+
 To run it exactly as production does, with the static export served by the backend:
 
 ```sh

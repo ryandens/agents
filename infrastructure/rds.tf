@@ -14,6 +14,13 @@ resource "aws_db_subnet_group" "main" {
   subnet_ids  = aws_subnet.private[*].id
 }
 
+# Suffixes the final snapshot name. AWS refuses to create a snapshot whose name already
+# exists, so a fixed name means the *second* destroy of a cluster fails outright with
+# DBClusterSnapshotAlreadyExistsFault, with the first destroy's snapshot in the way.
+#
+# This covers the destroy-then-apply-again case, where state is gone and a fresh value is
+# generated. It does not cover a cluster replaced in place, which keeps the same suffix —
+# rare, and the failure is a refused destroy rather than lost data.
 resource "random_id" "final_snapshot_suffix" {
   byte_length = 4
   keepers = {

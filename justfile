@@ -470,10 +470,20 @@ db-reset:
     #!/usr/bin/env bash
     set -euo pipefail
     docker rm -f {{ db_container }} >/dev/null 2>&1 || true
-    if ! docker volume rm agents-pgdata >/dev/null 2>&1; then
-        echo "error: could not remove volume agents-pgdata — is another container using it?" >&2
-        exit 1
+
+    # A volume that is not there is already in the state this recipe wants — that is the
+    # normal case on a fresh clone, and treating it as an error made `just db-reset` fail
+    # on any machine that had never run `just db-up`. A volume that exists and *cannot* be
+    # removed is the real problem: db-up would then start against the old data and report
+    # success, so a command whose whole job is to wipe the database silently would not.
+    if docker volume inspect agents-pgdata >/dev/null 2>&1; then
+        if ! docker volume rm agents-pgdata >/dev/null 2>&1; then
+            echo "error: could not remove volume agents-pgdata — is another container using it?" >&2
+            docker ps -a --filter volume=agents-pgdata --format '  still attached: {{{{.Names}}}} ({{{{.Status}}}})' >&2
+            exit 1
+        fi
     fi
+
     {{ just_executable() }} db-up
 
 # Open a psql shell on the local database — or pipe SQL in: `echo 'select …' | just db-psql`

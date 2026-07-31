@@ -91,8 +91,11 @@ class PantryStore:
         # sent reach the SET list.
         patch = data.model_dump(exclude_unset=True)
 
-        # Validate that NOT NULL columns are not explicitly set to None. Raising early
-        # gives a clear error instead of letting a constraint violation reach PostgreSQL.
+        # Backstop only. PantryItemUpdate rejects an explicit null for these fields, so a
+        # request never gets this far — the API answers 422 first. This catches a caller
+        # that builds the model directly, in which case failing here beats a NOT NULL
+        # violation from Postgres, which is harder to read and leaves the error to the
+        # driver. Keep the two lists in step with the NOT NULL columns in db.SCHEMA.
         not_null_columns = ("name", "category", "storage_location", "quantity", "unit")
         for column in not_null_columns:
             if column in patch and patch[column] is None:

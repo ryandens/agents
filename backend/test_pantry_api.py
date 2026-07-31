@@ -179,3 +179,43 @@ def test_deleted_item_no_longer_fetchable(client: TestClient) -> None:
 def test_delete_nonexistent_item_returns_404(client: TestClient) -> None:
     resp = client.delete("/api/pantry/00000000-0000-0000-0000-000000000000")
     assert resp.status_code == 404
+
+
+# --- Nulling a NOT NULL field ---
+#
+# Every field on PantryItemUpdate is optional so that omitting it means "leave alone".
+# That is not the same as allowing null, and five of the columns are NOT NULL, so an
+# explicit null has to be refused at the boundary rather than becoming a 500 from
+# Postgres.
+
+
+@pytest.mark.parametrize(
+    "field", ["name", "category", "storage_location", "quantity", "unit"]
+)
+def test_patch_rejects_null_for_a_required_field(
+    client: TestClient, field: str
+) -> None:
+    created = client.post("/api/pantry", json=OLIVE_OIL).json()
+    resp = client.patch(f"/api/pantry/{created['id']}", json={field: None})
+    assert resp.status_code == 422, f"{field}: expected 422, got {resp.status_code}"
+    # The body has to say which field, or the caller cannot act on it.
+    assert field in resp.text
+
+
+@pytest.mark.parametrize(
+    "field", ["brand", "purchase_date", "expiration_date", "notes"]
+)
+def test_patch_still_clears_a_nullable_field(client: TestClient, field: str) -> None:
+    """The other side of the same coin: null is how these are cleared."""
+    created = client.post("/api/pantry", json=MILK).json()
+    resp = client.patch(f"/api/pantry/{created['id']}", json={field: None})
+    assert resp.status_code == 200, f"{field}: expected 200, got {resp.status_code}"
+    assert resp.json()[field] is None
+
+
+def test_patch_leaves_a_required_field_alone_when_omitted(client: TestClient) -> None:
+    """Omitting a field must not trip the null check that guards it."""
+    created = client.post("/api/pantry", json=OLIVE_OIL).json()
+    resp = client.patch(f"/api/pantry/{created['id']}", json={"notes": "Half used"})
+    assert resp.status_code == 200
+    assert resp.json()["name"] == "Olive Oil"

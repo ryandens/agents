@@ -149,10 +149,16 @@ variable "db_name" {
   default     = "agents"
 
   validation {
-    # Postgres identifier rules, and the value is interpolated into a DSN where a '/' or
-    # '?' would silently move the path or start a query string.
-    condition     = can(regex("^[a-zA-Z][a-zA-Z0-9]{0,63}$", var.db_name))
-    error_message = "db_name must start with a letter and contain only alphanumeric characters (1-64 characters)."
+    # RDS accepts "up to 64 alphanumeric characters" beginning with a letter, which is
+    # narrower than Postgres identifier rules — an underscore here passes `terraform
+    # validate` and then fails at cluster creation.
+    #
+    # Lowercase only, which RDS does not require but this does: the name is interpolated
+    # into the DSN path, where it is matched case-sensitively, so a mixed-case name that
+    # Postgres folds to lowercase would leave the app connecting to a database that does
+    # not exist.
+    condition     = can(regex("^[a-z][a-z0-9]{0,63}$", var.db_name))
+    error_message = "db_name must start with a lowercase letter and contain only lowercase letters and digits (1-64 characters) — RDS rejects underscores here."
   }
 }
 
@@ -175,10 +181,13 @@ variable "db_username" {
   default     = "agents"
 
   validation {
-    # 'rds_superuser' and friends are reserved by RDS, and the same DSN-safety rules as
-    # db_name apply since this is interpolated into the userinfo part of the URL.
-    condition     = can(regex("^[a-z][a-z0-9]{0,62}$", var.db_username)) && !contains(["rdsadmin", "admin", "postgres"], var.db_username)
-    error_message = "db_username must start with a letter, contain only lowercase letters and digits, and must not be a name RDS reserves ('rdsadmin', 'admin', 'postgres')."
+    # RDS constrains a cluster's MasterUsername to "1 to 16 letters or numbers", first
+    # character a letter — not the 63 a Postgres identifier allows, and no underscores.
+    # Both halves matter: either one lets a value pass `terraform validate` and then fail
+    # at cluster creation, which is the slowest possible place to learn about a typo.
+    # 'rdsadmin' and friends are reserved by RDS on top of that.
+    condition     = can(regex("^[a-z][a-z0-9]{0,15}$", var.db_username)) && !contains(["rdsadmin", "admin", "postgres"], var.db_username)
+    error_message = "db_username must be 1-16 characters, start with a lowercase letter, contain only lowercase letters and digits (RDS rejects underscores), and must not be a name RDS reserves ('rdsadmin', 'admin', 'postgres')."
   }
 }
 
