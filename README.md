@@ -194,11 +194,7 @@ Track everything in your kitchen:
 Items live in a single `pantry_items` table in Postgres — Aurora Serverless v2 in
 production, a container in development and in tests. `backend/db.py` owns the pool and
 creates the schema at startup; `backend/pantry_store.py` is the only module that writes
-SQL, so the API layer is unchanged from when this was a JSON file on disk.
-
-The pantry used to be `backend/data/pantry.json`, written to a volume on the instance.
-That file is still in the repo, and `just db-import` loads it (or any copy of it) into a
-database — see [Migrating the pantry off the JSON file](#migrating-the-pantry-off-the-json-file).
+SQL, so the API layer is unchanged from when this was a file on disk.
 
 ## Deployment
 
@@ -323,34 +319,11 @@ Changing config works exactly the same way. `allowed_emails`, `allowed_service_a
 `google_client_id` and the derived `app_base_url` are all parameters now, so editing one
 in `terraform.tfvars` and running `just deploy` takes effect on the restart.
 
-### Migrating the pantry off the JSON file
-
-The move to Aurora is a one-off exception to "deploying does not replace the instance":
-`agents.service` gained a parameter to read and lost its `/opt/agents/data` mount, and
-both are rendered into `user_data`, so the first apply after this change **replaces the
-instance and takes its disk with it**. Copy the old pantry off the box before deploying,
-or it is gone:
-
-```sh
-just ssh                                    # SSM session on the current instance
-sudo cat /opt/agents/data/pantry.json       # paste this into a local file
-```
-
-Then deploy, and load it into the new cluster from the instance — Aurora is not reachable
-from a laptop, so this runs on the box, which is the only thing that can connect:
-
-```sh
-just deploy
-just db-import pantry.json "$DATABASE_URL"  # on the instance, DSN from /agents/database-url
-```
-
-`just db-import` on its own targets the local dev database and defaults to
-`backend/data/pantry.json`, the copy already in the repo. Importing is idempotent — rows
-are matched on the id already in the file and existing ones are left alone — so a re-run
-after a partial import is safe.
-
 **What still replaces the instance:** rotating `google_client_secret` or the session
-secret, and changing the AMI, instance type or the Tailscale settings. Secret rotation is
+secret, and changing the AMI, instance type or the Tailscale settings — plus anything
+else that edits the systemd unit, which is why the move to Aurora replaced it once. That
+is now a downtime event and nothing more: the pantry lives in the database, so an
+instance can be rebuilt without losing anything. Secret rotation is
 deliberate — a hash of each secret is embedded in `user_data` so the instance is rebuilt
 rather than relying on someone remembering to restart it. Those are the cases the
 paragraph below applies to.
@@ -404,7 +377,6 @@ just backend-fmt    # ruff format --check
 just db-up          # local Postgres on :5432
 just db-reset       # wipe it and start clean
 just db-psql        # psql shell on it
-just db-import      # load backend/data/pantry.json into it
 
 just frontend-test  # vitest
 just frontend-lint  # eslint

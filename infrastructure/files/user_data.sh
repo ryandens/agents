@@ -21,9 +21,9 @@ curl -fsSL https://pkgs.tailscale.com/stable/amazon-linux/2023/tailscale.repo \
 dnf install -y tailscale
 systemctl enable --now tailscaled
 
-# /opt/agents/data used to be bind-mounted into the container to hold pantry.json. The
-# pantry is in Aurora now, so nothing on this disk is worth keeping and the directory is
-# no longer created.
+# /opt/agents/data used to be bind-mounted into the container to hold the pantry. It is
+# in Aurora now, so nothing on this disk is worth keeping and the directory is no longer
+# created.
 
 # Quoted delimiter, like the unit below it. Terraform interpolates $${service_content}
 # before this script ever runs, so the unit's text is inlined here — and an unquoted

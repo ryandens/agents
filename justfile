@@ -479,10 +479,6 @@ db-psql *args:
     [ -t 0 ] && tty_flags+=(-t)
     exec docker exec "${tty_flags[@]}" {{ db_container }} psql -U agents -d agents {{ args }}
 
-# Load a pantry.json — the old file-backed store — into a database
-db-import file="backend/data/pantry.json" url=db_url:
-    uv run --project backend python scripts/import_pantry_json.py {{ file }} {{ url }}
-
 # Build the frontend into backend/static, where the app serves it from
 build: frontend-build
     rm -rf backend/static
