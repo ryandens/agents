@@ -45,5 +45,5 @@ dev = [
     # Starts the Postgres the store tests run against. See backend/conftest.py — the
     # store is worth testing against the real thing, and a container is the only way to
     # do that without asking every developer to install and run a server by hand.
-    "testcontainers[postgres]>=4.9.0",
+    "testcontainers[postgres]>=4.15.0",
 ]
