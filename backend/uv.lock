@@ -34,7 +34,7 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.141.1" },
     { name = "google-auth", extras = ["requests"], specifier = ">=2.56.2" },
     { name = "itsdangerous", specifier = ">=2.2.0" },
-    { name = "psycopg", extras = ["binary", "pool"], specifier = ">=3.2.10" },
+    { name = "psycopg", extras = ["binary", "pool"], specifier = ">=3.3.4" },
     { name = "python-dotenv", specifier = ">=1.2.2" },
     { name = "requests", specifier = ">=2.34.2" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.52.0" },
