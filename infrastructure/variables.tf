@@ -177,8 +177,8 @@ variable "db_username" {
   validation {
     # 'rds_superuser' and friends are reserved by RDS, and the same DSN-safety rules as
     # db_name apply since this is interpolated into the userinfo part of the URL.
-    condition     = can(regex("^[a-z_][a-z0-9_]{0,62}$", var.db_username)) && !contains(["rdsadmin", "admin", "postgres"], var.db_username)
-    error_message = "db_username must be a lowercase Postgres identifier and must not be a name RDS reserves ('rdsadmin', 'admin', 'postgres')."
+    condition     = can(regex("^[a-z][a-z0-9]{0,62}$", var.db_username)) && !contains(["rdsadmin", "admin", "postgres"], var.db_username)
+    error_message = "db_username must start with a letter, contain only lowercase letters and digits, and must not be a name RDS reserves ('rdsadmin', 'admin', 'postgres')."
   }
 }
 
