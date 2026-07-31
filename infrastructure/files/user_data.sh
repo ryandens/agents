@@ -35,11 +35,19 @@ cat > /etc/systemd/system/agents.service <<'EOF_UNIT'
 ${service_content}
 EOF_UNIT
 
+cat > /etc/systemd/system/agents-migrate.service <<'EOF_UNIT'
+${migrate_service_content}
+EOF_UNIT
+
 cat > /etc/systemd/system/tailscale-agents.service <<'EOF_UNIT'
 ${tailscale_service_content}
 EOF_UNIT
 
 systemctl daemon-reload
+
+# Enabled but not started here: agents.service Requires= it, so starting the app pulls
+# the migration in and orders it first. Starting it separately would just run it twice.
+systemctl enable agents-migrate.service
 systemctl enable --now agents.service
 
 # Started after the app so `tailscale serve` has something behind it the moment the node

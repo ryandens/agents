@@ -52,3 +52,8 @@ output "db_master_secret_arn" {
   description = "Secrets Manager secret holding the master password, generated and rotated by AWS. Terraform never sees the value. Needed only to run `just db-bootstrap`; the app never reads it."
   value       = aws_rds_cluster.main.master_user_secret[0].secret_arn
 }
+
+output "db_migrator_username" {
+  description = "Schema-owning role that agents-migrate.service applies migrations as. `just db-bootstrap` creates it; the app connects as db_app_username instead and holds no DDL rights."
+  value       = var.db_migrator_username
+}

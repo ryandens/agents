@@ -1,0 +1,53 @@
+[Unit]
+Description=Apply pantry database migrations
+After=docker.service network-online.target
+Requires=docker.service
+Wants=network-online.target
+# agents.service pulls this in and orders itself after it, so a boot migrates before it
+# serves and a failed migration keeps the app from starting against the wrong schema.
+Before=agents.service
+
+[Service]
+# oneshot without RemainAfterExit: the unit is "done" when alembic exits, and going
+# inactive again is what lets agents.service re-trigger it on the next restart. That is
+# the whole rollout mechanism — `just deploy` restarts the app and the migrations run
+# ahead of it, from the same image, so code and schema can never be a version apart.
+Type=oneshot
+
+# Same image as the app, different command. Running migrations from a different artifact
+# is how a schema ends up ahead of or behind the code that uses it.
+ExecStartPre=/bin/sh -c '/usr/bin/aws ecr get-login-password --region ${aws_region} | /usr/bin/docker login --username AWS --password-stdin ${ecr_registry}'
+
+# Only parameter names are baked in here, exactly as in agents.service, so this unit's
+# text — and therefore user_data — stays byte-identical across a release.
+#
+# The DSN carries no password: the migrator authenticates with an RDS IAM token it signs
+# from the instance profile, the same way the app does. It is a *different* role from the
+# app's, and the only one with rights to change the schema.
+ExecStartPre=/bin/bash -c 'set -e; set -o pipefail; \
+    ssm() { /usr/bin/aws ssm get-parameter --name "$1" --with-decryption --query Parameter.Value --output text --region ${aws_region}; }; \
+    database_url="$(ssm ${migrator_database_url_parameter_name})"; \
+    app_version="$(ssm ${app_version_parameter_name})"; \
+    umask 077; \
+    { \
+        printf "DATABASE_URL=%%s\n" "$database_url"; \
+        printf "DATABASE_IAM_AUTH=true\n"; \
+        printf "AWS_REGION=%%s\n" "${aws_region}"; \
+        printf "AWS_DEFAULT_REGION=%%s\n" "${aws_region}"; \
+    } > /run/agents-migrate.env; \
+    printf "%%s:%%s" "${ecr_repository_url}" "$app_version" > /run/agents-migrate.image'
+ExecStartPre=/bin/bash -c 'exec /usr/bin/docker pull "$(cat /run/agents-migrate.image)"'
+
+# --entrypoint overrides the image's uvicorn, so the same artifact runs alembic instead.
+# --rm because there is nothing to inspect afterwards; the exit status is the result, and
+# journalctl -u agents-migrate.service has the log.
+ExecStart=/bin/bash -c 'exec /usr/bin/docker run \
+    --rm \
+    --name agents-migrate \
+    --env-file /run/agents-migrate.env \
+    --entrypoint /app/.venv/bin/alembic \
+    "$(cat /run/agents-migrate.image)" \
+    -c /app/alembic.ini upgrade head'
+
+[Install]
+WantedBy=multi-user.target

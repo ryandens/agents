@@ -175,6 +175,20 @@ variable "db_app_username" {
   }
 }
 
+variable "db_migrator_username" {
+  description = "Database role that owns the schema and applies migrations. Separate from db_app_username so the running application holds no DDL rights at all — a compromised app cannot alter the schema, only the rows. Used solely by agents-migrate.service, which runs before the app on every start. Created by `just db-bootstrap`; the IAM policy grants rds-db:connect for this name specifically, so changing it means re-running that bootstrap."
+  type        = string
+  default     = "agents_migrator"
+
+  validation {
+    # Postgres identifier rules — this role is created by SQL, not by RDS, so unlike
+    # db_username it may contain underscores. Also interpolated into an IAM resource
+    # ARN, where a '/' or a wildcard would widen the grant past the single user intended.
+    condition     = can(regex("^[a-z_][a-z0-9_]{0,62}$", var.db_migrator_username))
+    error_message = "db_migrator_username must be a lowercase Postgres identifier: letters, digits and underscores, not starting with a digit."
+  }
+}
+
 variable "db_username" {
   description = "Master username on the Aurora cluster, for administration only — the app connects as db_app_username with an IAM token. Its password is generated and rotated by AWS in Secrets Manager and never passes through Terraform."
   type        = string

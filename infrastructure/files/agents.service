@@ -1,8 +1,13 @@
 [Unit]
 Description=Kitchen Agent
-After=docker.service network-online.target
+After=docker.service network-online.target agents-migrate.service
 Requires=docker.service
 Wants=network-online.target
+# The schema this app expects is applied by agents-migrate.service, from the same image.
+# Requires= means a failed migration stops the app from starting at all rather than
+# letting it serve against a schema it does not match; After= orders the two so the
+# migration has finished before the first request can arrive.
+Requires=agents-migrate.service
 
 [Service]
 Type=simple

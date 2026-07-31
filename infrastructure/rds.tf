@@ -141,9 +141,33 @@ resource "aws_iam_role_policy" "ec2_rds_connect" {
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
-      Effect   = "Allow"
-      Action   = "rds-db:connect"
-      Resource = "arn:aws:rds-db:${var.aws_region}:${data.aws_caller_identity.current.account_id}:dbuser:${aws_rds_cluster.main.cluster_resource_id}/${var.db_app_username}"
+      Effect = "Allow"
+      Action = "rds-db:connect"
+      # Two roles, listed explicitly rather than wildcarded: the app's, which has DML
+      # only, and the migrator's, which owns the schema. The instance can mint a token
+      # for each because it runs both the app and the migrate step — what the split buys
+      # is that the *app process* holds no DDL rights, so a bug or an injection in it
+      # cannot reach the schema. Separating the two further would mean running migrations
+      # from somewhere with different credentials entirely, such as CI.
+      Resource = [
+        "arn:aws:rds-db:${var.aws_region}:${data.aws_caller_identity.current.account_id}:dbuser:${aws_rds_cluster.main.cluster_resource_id}/${var.db_app_username}",
+        "arn:aws:rds-db:${var.aws_region}:${data.aws_caller_identity.current.account_id}:dbuser:${aws_rds_cluster.main.cluster_resource_id}/${var.db_migrator_username}",
+      ]
     }]
   })
+}
+
+# The migrator's DSN. Same cluster and database as the app's, different role — and, like
+# the app's, no password: agents-migrate.service signs an IAM token for it at start.
+resource "aws_ssm_parameter" "migrator_database_url" {
+  name        = "/agents/migrator-database-url"
+  description = "Passwordless Postgres DSN used by agents-migrate.service. Connects as the schema-owning role, which the app deliberately is not."
+  type        = "String"
+  value = format(
+    "postgresql://%s@%s:%s/%s?sslmode=require",
+    var.db_migrator_username,
+    aws_rds_cluster.main.endpoint,
+    aws_rds_cluster.main.port,
+    var.db_name,
+  )
 }

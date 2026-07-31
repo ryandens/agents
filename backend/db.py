@@ -1,4 +1,4 @@
-"""Postgres connection pool and schema bootstrap.
+"""Postgres connection pool and authentication.
 
 The pantry lives in Postgres — Aurora Serverless v2 in production, a container locally
 and in tests. Nothing about the app is Aurora-specific except how it authenticates.
@@ -11,6 +11,10 @@ There are two ways in, chosen by DATABASE_IAM_AUTH:
   anywhere — nothing in Parameter Store, nothing in the image, nothing to rotate. The
   token lasts 15 minutes and is signed locally from credentials the instance profile
   hands out, so minting one costs no network round trip.
+
+The schema is not created here. It belongs to Alembic (backend/migrations/), applied by
+a separate deploy step running as a different, DDL-owning database role — so the role
+this module connects as has no rights to change the schema at all.
 """
 
 import logging
@@ -103,39 +107,6 @@ class IamConnection(psycopg.Connection):
         return super().connect(conninfo, **kwargs)
 
 
-# One statement per element, because psycopg only sends multiple statements in a single
-# execute() under the simple query protocol — a detail not worth depending on.
-#
-# The enums (category, unit, storage_location) are stored as TEXT and validated by
-# pydantic on the way out rather than by a CHECK constraint. Unit alone has twenty
-# members and both it and Category are expected to grow; a constraint would turn every
-# new member into a schema migration for no protection the API layer does not already
-# give, since nothing writes to this table except the app.
-SCHEMA = [
-    """
-    CREATE TABLE IF NOT EXISTS pantry_items (
-        id                UUID PRIMARY KEY,
-        name              TEXT NOT NULL,
-        brand             TEXT,
-        category          TEXT NOT NULL,
-        storage_location  TEXT NOT NULL,
-        quantity          DOUBLE PRECISION NOT NULL,
-        unit              TEXT NOT NULL,
-        purchase_date     DATE,
-        expiration_date   DATE,
-        notes             TEXT,
-        created_at        TIMESTAMPTZ NOT NULL,
-        updated_at        TIMESTAMPTZ NOT NULL
-    )
-    """,
-    # The one query shape the API filters on.
-    """
-    CREATE INDEX IF NOT EXISTS pantry_items_storage_location_idx
-        ON pantry_items (storage_location)
-    """,
-]
-
-
 def database_url() -> str:
     """Where to connect. Empty and unset both mean "use the local default"."""
     return os.environ.get("DATABASE_URL") or DEFAULT_DATABASE_URL
@@ -173,18 +144,6 @@ def open_pool(
     )
     pool.open(wait=True, timeout=timeout)
     return pool
-
-
-def apply_schema(pool: ConnectionPool) -> None:
-    """Create the schema if it is not there yet.
-
-    One table with no history behind it, so `CREATE TABLE IF NOT EXISTS` at startup is
-    the whole migration story. A second table — or a column that has to change shape on
-    a table holding real rows — is the point at which this should become Alembic.
-    """
-    with pool.connection() as conn:
-        for statement in SCHEMA:
-            conn.execute(statement)
 
 
 def ping(pool: ConnectionPool, *, timeout: float = 5.0) -> None:

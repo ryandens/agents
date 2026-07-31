@@ -16,6 +16,7 @@ An AI-powered meal planning and kitchen management app. Chat with the agent to p
 | Frontend | Next.js 16 (App Router), React 19, Tailwind CSS v4, Vercel AI SDK v6 |
 | Database | PostgreSQL 17 — Aurora Serverless v2 in production, a container locally |
 | Database auth | RDS IAM tokens in production (no stored password); password locally |
+| Migrations | Alembic, hand-written SQL, applied as a separate deploy step |
 | Package managers | `uv` (backend), `npm` (frontend) |
 | Task runner | `just` |
 
@@ -143,9 +144,8 @@ proxies `/api/*` to the backend on `http://localhost:8000`, which runs with
 same shape as production.
 
 `just dev` also starts the Postgres the backend stores the pantry in, as a container on
-`:5432`, and waits for it to accept connections before the servers come up. The backend
-creates its schema on startup, so there is no migration step to remember. The data lives
-in a Docker volume and outlives the container:
+`:5432`, waits for it to accept connections, and applies any pending migrations before
+the servers come up. The data lives in a Docker volume and outlives the container:
 
 ```sh
 just db-up      # start it on its own (`just dev` does this for you)
@@ -156,6 +156,17 @@ just db-psql    # psql shell — or pipe SQL in: echo 'select * from pantry_item
 
 `DATABASE_URL` in `.env` selects the database; unset, the backend falls back to the same
 local container, so nothing has to be configured to get started.
+
+The app does **not** create its own schema. `just dev` applies migrations before starting
+the servers; run them by hand with:
+
+```sh
+just db-migrate            # apply anything pending
+just db-migration-status   # what the database is at, and what exists
+just db-migrate-sql        # print the SQL without touching the database
+just db-rollback           # back out the last revision
+just db-revision "add recipes table"   # new, empty revision to fill in
+```
 
 The container publishes Postgres on `127.0.0.1` only. If you have an `agents-postgres`
 container from before that change, it kept the port binding it was created with — which
@@ -199,9 +210,9 @@ Track everything in your kitchen:
 - Items sorted by expiration date, soonest first
 
 Items live in a single `pantry_items` table in Postgres — Aurora Serverless v2 in
-production, a container in development and in tests. `backend/db.py` owns the pool and
-creates the schema at startup; `backend/pantry_store.py` is the only module that writes
-SQL, so the API layer is unchanged from when this was a file on disk.
+production, a container in development and in tests. `backend/db.py` owns the pool,
+`backend/migrations/` owns the schema, and `backend/pantry_store.py` is the only module
+that writes SQL, so the API layer is unchanged from when this was a file on disk.
 
 ## Deployment
 
@@ -351,10 +362,40 @@ Changing config works exactly the same way. `allowed_emails`, `allowed_service_a
 `google_client_id` and the derived `app_base_url` are all parameters now, so editing one
 in `terraform.tfvars` and running `just deploy` takes effect on the restart.
 
+### Migrations
+
+The schema belongs to Alembic (`backend/migrations/`), not to the app. `agents-migrate.service`
+applies it — a `oneshot` unit that `agents.service` `Requires=` and orders itself after,
+so:
+
+- Every start of the app runs pending migrations first, from **the same image**. Code and
+  schema cannot end up a version apart, because they ship as one artifact.
+- A failed migration stops the app from starting rather than letting it serve against a
+  schema it does not match. It surfaces as a failed unit in `journalctl -u
+  agents-migrate.service`, and `just deploy` fails on the health check that follows.
+- Migrations run as `agents_migrator`, which owns the schema. The app connects as
+  `agents_app`, which has `SELECT/INSERT/UPDATE/DELETE` and no `CREATE` at all — so a bug
+  or an injection in the running app cannot reach the schema. Both authenticate with IAM
+  tokens; neither has a password.
+
+Writing one:
+
+```sh
+just db-revision "add recipes table"   # empty revision — there is no autogenerate
+just db-migrate-sql                    # review the SQL it would run
+just db-migrate                        # apply locally
+```
+
+There is deliberately no autogenerate: the app has no SQLAlchemy models (it is raw
+psycopg and pydantic), so there is nothing to diff a schema against. Migrations are
+hand-written SQL, one transaction per revision, under a Postgres advisory lock with a
+short `lock_timeout` so a migration queued behind a long query fails fast instead of
+blocking every later query on the table.
+
 ### One-time: create the app's database role
 
-After the **first** apply, the IAM-authenticated role has to be created once. The app
-cannot do it itself — it holds no password, and a role that could grant `rds_iam` is
+After the **first** apply, the two IAM-authenticated roles have to be created once. The
+app cannot do it itself — it holds no password, and a role that could grant `rds_iam` is
 exactly what it must not have:
 
 ```sh
@@ -363,9 +404,12 @@ just db-bootstrap
 
 That reads the AWS-managed master password from Secrets Manager **on your machine**,
 opens an SSM port forward through the instance, and runs the `CREATE ROLE` /
-`GRANT rds_iam` SQL. The master password is never given to the instance, so this is the
-one operation that uses your own AWS credentials rather than the instance's. It is
-idempotent, and only needs re-running if `db_app_username` changes.
+`GRANT rds_iam` SQL for both roles — granting the schema to `agents_migrator` and DML
+only to `agents_app`, with `ALTER DEFAULT PRIVILEGES` so tables a future migration
+creates stay readable and writable by the app. The master password is never given to the
+instance, so this is the one operation that uses your own AWS credentials rather than the
+instance's. It is idempotent, and only needs re-running if `db_app_username` or
+`db_migrator_username` changes.
 
 Until it has run, the app starts and fails its health check with an authentication
 error — which is the boot gate doing its job.
