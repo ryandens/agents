@@ -56,7 +56,13 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
+      # Pinned rather than the action's `releases/latest`, which silently changes the
+      # analyzer and its bundled rulesets underneath us — a new ruleset could turn CI
+      # red on an unrelated PR. Renovate keeps the version in lockstep with upstream
+      # release tags; see the customManager in renovate.json.
       - name: Install datadog-static-analyzer
+        env:
+          DDSA_VERSION: 0.9.0
         run: |
           case "${{ runner.arch }}" in
             X64)   DDSA_ARCH="x86_64" ;;
@@ -81,7 +87,7 @@ jobs:
 
           filename="datadog-static-analyzer-$DDSA_ARCH-$DDSA_OS.zip"
           tmpdir="$(mktemp -d)"
-          curl -fsSL --retry 5 "https://github.com/DataDog/datadog-static-analyzer/releases/latest/download/$filename" -o "$tmpdir/$filename"
+          curl -fsSL --retry 5 "https://github.com/DataDog/datadog-static-analyzer/releases/download/$DDSA_VERSION/$filename" -o "$tmpdir/$filename"
           unzip -q "$tmpdir/$filename" -d "$HOME/.local/bin"
           chmod +x "$HOME/.local/bin/datadog-static-analyzer"
 
