@@ -27,6 +27,26 @@ jobs:
       - name: Check
         run: just backend-check
 
+  # The Safari exporter. Its tests build a synthetic history database rather than
+  # reading a real one, so they need neither macOS nor Full Disk Access and run here.
+  cli:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Setup Just
+        uses: taiki-e/install-action@be5d41457cdd7bd9986d07500bf51a8c67803dbf # just
+
+      # Python version comes from cli/.python-version, which uv reads itself.
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+
+      - name: Install dependencies
+        run: just cli-dev-install
+
+      - name: Check
+        run: just cli-check
+
   frontend:
     runs-on: ubuntu-latest
     steps:

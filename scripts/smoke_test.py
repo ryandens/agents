@@ -158,6 +158,10 @@ def api_is_not_shadowed_by_static_files(base_url):
         ("GET", "/api/pantry", None),
         ("POST", "/api/chat", b'{"messages":[]}'),
         ("PATCH", "/api/pantry/8d1c1b1e-0000-4000-8000-000000000000", b"{}"),
+        # The exporter's endpoint. Worth a check of its own: it is the one route
+        # reached by a machine rather than a browser, so nobody would notice the
+        # static mount swallowing it by clicking around.
+        ("POST", "/api/browser-history", b"[]"),
     ):
         status, headers, payload = fetch(
             f"{base_url}{path}", method=method, body=body, follow_redirects=False

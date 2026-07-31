@@ -18,6 +18,7 @@ import psycopg
 import pytest
 from alembic import command
 from alembic.config import Config
+from alembic.script import ScriptDirectory
 from psycopg.rows import dict_row
 
 from conftest import BACKEND_DIR, run_migrations
@@ -29,11 +30,31 @@ def inspect(url: str, sql: str, params: tuple = ()):
         return conn.execute(sql, params).fetchone()
 
 
+def alembic_config(script_location: str | None = None) -> Config:
+    config = Config(str(BACKEND_DIR / "alembic.ini"))
+    config.set_main_option(
+        "script_location", script_location or str(BACKEND_DIR / "migrations")
+    )
+    return config
+
+
+def head_revision() -> str:
+    """The newest revision on disk.
+
+    Read from the script directory rather than written down here, so adding a migration
+    does not require editing the tests that assert the database reached head — a chore
+    that invites pinning the assertion to whatever the code currently does.
+    """
+    head = ScriptDirectory.from_config(alembic_config()).get_current_head()
+    assert head is not None, "no migrations found"
+    return head
+
+
 def test_migrations_are_committed(unmigrated_database: str) -> None:
     """The regression test: a separate connection must see the migrated schema."""
     run_migrations(unmigrated_database)
 
-    for table in ("pantry_items", "alembic_version"):
+    for table in ("pantry_items", "browser_visits", "alembic_version"):
         row = inspect(unmigrated_database, "SELECT to_regclass(%s) AS t", (table,))
         assert row is not None and row["t"] == table, (
             f"{table} is missing after a migration that reported success — "
@@ -45,7 +66,7 @@ def test_migrations_record_the_head_revision(unmigrated_database: str) -> None:
     run_migrations(unmigrated_database)
 
     row = inspect(unmigrated_database, "SELECT version_num FROM alembic_version")
-    assert row is not None and row["version_num"] == "0001"
+    assert row is not None and row["version_num"] == head_revision()
 
 
 def test_migrations_are_idempotent(unmigrated_database: str) -> None:
@@ -116,9 +137,10 @@ def test_a_failing_revision_keeps_the_ones_before_it(
     """Each revision commits on its own, so a later failure does not undo earlier ones.
 
     transaction_per_migration is what makes a partially-applied batch land on a real
-    revision rather than rolling everything back — the database ends up at 0001, which
-    is a state the next deploy can resume from. Pinned here because it is a property of
-    how env.py drives Alembic, not something Alembic guarantees on its own.
+    revision rather than rolling everything back — the database ends up at the last
+    revision that succeeded, which is a state the next deploy can resume from. Pinned
+    here because it is a property of how env.py drives Alembic, not something Alembic
+    guarantees on its own.
     """
     versions = tmp_path / "versions"
     versions.mkdir(parents=True)
@@ -129,9 +151,14 @@ def test_a_failing_revision_keeps_the_ones_before_it(
     for migration in (BACKEND_DIR / "migrations" / "versions").glob("*.py"):
         shutil.copy(migration, versions / migration.name)
 
-    (versions / "0002_boom.py").write_text(
-        'revision = "0002"\n'
-        'down_revision = "0001"\n'
+    # Chained onto the real head rather than onto a fixed revision, so this stays a
+    # linear history as migrations are added. A hardcoded down_revision would branch
+    # the tree the moment it stopped naming the newest one, and Alembic would fail
+    # with "multiple head revisions" instead of the failure this test is about.
+    last_good = head_revision()
+    (versions / "9999_boom.py").write_text(
+        'revision = "9999"\n'
+        f'down_revision = "{last_good}"\n'
         "branch_labels = None\n"
         "depends_on = None\n"
         "\n"
@@ -142,8 +169,7 @@ def test_a_failing_revision_keeps_the_ones_before_it(
         "    pass\n"
     )
 
-    config = Config(str(BACKEND_DIR / "alembic.ini"))
-    config.set_main_option("script_location", str(tmp_path))
+    config = alembic_config(str(tmp_path))
     previous = os.environ.get("DATABASE_URL")
     os.environ["DATABASE_URL"] = unmigrated_database
     try:
@@ -155,8 +181,9 @@ def test_a_failing_revision_keeps_the_ones_before_it(
         else:
             os.environ["DATABASE_URL"] = previous
 
-    # 0001 survived the failure of 0002, and the recorded revision says so.
+    # The real migrations survived the failure of 9999, and the recorded revision
+    # says so.
     row = inspect(unmigrated_database, "SELECT to_regclass('pantry_items') AS t")
     assert row is not None and row["t"] == "pantry_items"
     row = inspect(unmigrated_database, "SELECT version_num FROM alembic_version")
-    assert row is not None and row["version_num"] == "0001"
+    assert row is not None and row["version_num"] == last_good
