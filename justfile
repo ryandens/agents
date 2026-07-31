@@ -444,8 +444,15 @@ db-up:
 
     # `docker run` returns once the container is started, which is well before postgres
     # is accepting connections — without this the backend loses the race on a cold start.
-    for _ in $(seq 1 60); do
-        if docker exec {{ db_container }} pg_isready -U agents -d agents >/dev/null 2>&1; then
+    #
+    # -h 127.0.0.1 forces the check over TCP, and that is the whole point rather than a
+    # detail. On a first run the entrypoint brings up a temporary server to run initdb
+    # and CREATE DATABASE, then shuts it down and starts the real one; a socket check
+    # answers "ready" against that temporary server and returns just in time for the
+    # shutdown. The init server is started with listen_addresses='' precisely so it is
+    # invisible over TCP, so this cannot mistake it for the real thing.
+    for _ in $(seq 1 120); do
+        if docker exec {{ db_container }} pg_isready -h 127.0.0.1 -U agents -d agents >/dev/null 2>&1; then
             echo "postgres ready on :{{ db_port }}"
             exit 0
         fi
@@ -531,11 +538,15 @@ smoke image="agents:local" port="8080":
         -e POSTGRES_DB=agents \
         {{ postgres_image }} >/dev/null
 
-    for _ in $(seq 1 60); do
-        docker exec "$db" pg_isready -U agents -d agents >/dev/null 2>&1 && break
+    # -h 127.0.0.1 to check over TCP rather than the socket. The entrypoint's temporary
+    # init server listens on the socket only, so a socket check reports ready during
+    # initdb and then the server shuts down to restart for real — which is exactly the
+    # race that failed in CI, where the image was pulled cold. See `db-up` above.
+    for _ in $(seq 1 120); do
+        docker exec "$db" pg_isready -h 127.0.0.1 -U agents -d agents >/dev/null 2>&1 && break
         sleep 0.5
     done
-    docker exec "$db" pg_isready -U agents -d agents >/dev/null 2>&1 || {
+    docker exec "$db" pg_isready -h 127.0.0.1 -U agents -d agents >/dev/null 2>&1 || {
         echo "error: smoke-test postgres did not become ready" >&2
         exit 1
     }
