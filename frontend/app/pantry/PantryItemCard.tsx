@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+
 import { CATEGORY_LABELS, PantryItem } from "./types";
 
 interface Props {
@@ -47,9 +49,11 @@ function expiryLabel(dateStr: string | null, status: ExpiryStatus): string {
 
 export default function PantryItemCard({ item, onEdit, onDeleted }: Props) {
   const status = expiryStatus(item.expiration_date);
+  // Confirmation lives on the card rather than in window.confirm, which blocks the
+  // event loop, can't be styled to match, and is suppressed outright in some browsers.
+  const [confirming, setConfirming] = useState(false);
 
   async function handleDelete() {
-    if (!confirm(`Delete "${item.name}"?`)) return;
     await fetch(`/api/pantry/${item.id}`, { method: "DELETE" });
     onDeleted(item.id);
   }
@@ -65,22 +69,44 @@ export default function PantryItemCard({ item, onEdit, onDeleted }: Props) {
             <p className="text-xs text-stone-400 dark:text-stone-500 truncate">{item.brand}</p>
           )}
         </div>
-        <div className="flex gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-          <button
-            onClick={() => onEdit(item)}
-            className="w-6 h-6 rounded flex items-center justify-center text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors text-xs"
-            title="Edit"
-          >
-            ✎
-          </button>
-          <button
-            onClick={handleDelete}
-            className="w-6 h-6 rounded flex items-center justify-center text-stone-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors text-xs"
-            title="Delete"
-          >
-            ✕
-          </button>
-        </div>
+        {/* Stays visible while confirming — the hover-reveal treatment would hide the
+            prompt the moment the pointer left the card. */}
+        {confirming ? (
+          <div className="flex gap-1 shrink-0 items-center">
+            <span className="text-xs text-stone-500 dark:text-stone-400">Delete?</span>
+            <button
+              onClick={handleDelete}
+              className="w-6 h-6 rounded flex items-center justify-center text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors text-xs"
+              title="Confirm delete"
+            >
+              ✓
+            </button>
+            <button
+              onClick={() => setConfirming(false)}
+              className="w-6 h-6 rounded flex items-center justify-center text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors text-xs"
+              title="Cancel delete"
+            >
+              ✕
+            </button>
+          </div>
+        ) : (
+          <div className="flex gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button
+              onClick={() => onEdit(item)}
+              className="w-6 h-6 rounded flex items-center justify-center text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors text-xs"
+              title="Edit"
+            >
+              ✎
+            </button>
+            <button
+              onClick={() => setConfirming(true)}
+              className="w-6 h-6 rounded flex items-center justify-center text-stone-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors text-xs"
+              title="Delete"
+            >
+              ✕
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="flex items-center gap-1.5 flex-wrap">

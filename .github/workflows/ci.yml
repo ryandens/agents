@@ -45,6 +45,63 @@ jobs:
       - name: Check
         run: just frontend-check
 
+  # Datadog's static analyzer, run straight from its release archive rather than through
+  # DataDog/datadog-static-analyzer-github-action. The action also installs datadog-ci and
+  # uploads results, which needs DD_API_KEY/DD_APP_KEY org credentials this repo does not
+  # have. The analyzer binary ships its own rulesets and needs no credentials to scan, so
+  # the install logic below is lifted from that action's `Set up environment` and
+  # `Install datadog-static-analyzer` steps and the upload is dropped.
+  static-analysis:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      # Pinned rather than the action's `releases/latest`, which silently changes the
+      # analyzer and its bundled rulesets underneath us — a new ruleset could turn CI
+      # red on an unrelated PR. Renovate keeps the version in lockstep with upstream
+      # release tags; see the customManager in renovate.json.
+      - name: Install datadog-static-analyzer
+        env:
+          DDSA_VERSION: 0.8.9
+        run: |
+          case "${{ runner.arch }}" in
+            X64)   DDSA_ARCH="x86_64" ;;
+            ARM64) DDSA_ARCH="aarch64" ;;
+            *)
+              echo "::error title=Unsupported architecture::${{ runner.arch }}"
+              exit 1
+              ;;
+          esac
+
+          if [ "${{ runner.os }}" = "Linux" ]; then
+            DDSA_OS="unknown-linux-gnu"
+          elif [ "${{ runner.os }}" = "macOS" ]; then
+            DDSA_OS="apple-darwin"
+          else
+            echo "::error title=Unsupported platform::${{ runner.os }}/${{ runner.arch }}"
+            exit 1
+          fi
+
+          mkdir -p "$HOME/.local/bin"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+          filename="datadog-static-analyzer-$DDSA_ARCH-$DDSA_OS.zip"
+          tmpdir="$(mktemp -d)"
+          curl -fsSL --retry 5 "https://github.com/DataDog/datadog-static-analyzer/releases/download/$DDSA_VERSION/$filename" -o "$tmpdir/$filename"
+          unzip -q "$tmpdir/$filename" -d "$HOME/.local/bin"
+          chmod +x "$HOME/.local/bin/datadog-static-analyzer"
+
+      # Rules and path exclusions come from code-security.datadog.yaml at the repo root,
+      # so this run matches what the same binary reports locally.
+      - name: Run static analysis
+        run: |
+          datadog-static-analyzer \
+            -i "$GITHUB_WORKSPACE" \
+            -o "$RUNNER_TEMP/results.sarif" \
+            -f sarif \
+            --print-violations \
+            --fail-on-any-violation error,warning
+
   # Builds the same image the release workflow ships and checks that one container
   # really does serve the frontend at / and the API under /api. Neither the backend
   # nor the frontend job can see that seam on its own.

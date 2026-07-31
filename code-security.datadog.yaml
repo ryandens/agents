@@ -1,0 +1,13 @@
+schema-version: v1.0
+sast:
+  use-default-rulesets: true
+  global-config:
+    # Do not analyze the following paths/files
+    ignore-paths:
+      - ".claude/worktrees"
+      - "**/.venv/**"
+      - "frontend/out/**"
+      - "frontend/next-env.d.ts"
+    use-gitignore: true
+    ignore-generated-files: true
+    max-file-size-kb: 200

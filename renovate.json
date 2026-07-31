@@ -6,6 +6,17 @@
     "enabled": true,
     "schedule": ["before 4am on monday"]
   },
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Keep the pinned datadog-static-analyzer release in the CI workflow in lockstep with upstream GitHub release tags",
+      "managerFilePatterns": ["/^\\.github/workflows/.+\\.ya?ml$/"],
+      "matchStrings": ["DDSA_VERSION:\\s*(?<currentValue>\\S+)"],
+      "depNameTemplate": "DataDog/datadog-static-analyzer",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^v?(?<version>.+)$"
+    }
+  ],
   "packageRules": [
     {
       "description": "Bump the >= floors in backend/pyproject.toml, which also regenerates uv.lock. The default rangeStrategy only edits a manifest when the new version escapes the declared range, and an open-ended '>=x' is satisfied by every release — so without this the backend gets no update PRs at all.",
