@@ -28,7 +28,7 @@ variable "ec2_instance_type" {
 }
 
 variable "app_version" {
-  description = "Image tag and digest to deploy, e.g. '0.1.0@sha256:abc123'. Tag is human-readable; digest pins the exact manifest. To upgrade: set the new tag@digest, run terraform apply (which updates the SSM parameter in place), then restart agents.service — `just deploy` does both. The instance is not replaced and /opt/agents/data survives."
+  description = "Image tag and digest to deploy, e.g. '0.1.0@sha256:abc123'. Tag is human-readable; digest pins the exact manifest. To upgrade: set the new tag@digest, run terraform apply (which updates the SSM parameter in place), then restart agents.service — `just deploy` does both. The instance is not replaced, so the app is down only for the few seconds the container takes to restart."
   type        = string
 }
 

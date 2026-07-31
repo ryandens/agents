@@ -127,7 +127,9 @@ resource "aws_ssm_parameter" "tailscale_auth_key" {
 # rendered into the systemd unit lands in user_data, and user_data_replace_on_change
 # turns every edit into a new EC2 instance. Held here instead, the unit references only
 # the (fixed) parameter names, so changing a value is an in-place SSM update followed by
-# `systemctl restart agents.service` — no replacement, and /opt/agents/data survives.
+# `systemctl restart agents.service` — no replacement, so the app is down only for the
+# few seconds the container takes to come back. The pantry is in Aurora and unaffected
+# either way; keeping the instance is now about downtime rather than about data.
 
 resource "aws_ssm_parameter" "app_version" {
   name        = "/agents/app-version"

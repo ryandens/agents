@@ -19,7 +19,7 @@ ExecStartPre=/bin/sh -c '/usr/bin/aws ecr get-login-password --region ${aws_regi
 # and user_data_replace_on_change means anything inlined here replaces the instance when
 # it changes. Holding only names keeps user data byte-identical across a release, so
 # `terraform apply` updates the parameters and `systemctl restart agents.service` rolls
-# them out — no new VM, and /opt/agents/data survives.
+# them out — no new VM, and no downtime beyond the container restart.
 #
 # Values are written to a 0600 file rather than passed as -e, so secrets never appear in
 # `docker inspect` or in this unit.
