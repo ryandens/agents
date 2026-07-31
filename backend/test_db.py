@@ -147,19 +147,39 @@ def test_pool_uses_password_auth_by_default(database_url: str, monkeypatch) -> N
 # --- Token generation ---
 
 
-def test_generate_auth_token_signs_a_connect_request(monkeypatch) -> None:
+@pytest.fixture
+def aws_env(monkeypatch, tmp_path):
+    """Dummy credentials and *no* ambient AWS config.
+
+    Pointing AWS_CONFIG_FILE and AWS_SHARED_CREDENTIALS_FILE at files that do not exist
+    is the important part. Without it a developer's ~/.aws/config supplies a region and
+    these tests pass locally while failing in CI — which is exactly how the
+    AWS_REGION/AWS_DEFAULT_REGION difference got through the first time.
+    """
+    monkeypatch.setenv("AWS_ACCESS_KEY_ID", "AKIAIOSFODNN7EXAMPLE")
+    monkeypatch.setenv(
+        "AWS_SECRET_ACCESS_KEY", "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+    )
+    monkeypatch.setenv("AWS_CONFIG_FILE", str(tmp_path / "no-config"))
+    monkeypatch.setenv("AWS_SHARED_CREDENTIALS_FILE", str(tmp_path / "no-credentials"))
+    monkeypatch.delenv("AWS_PROFILE", raising=False)
+    monkeypatch.delenv("AWS_REGION", raising=False)
+    monkeypatch.delenv("AWS_DEFAULT_REGION", raising=False)
+
+
+# Both names, because botocore's own chain reads only AWS_DEFAULT_REGION while the unit
+# — and every other AWS SDK — uses AWS_REGION. db.aws_region() exists to bridge that.
+@pytest.mark.parametrize("region_var", ["AWS_REGION", "AWS_DEFAULT_REGION"])
+def test_generate_auth_token_signs_a_connect_request(
+    aws_env, monkeypatch, region_var: str
+) -> None:
     """The real boto3 call, checked without AWS: SigV4 signing is local and offline.
 
     This is the one piece the fakes above deliberately skip, and it is where a wrong
     argument name or a wrong service scope would hide — the resulting token would look
     fine and be rejected only by RDS, in production.
     """
-    monkeypatch.setenv("AWS_ACCESS_KEY_ID", "AKIAIOSFODNN7EXAMPLE")
-    monkeypatch.setenv(
-        "AWS_SECRET_ACCESS_KEY", "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
-    )
-    monkeypatch.setenv("AWS_REGION", "us-east-1")
-    monkeypatch.delenv("AWS_PROFILE", raising=False)
+    monkeypatch.setenv(region_var, "us-east-1")
 
     host = "agents.cluster-abc123.us-east-1.rds.amazonaws.com"
     token = db.generate_auth_token(host, 5432, "agents_app")
@@ -173,3 +193,22 @@ def test_generate_auth_token_signs_a_connect_request(monkeypatch) -> None:
     assert "/rds-db/aws4_request" in query["X-Amz-Credential"]
     assert query["X-Amz-Expires"] == "900"
     assert query["X-Amz-Signature"]
+
+
+def test_generate_auth_token_without_a_region_says_so(aws_env) -> None:
+    """A missing region is a deployment mistake; say which variable to set."""
+    with pytest.raises(RuntimeError, match="AWS_REGION"):
+        db.generate_auth_token("agents.cluster-abc123.rds.amazonaws.com", 5432, "app")
+
+
+def test_aws_region_prefers_aws_region_over_default(monkeypatch) -> None:
+    monkeypatch.setenv("AWS_REGION", "eu-west-1")
+    monkeypatch.setenv("AWS_DEFAULT_REGION", "us-east-1")
+    assert db.aws_region() == "eu-west-1"
+
+
+def test_aws_region_falls_back_to_botocore_when_unset(monkeypatch) -> None:
+    """None, not "", so botocore still gets to consult ~/.aws/config."""
+    monkeypatch.delenv("AWS_REGION", raising=False)
+    monkeypatch.delenv("AWS_DEFAULT_REGION", raising=False)
+    assert db.aws_region() is None

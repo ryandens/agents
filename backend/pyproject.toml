@@ -12,8 +12,13 @@ requires-python = ">=3.14"
 dependencies = [
     "anthropic>=0.120.2",
     # Mints the RDS IAM auth token the app connects with, signed locally from the
-    # instance profile's credentials. The only reason AWS SDK is in the runtime image.
-    "boto3>=1.42.9",
+    # instance profile's credentials. The only reason an AWS SDK is in the runtime image.
+    #
+    # Floor is the version this was verified against — boto3 and botocore ship in
+    # lockstep, so this pins botocore 1.43.61 too. That matters more than usual here:
+    # botocore's own region resolution reads AWS_DEFAULT_REGION and not AWS_REGION, and
+    # db.aws_region() bridges that difference. See test_db.py.
+    "boto3>=1.43.61",
     "fastapi>=0.141.1",
     "google-auth[requests]>=2.56.2",
     "itsdangerous>=2.2.0",

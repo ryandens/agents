@@ -39,6 +39,18 @@ def iam_auth_enabled() -> bool:
     }
 
 
+def aws_region() -> str | None:
+    """Region to sign the token for, or None to let botocore work it out.
+
+    Resolved here rather than left entirely to botocore, because botocore reads only
+    AWS_DEFAULT_REGION from the environment — AWS_REGION, which the other AWS SDKs
+    honour and which is the more natural name to set, is not in its chain. Relying on
+    botocore alone fails in exactly the place it matters least visibly: a developer
+    machine has ~/.aws/config to fall back on, a container has nothing.
+    """
+    return os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION") or None
+
+
 def generate_auth_token(host: str, port: int, user: str) -> str:
     """Mint a short-lived RDS IAM auth token to use as the password.
 
@@ -46,14 +58,21 @@ def generate_auth_token(host: str, port: int, user: str) -> str:
     which never call this, do not pay for it — and so a missing AWS environment fails
     at connect time with a clear error rather than at import.
 
-    The region comes from the standard AWS_REGION/AWS_DEFAULT_REGION resolution; the
-    systemd unit sets it. Credentials come from the instance profile via IMDS, which is
-    why the instance's metadata hop limit has to be 2 — the app runs in a container, and
-    the bridge network is one hop more than the default allows.
+    Credentials come from the instance profile via IMDS, which is why the instance's
+    metadata hop limit has to be 2 — the app runs in a container, and the bridge network
+    is one hop more than the default allows.
     """
     import boto3
+    from botocore.exceptions import NoRegionError
 
-    client = boto3.client("rds")
+    try:
+        client = boto3.client("rds", region_name=aws_region())
+    except NoRegionError as exc:
+        raise RuntimeError(
+            "RDS IAM auth needs a region: set AWS_REGION (the systemd unit does). "
+            "Without it the token cannot be signed for the right endpoint."
+        ) from exc
+
     return client.generate_db_auth_token(
         DBHostname=host, Port=port, DBUsername=user, Region=client.meta.region_name
     )

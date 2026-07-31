@@ -35,6 +35,13 @@ ExecStartPre=/bin/sh -c '/usr/bin/aws ecr get-login-password --region ${aws_regi
 # format string collapsed to a literal `/bin/bash` and printf silently dropped the
 # secret it was handed. `%%` is the escape that leaves a real `%s` for printf.
 #
+# There is no database password to fetch: the app signs its own short-lived RDS IAM
+# token from the instance profile. DATABASE_URL therefore carries no credential, and the
+# only thing the container needs beyond it is a region. Both region variables are written
+# because botocore reads AWS_DEFAULT_REGION while AWS_REGION is the name every other AWS
+# SDK uses — the app copes with either, and writing both keeps it working if that code
+# is ever simplified away.
+#
 # Every shell variable below is written unbraced, as `$name`, on purpose. Terraform's
 # templatefile claims the braced dollar form for its own interpolation — including inside
 # comments, which it parses like any other line — so writing a shell variable that way
@@ -62,6 +69,7 @@ ExecStartPre=/bin/bash -c 'set -e; set -o pipefail; \
         printf "DATABASE_URL=%%s\n" "$database_url"; \
         printf "DATABASE_IAM_AUTH=true\n"; \
         printf "AWS_REGION=%%s\n" "${aws_region}"; \
+        printf "AWS_DEFAULT_REGION=%%s\n" "${aws_region}"; \
     } > /run/agents.env; \
     printf "%%s:%%s" "${ecr_repository_url}" "$app_version" > /run/agents.image'
 ExecStartPre=/bin/bash -c 'exec /usr/bin/docker pull "$(cat /run/agents.image)"'
