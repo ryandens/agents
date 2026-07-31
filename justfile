@@ -425,22 +425,20 @@ db-up:
     #!/usr/bin/env bash
     set -euo pipefail
 
-    if [ -n "$(docker ps -q --filter "name=^/{{ db_container }}$")" ]; then
-        exit 0
+    if [ -z "$(docker ps -q --filter "name=^/{{ db_container }}$")" ]; then
+        # Start the existing container if there is one, so a stop/start cycle keeps the
+        # data; otherwise create it. A named volume rather than a bind mount, because the
+        # data directory has to be owned by the postgres user inside the container and a
+        # host directory would arrive owned by whoever ran this.
+        docker start {{ db_container }} >/dev/null 2>&1 || docker run -d \
+            --name {{ db_container }} \
+            -e POSTGRES_USER=agents \
+            -e POSTGRES_PASSWORD=agents \
+            -e POSTGRES_DB=agents \
+            -p 127.0.0.1:{{ db_port }}:5432 \
+            -v agents-pgdata:/var/lib/postgresql/data \
+            {{ postgres_image }} >/dev/null
     fi
-
-    # Start the existing container if there is one, so a stop/start cycle keeps the
-    # data; otherwise create it. A named volume rather than a bind mount, because the
-    # data directory has to be owned by the postgres user inside the container and a
-    # host directory would arrive owned by whoever ran this.
-    docker start {{ db_container }} >/dev/null 2>&1 || docker run -d \
-        --name {{ db_container }} \
-        -e POSTGRES_USER=agents \
-        -e POSTGRES_PASSWORD=agents \
-        -e POSTGRES_DB=agents \
-        -p {{ db_port }}:5432 \
-        -v agents-pgdata:/var/lib/postgresql/data \
-        {{ postgres_image }} >/dev/null
 
     # `docker run` returns once the container is started, which is well before postgres
     # is accepting connections — without this the backend loses the race on a cold start.
@@ -472,7 +470,10 @@ db-reset:
     #!/usr/bin/env bash
     set -euo pipefail
     docker rm -f {{ db_container }} >/dev/null 2>&1 || true
-    docker volume rm agents-pgdata >/dev/null 2>&1 || true
+    if ! docker volume rm agents-pgdata >/dev/null 2>&1; then
+        echo "error: could not remove volume agents-pgdata — is another container using it?" >&2
+        exit 1
+    fi
     {{ just_executable() }} db-up
 
 # Open a psql shell on the local database — or pipe SQL in: `echo 'select …' | just db-psql`

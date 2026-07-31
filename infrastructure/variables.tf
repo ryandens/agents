@@ -151,8 +151,8 @@ variable "db_name" {
   validation {
     # Postgres identifier rules, and the value is interpolated into a DSN where a '/' or
     # '?' would silently move the path or start a query string.
-    condition     = can(regex("^[a-z_][a-z0-9_]{0,62}$", var.db_name))
-    error_message = "db_name must be a lowercase Postgres identifier: letters, digits and underscores, not starting with a digit."
+    condition     = can(regex("^[a-zA-Z][a-zA-Z0-9]{0,63}$", var.db_name))
+    error_message = "db_name must start with a letter and contain only alphanumeric characters (1-64 characters)."
   }
 }
 
@@ -177,8 +177,8 @@ variable "db_username" {
   validation {
     # 'rds_superuser' and friends are reserved by RDS, and the same DSN-safety rules as
     # db_name apply since this is interpolated into the userinfo part of the URL.
-    condition     = can(regex("^[a-z_][a-z0-9_]{0,62}$", var.db_username)) && !contains(["rdsadmin", "admin", "postgres"], var.db_username)
-    error_message = "db_username must be a lowercase Postgres identifier and must not be a name RDS reserves ('rdsadmin', 'admin', 'postgres')."
+    condition     = can(regex("^[a-z][a-z0-9]{0,62}$", var.db_username)) && !contains(["rdsadmin", "admin", "postgres"], var.db_username)
+    error_message = "db_username must start with a letter, contain only lowercase letters and digits, and must not be a name RDS reserves ('rdsadmin', 'admin', 'postgres')."
   }
 }
 
@@ -199,8 +199,8 @@ variable "db_min_capacity" {
   default     = 0
 
   validation {
-    condition     = var.db_min_capacity == 0 || (var.db_min_capacity >= 0.5 && var.db_min_capacity <= 256)
-    error_message = "db_min_capacity must be 0 (auto-pause) or between 0.5 and 256 ACUs."
+    condition     = var.db_min_capacity == 0 || (var.db_min_capacity >= 0.5 && var.db_min_capacity <= 256 && var.db_min_capacity * 2 == floor(var.db_min_capacity * 2))
+    error_message = "db_min_capacity must be 0 (auto-pause) or between 0.5 and 256 ACUs in 0.5 ACU increments."
   }
 }
 
@@ -210,8 +210,8 @@ variable "db_max_capacity" {
   default     = 4
 
   validation {
-    condition     = var.db_max_capacity >= 1 && var.db_max_capacity <= 256 && var.db_max_capacity >= var.db_min_capacity
-    error_message = "db_max_capacity must be between 1 and 256 ACUs, and not below db_min_capacity."
+    condition     = var.db_max_capacity >= 1 && var.db_max_capacity <= 256 && var.db_max_capacity >= var.db_min_capacity && var.db_max_capacity * 2 == floor(var.db_max_capacity * 2)
+    error_message = "db_max_capacity must be between 1 and 256 ACUs in 0.5 ACU increments, and not below db_min_capacity."
   }
 }
 

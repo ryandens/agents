@@ -90,6 +90,14 @@ class PantryStore:
         # a PATCH that omits "brand" leaves it alone. Only the fields the caller actually
         # sent reach the SET list.
         patch = data.model_dump(exclude_unset=True)
+
+        # Validate that NOT NULL columns are not explicitly set to None. Raising early
+        # gives a clear error instead of letting a constraint violation reach PostgreSQL.
+        not_null_columns = ("name", "category", "storage_location", "quantity", "unit")
+        for column in not_null_columns:
+            if column in patch and patch[column] is None:
+                raise ValueError(f"Field '{column}' cannot be set to null")
+
         # Always assigned, which also guarantees the SET list is never empty — a PATCH
         # with an empty body is a no-op that still touches the row, as it was before.
         patch["updated_at"] = datetime.now(UTC)
