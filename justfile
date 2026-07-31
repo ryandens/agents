@@ -438,7 +438,7 @@ db-up:
         -e POSTGRES_USER=agents \
         -e POSTGRES_PASSWORD=agents \
         -e POSTGRES_DB=agents \
-        -p {{ db_port }}:5432 \
+        -p 127.0.0.1:{{ db_port }}:5432 \
         -v agents-pgdata:/var/lib/postgresql/data \
         {{ postgres_image }} >/dev/null
 
