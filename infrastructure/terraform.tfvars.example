@@ -13,3 +13,12 @@ allowed_emails = ["you@example.com"]
 # Machine callers, which sign in with a bearer ID token instead of a browser. Optional:
 # leave it out and the API is reachable only by a signed-in person.
 # allowed_service_accounts = ["batch@your-project.iam.gserviceaccount.com"]
+
+# The Aurora PostgreSQL cluster holding the pantry. Every one of these has a default, so
+# the block is optional — shown here because the capacity floor is the one setting with a
+# real cost/latency trade-off behind it.
+#
+# db_min_capacity = 0     # 0 pauses the cluster when idle (cheap, ~15s to resume)
+# db_max_capacity = 4
+# db_seconds_until_auto_pause = 3600
+# db_engine_version = "17.4"

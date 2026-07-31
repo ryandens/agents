@@ -47,6 +47,7 @@ ExecStartPre=/bin/bash -c 'set -e; set -o pipefail; \
     google_client_id="$(ssm ${client_id_parameter_name})"; \
     app_base_url="$(ssm ${app_base_url_parameter_name})"; \
     allowed_emails="$(ssm ${allowed_emails_parameter_name})"; \
+    database_url="$(ssm ${database_url_parameter_name})"; \
     app_version="$(ssm ${app_version_parameter_name})"; \
     allowed_service_accounts="$(ssm ${allowed_service_accounts_parameter_name} 2> /dev/null || case $? in 0|254) true;; *) false;; esac)"; \
     umask 077; \
@@ -58,6 +59,7 @@ ExecStartPre=/bin/bash -c 'set -e; set -o pipefail; \
         printf "APP_BASE_URL=%%s\n" "$app_base_url"; \
         printf "ALLOWED_EMAILS=%%s\n" "$allowed_emails"; \
         printf "ALLOWED_SERVICE_ACCOUNTS=%%s\n" "$allowed_service_accounts"; \
+        printf "DATABASE_URL=%%s\n" "$database_url"; \
     } > /run/agents.env; \
     printf "%%s:%%s" "${ecr_repository_url}" "$app_version" > /run/agents.image'
 ExecStartPre=/bin/bash -c 'exec /usr/bin/docker pull "$(cat /run/agents.image)"'
@@ -67,12 +69,16 @@ ExecStartPre=/bin/bash -c 'exec /usr/bin/docker pull "$(cat /run/agents.image)"'
 # Wrapped in bash so the image tag can come from the file written above. EnvironmentFile=
 # would not work here: systemd reads it once when the unit starts, before ExecStartPre
 # runs, so a value written by ExecStartPre is not visible to ExecStart in the same start.
+#
+# No volume mount any more: the pantry lives in Aurora, so the container holds nothing
+# worth keeping and an instance can be replaced without taking data with it. That was
+# the point of moving off the disk — /opt/agents/data only ever survived because the
+# unit was careful not to trigger a replacement.
 ExecStart=/bin/bash -c 'exec /usr/bin/docker run \
     --name agents \
     --rm \
     --env-file /run/agents.env \
     -p 127.0.0.1:${app_port}:8080 \
-    -v /opt/agents/data:/app/data \
     "$(cat /run/agents.image)"'
 ExecStop=-/usr/bin/docker stop agents
 

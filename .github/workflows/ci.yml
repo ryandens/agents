@@ -6,6 +6,9 @@ on:
   pull_request:
 
 jobs:
+  # Needs a Docker daemon, which ubuntu-latest provides: the store tests run against a
+  # real Postgres that backend/conftest.py starts with testcontainers. A runner without
+  # Docker would fail collection rather than skip those tests.
   backend:
     runs-on: ubuntu-latest
     steps:
@@ -46,8 +49,9 @@ jobs:
         run: just frontend-check
 
   # Builds the same image the release workflow ships and checks that one container
-  # really does serve the frontend at / and the API under /api. Neither the backend
-  # nor the frontend job can see that seam on its own.
+  # really does serve the frontend at / and the API under /api, backed by a Postgres
+  # container `just smoke` starts alongside it. Neither the backend nor the frontend job
+  # can see those seams on its own.
   docker:
     runs-on: ubuntu-latest
     steps:

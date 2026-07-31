@@ -57,3 +57,37 @@ check "ecr_scanning_enabled" {
     error_message = "ECR repository must have scan_on_push enabled."
   }
 }
+
+# The database holds the only copy of the pantry and sits behind no ALB, no NAT and one
+# security group. Nothing in a plan would notice if that stopped being true — a snapshot
+# restored by hand, a console click, a support action — so assert the properties that
+# make it private and recoverable rather than trusting they stayed set.
+check "database_is_private_and_recoverable" {
+  data "aws_rds_cluster" "main_check" {
+    cluster_identifier = aws_rds_cluster.main.cluster_identifier
+  }
+
+  assert {
+    condition     = data.aws_rds_cluster.main_check.storage_encrypted
+    error_message = "Aurora cluster ${aws_rds_cluster.main.cluster_identifier} is not encrypted at rest."
+  }
+
+  assert {
+    condition     = data.aws_rds_cluster.main_check.backup_retention_period >= 7
+    error_message = "Aurora cluster ${aws_rds_cluster.main.cluster_identifier} retains backups for ${data.aws_rds_cluster.main_check.backup_retention_period} days; the pantry exists nowhere else, so keep at least 7."
+  }
+}
+# deletion_protection is deliberately not asserted here: the data source does not export
+# it, and unlike the security group rules above it is a managed attribute, so switching
+# it off in the console shows up as ordinary drift on the next plan.
+
+check "database_not_publicly_accessible" {
+  data "aws_db_instance" "main_check" {
+    db_instance_identifier = aws_rds_cluster_instance.main.identifier
+  }
+
+  assert {
+    condition     = data.aws_db_instance.main_check.publicly_accessible == false
+    error_message = "Aurora instance ${aws_rds_cluster_instance.main.identifier} is publicly accessible. It must be reachable only from the app instance's security group."
+  }
+}

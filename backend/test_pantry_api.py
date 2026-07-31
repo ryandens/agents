@@ -1,4 +1,4 @@
-from pathlib import Path
+from collections.abc import Iterator
 
 import pytest
 from fastapi.testclient import TestClient
@@ -33,9 +33,12 @@ MILK = {
 
 
 @pytest.fixture
-def client(tmp_path: Path) -> TestClient:
-    main.pantry_store = PantryStore(file_path=tmp_path / "pantry.json")
+def client(store: PantryStore) -> Iterator[TestClient]:
+    # The store is injected rather than left to the app's lifespan, which would open a
+    # second pool against whatever DATABASE_URL happens to be set to — in a developer's
+    # shell that is the local dev database, not the test container.
     main.app.dependency_overrides[authenticated] = lambda: {"sub": "test-user"}
+    main.app.dependency_overrides[main.store] = lambda: store
     yield TestClient(main.app)
     main.app.dependency_overrides.clear()
 

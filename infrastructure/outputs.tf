@@ -32,3 +32,13 @@ output "github_actions_role_arn" {
   description = "IAM role ARN for GitHub Actions ECR push — set as the AWS_ROLE_ARN repository secret"
   value       = aws_iam_role.github_actions_ecr_push.arn
 }
+
+output "db_cluster_endpoint" {
+  description = "Aurora writer endpoint. Reachable only from inside the VPC — connect through the instance with `just ssh`, not from a laptop."
+  value       = aws_rds_cluster.main.endpoint
+}
+
+output "db_name" {
+  description = "Database the app connects to on that cluster."
+  value       = aws_rds_cluster.main.database_name
+}

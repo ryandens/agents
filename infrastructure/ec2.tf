@@ -71,6 +71,10 @@ resource "aws_iam_role_policy" "ec2_agents" {
           aws_ssm_parameter.google_client_id.arn,
           aws_ssm_parameter.app_base_url.arn,
           aws_ssm_parameter.allowed_emails.arn,
+          # Carries the Aurora credentials. Reading this is what lets the instance —
+          # and only the instance — read and write the pantry; the security group in
+          # security_groups.tf is the other half, and neither works without the other.
+          aws_ssm_parameter.database_url.arn,
         ], aws_ssm_parameter.allowed_service_accounts[*].arn)
       },
     ]
@@ -208,6 +212,7 @@ resource "aws_instance" "app" {
       app_base_url_parameter_name             = aws_ssm_parameter.app_base_url.name
       allowed_emails_parameter_name           = aws_ssm_parameter.allowed_emails.name
       allowed_service_accounts_parameter_name = local.allowed_service_accounts_parameter
+      database_url_parameter_name             = aws_ssm_parameter.database_url.name
     })
 
     tailscale_service_content = templatefile("${path.module}/files/tailscale.service", {

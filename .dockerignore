@@ -17,8 +17,10 @@ README.md
 **/*.py[co]
 **/.pytest_cache/
 backend/.python-version
+# Only the pre-Postgres pantry.json lives here now, kept for `just db-import`.
 backend/data/
 backend/test_*.py
+backend/conftest.py
 # Built inside the image by the frontend stage; a local `just build` copy would only
 # be overwritten.
 backend/static/

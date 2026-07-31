@@ -140,3 +140,75 @@ variable "app_port" {
     error_message = "app_port must be an unprivileged port (1024–65535)."
   }
 }
+
+# ── Database ──────────────────────────────────────────────────────────────────
+
+variable "db_name" {
+  description = "Name of the database inside the Aurora cluster."
+  type        = string
+  default     = "agents"
+
+  validation {
+    # Postgres identifier rules, and the value is interpolated into a DSN where a '/' or
+    # '?' would silently move the path or start a query string.
+    condition     = can(regex("^[a-z_][a-z0-9_]{0,62}$", var.db_name))
+    error_message = "db_name must be a lowercase Postgres identifier: letters, digits and underscores, not starting with a digit."
+  }
+}
+
+variable "db_username" {
+  description = "Master username on the Aurora cluster. The app connects as this user; there is one application and one schema, so it is not worth a second role."
+  type        = string
+  default     = "agents"
+
+  validation {
+    # 'rds_superuser' and friends are reserved by RDS, and the same DSN-safety rules as
+    # db_name apply since this is interpolated into the userinfo part of the URL.
+    condition     = can(regex("^[a-z_][a-z0-9_]{0,62}$", var.db_username)) && !contains(["rdsadmin", "admin", "postgres"], var.db_username)
+    error_message = "db_username must be a lowercase Postgres identifier and must not be a name RDS reserves ('rdsadmin', 'admin', 'postgres')."
+  }
+}
+
+variable "db_engine_version" {
+  description = "Aurora PostgreSQL version. Pinned rather than auto-upgraded, so a minor bump is a reviewed change like the app image is. List what is available with: aws rds describe-db-engine-versions --engine aurora-postgresql --query 'DBEngineVersions[].EngineVersion'."
+  type        = string
+  default     = "17.4"
+
+  validation {
+    condition     = can(regex("^[0-9]+\\.[0-9]+$", var.db_engine_version))
+    error_message = "db_engine_version must be a major.minor Aurora PostgreSQL version, e.g. '17.4'."
+  }
+}
+
+variable "db_min_capacity" {
+  description = "Aurora Serverless v2 floor, in ACUs. 0 lets the cluster pause when idle and is what makes this affordable for a household-sized app; the cost is roughly fifteen seconds to resume on the first connection afterwards. Set 0.5 or more to keep it always warm."
+  type        = number
+  default     = 0
+
+  validation {
+    condition     = var.db_min_capacity == 0 || (var.db_min_capacity >= 0.5 && var.db_min_capacity <= 256)
+    error_message = "db_min_capacity must be 0 (auto-pause) or between 0.5 and 256 ACUs."
+  }
+}
+
+variable "db_max_capacity" {
+  description = "Aurora Serverless v2 ceiling, in ACUs. The workload is a handful of single-row queries, so this is a runaway-cost backstop rather than a target."
+  type        = number
+  default     = 4
+
+  validation {
+    condition     = var.db_max_capacity >= 1 && var.db_max_capacity <= 256 && var.db_max_capacity >= var.db_min_capacity
+    error_message = "db_max_capacity must be between 1 and 256 ACUs, and not below db_min_capacity."
+  }
+}
+
+variable "db_seconds_until_auto_pause" {
+  description = "How long the cluster stays idle before pausing, when db_min_capacity is 0. Ignored otherwise. An hour keeps a day's normal use on a warm cluster while still pausing overnight."
+  type        = number
+  default     = 3600
+
+  validation {
+    condition     = var.db_seconds_until_auto_pause >= 300 && var.db_seconds_until_auto_pause <= 86400
+    error_message = "db_seconds_until_auto_pause must be between 300 and 86400 seconds — the range Aurora accepts."
+  }
+}

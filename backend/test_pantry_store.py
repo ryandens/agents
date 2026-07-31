@@ -1,7 +1,7 @@
-from pathlib import Path
+from datetime import date
 from uuid import uuid4
 
-import pytest
+from psycopg_pool import ConnectionPool
 
 from pantry import Category, PantryItemCreate, PantryItemUpdate, StorageLocation, Unit
 from pantry_store import PantryStore
@@ -23,10 +23,19 @@ MILK = PantryItemCreate(
     unit=Unit.gallons,
 )
 
-
-@pytest.fixture
-def store(tmp_path: Path) -> PantryStore:
-    return PantryStore(file_path=tmp_path / "pantry.json")
+# Every optional field populated, so the round-trip test has something to check in each
+# of the nullable columns.
+FROZEN_PEAS = PantryItemCreate(
+    name="Frozen Peas",
+    brand="Cascadian Farm",
+    category=Category.frozen,
+    storage_location=StorageLocation.freezer,
+    quantity=16.0,
+    unit=Unit.bag,
+    purchase_date=date(2026, 4, 1),
+    expiration_date=date(2027, 1, 15),
+    notes="Back of the drawer",
+)
 
 
 def test_empty_store_returns_empty_list(store: PantryStore) -> None:
@@ -135,13 +144,36 @@ def test_delete_missing_item_returns_false(store: PantryStore) -> None:
     assert store.delete_item(uuid4()) is False
 
 
-def test_data_persists_across_instances(tmp_path: Path) -> None:
-    file_path = tmp_path / "pantry.json"
-    store1 = PantryStore(file_path=file_path)
-    created = store1.create_item(OLIVE_OIL)
+def test_data_persists_across_instances(clean_database: ConnectionPool) -> None:
+    """A second store sees the first one's writes — the point of moving off the disk."""
+    created = PantryStore(clean_database).create_item(OLIVE_OIL)
 
-    store2 = PantryStore(file_path=file_path)
-    fetched = store2.get_item(created.id)
+    fetched = PantryStore(clean_database).get_item(created.id)
     assert fetched is not None
     assert fetched.name == "Olive Oil"
     assert fetched.id == created.id
+
+
+def test_round_trip_preserves_every_field(store: PantryStore) -> None:
+    """Nothing is lost or coerced on the way through Postgres and back.
+
+    The store maps enums to TEXT and dates to DATE by hand, so this is the test that
+    would catch a column dropped from the INSERT or a value that no longer validates.
+    """
+    created = store.create_item(FROZEN_PEAS)
+    fetched = store.get_item(created.id)
+    assert fetched == created
+    assert fetched is not None
+    assert fetched.category == Category.frozen
+    assert fetched.storage_location == StorageLocation.freezer
+    assert fetched.unit == Unit.bag
+    assert fetched.purchase_date == date(2026, 4, 1)
+    assert fetched.expiration_date == date(2027, 1, 15)
+    assert fetched.notes == "Back of the drawer"
+
+
+def test_list_returns_items_in_creation_order(store: PantryStore) -> None:
+    first = store.create_item(OLIVE_OIL)
+    second = store.create_item(MILK)
+    third = store.create_item(FROZEN_PEAS)
+    assert [i.id for i in store.list_items()] == [first.id, second.id, third.id]

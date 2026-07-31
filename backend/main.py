@@ -2,7 +2,8 @@ import json
 import logging
 import os
 import secrets
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated, Any, cast
 from uuid import UUID
@@ -12,12 +13,14 @@ from anthropic.types import MessageParam
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from psycopg_pool import ConnectionPool
 from pydantic import BaseModel
 from starlette.middleware.sessions import SessionMiddleware
 
 import auth
+import db
 from auth import authenticated
 from pantry import PantryItem, PantryItemCreate, PantryItemUpdate, StorageLocation
 from pantry_store import PantryStore
@@ -56,7 +59,43 @@ STATIC_DIR = (
     Path(static_dir_env) if static_dir_env else Path(__file__).parent / "static"
 )
 
-app = FastAPI()
+# The pantry lives in Postgres, so the pool is process-wide state with a lifetime tied
+# to the app rather than to a request. Opened here rather than at import so that
+# importing this module — which the tests do — never reaches for a database.
+pool: ConnectionPool | None = None
+pantry_store: PantryStore | None = None
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    global pool, pantry_store
+
+    pool = db.open_pool()
+    db.apply_schema(pool)
+    pantry_store = PantryStore(pool)
+    logger.info("connected to the pantry database")
+    try:
+        yield
+    finally:
+        pantry_store = None
+        pool.close()
+        pool = None
+
+
+def store() -> PantryStore:
+    """The pantry store, or a 503 if the app is running without one.
+
+    Only reachable if a request arrives outside the lifespan — which the tests do by
+    overriding this dependency, and nothing in production does.
+    """
+    if pantry_store is None:
+        raise HTTPException(status_code=503, detail="Pantry storage is unavailable")
+    return pantry_store
+
+
+Pantry = Annotated[PantryStore, Depends(store)]
+
+app = FastAPI(lifespan=lifespan)
 # Production is same-origin, so CORS only matters for `next dev` talking to a backend
 # started without the dev proxy. allow_credentials is required for the browser to send
 # the session cookie on those cross-origin calls, and it forbids a wildcard origin.
@@ -82,8 +121,6 @@ app.include_router(auth.router)
 
 # Depends() called in an argument default trips B008, so carry it in the type.
 AuthenticatedUser = Annotated[dict, Depends(authenticated)]
-
-pantry_store = PantryStore()
 
 client = anthropic.AsyncAnthropic()
 
@@ -143,7 +180,26 @@ async def ui_message_stream(messages: list[MessageParam]) -> AsyncGenerator[str]
 
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    """Readiness, including the database.
+
+    user_data.sh waits on this before declaring a boot good and `just restart` waits on
+    it before declaring a rollout good, so it has to fail when the app is up but cannot
+    reach its data — an app that answers 200 with a dead database would let a broken
+    deploy through both gates.
+    """
+    if pool is None:
+        return JSONResponse(
+            status_code=503, content={"status": "error", "database": "not configured"}
+        )
+    try:
+        db.ping(pool)
+    except Exception:
+        logger.exception("health check could not reach the database")
+        return JSONResponse(
+            status_code=503,
+            content={"status": "error", "database": "unreachable"},
+        )
+    return {"status": "ok", "database": "ok"}
 
 
 @app.post("/api/chat")
@@ -160,34 +216,38 @@ async def chat(request: ChatRequest, _: AuthenticatedUser):
 
 
 @app.get("/api/pantry", response_model=list[PantryItem])
-def list_pantry(_: AuthenticatedUser, location: StorageLocation | None = None):
-    return pantry_store.list_items(location=location)
+def list_pantry(
+    _: AuthenticatedUser, pantry: Pantry, location: StorageLocation | None = None
+):
+    return pantry.list_items(location=location)
 
 
 @app.post("/api/pantry", response_model=PantryItem, status_code=201)
-def create_pantry_item(data: PantryItemCreate, _: AuthenticatedUser):
-    return pantry_store.create_item(data)
+def create_pantry_item(data: PantryItemCreate, _: AuthenticatedUser, pantry: Pantry):
+    return pantry.create_item(data)
 
 
 @app.get("/api/pantry/{item_id}", response_model=PantryItem)
-def get_pantry_item(item_id: UUID, _: AuthenticatedUser):
-    item = pantry_store.get_item(item_id)
+def get_pantry_item(item_id: UUID, _: AuthenticatedUser, pantry: Pantry):
+    item = pantry.get_item(item_id)
     if item is None:
         raise HTTPException(status_code=404, detail="Item not found")
     return item
 
 
 @app.patch("/api/pantry/{item_id}", response_model=PantryItem)
-def update_pantry_item(item_id: UUID, data: PantryItemUpdate, _: AuthenticatedUser):
-    item = pantry_store.update_item(item_id, data)
+def update_pantry_item(
+    item_id: UUID, data: PantryItemUpdate, _: AuthenticatedUser, pantry: Pantry
+):
+    item = pantry.update_item(item_id, data)
     if item is None:
         raise HTTPException(status_code=404, detail="Item not found")
     return item
 
 
 @app.delete("/api/pantry/{item_id}", status_code=204)
-def delete_pantry_item(item_id: UUID, _: AuthenticatedUser):
-    if not pantry_store.delete_item(item_id):
+def delete_pantry_item(item_id: UUID, _: AuthenticatedUser, pantry: Pantry):
+    if not pantry.delete_item(item_id):
         raise HTTPException(status_code=404, detail="Item not found")
 
 
