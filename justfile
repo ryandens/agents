@@ -472,7 +472,10 @@ db-reset:
     #!/usr/bin/env bash
     set -euo pipefail
     docker rm -f {{ db_container }} >/dev/null 2>&1 || true
-    docker volume rm agents-pgdata >/dev/null 2>&1 || true
+    if ! docker volume rm agents-pgdata >/dev/null 2>&1; then
+        echo "error: could not remove volume agents-pgdata — is another container using it?" >&2
+        exit 1
+    fi
     {{ just_executable() }} db-up
 
 # Open a psql shell on the local database — or pipe SQL in: `echo 'select …' | just db-psql`
