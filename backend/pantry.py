@@ -2,7 +2,7 @@ from datetime import UTC, date, datetime
 from enum import Enum
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationInfo, field_validator
 
 
 class StorageLocation(str, Enum):
@@ -77,6 +77,27 @@ class PantryItemUpdate(BaseModel):
     purchase_date: date | None = None
     expiration_date: date | None = None
     notes: str | None = None
+
+    # Every field is Optional so that omitting it means "leave alone", but that is not
+    # the same as permitting null: these five are NOT NULL in the table, so
+    # PATCH {"name": null} would otherwise reach Postgres and come back as a 500.
+    # Rejecting here makes it a 422 with a body naming the field, which is what a
+    # malformed request deserves.
+    #
+    # brand, purchase_date, expiration_date and notes are deliberately absent from this
+    # list — they are nullable columns, and passing null is how the API clears them.
+    @field_validator(
+        "name", "category", "storage_location", "quantity", "unit", mode="before"
+    )
+    @classmethod
+    def _reject_explicit_null(cls, value: object, info: ValidationInfo) -> object:
+        # Only runs for fields the caller actually sent: pydantic does not validate
+        # defaults unless asked to, so an omitted field never reaches this.
+        if value is None:
+            raise ValueError(
+                f"{info.field_name} cannot be null; omit it to leave it unchanged"
+            )
+        return value
 
 
 class PantryItem(PantryItemCreate):

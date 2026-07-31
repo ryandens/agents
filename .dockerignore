@@ -19,6 +19,7 @@ README.md
 backend/.python-version
 backend/data/
 backend/test_*.py
+backend/conftest.py
 # Built inside the image by the frontend stage; a local `just build` copy would only
 # be overwritten.
 backend/static/

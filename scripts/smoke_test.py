@@ -14,6 +14,7 @@ Deliberately stdlib-only so CI can run it without installing anything.
 
 from __future__ import annotations
 
+import json
 import re
 import sys
 import time
@@ -90,7 +91,22 @@ def health_responds(base_url):
     """/health returns ok, which is what user_data waits on before finishing boot"""
     status, _, body = fetch(f"{base_url}/health")
     assert status == 200, f"expected 200, got {status}"
-    assert b'"ok"' in body, f"expected status ok, got {body[:200]!r}"
+    payload = json.loads(body)
+    assert payload.get("status") == "ok", f"expected status ok, got {payload!r}"
+
+
+# The seam the unit tests cannot see: whether the image can really open a connection —
+# driver present, DATABASE_URL honoured — rather than whether the SQL is right. /health
+# is also what user_data.sh and `just restart` wait on, so a container answering 200 with
+# no database behind it would let a broken deploy through both gates.
+@check
+def health_reports_a_reachable_database(base_url):
+    """/health reports the database it reached, not just that the process is up"""
+    _, _, body = fetch(f"{base_url}/health")
+    payload = json.loads(body)
+    assert payload.get("database") == "ok", (
+        f"health did not report a reachable database: {payload!r}"
+    )
 
 
 @check

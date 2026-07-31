@@ -1,5 +1,13 @@
 set dotenv-load := true
 
+# The local development database. The major version matches the Aurora PostgreSQL
+# cluster in infrastructure/rds.tf and the container backend/conftest.py starts for
+# tests, so development, tests and production all run the same engine.
+postgres_image := "postgres:17-alpine"
+db_container := "agents-postgres"
+db_port := "5432"
+db_url := "postgresql://agents:agents@127.0.0.1:" + db_port + "/agents"
+
 # List available recipes
 default:
     @just --list
@@ -110,6 +118,12 @@ env-sync:
         done
     fi
 
+    # Where the local backend keeps the pantry. Not in 1Password and not a secret, but
+    # preserved from an existing .env so anyone pointing their dev server at a different
+    # database does not get it reset from under them on the next sync.
+    database_url="$(read_env DATABASE_URL)"
+    database_url="${database_url:-{{ db_url }}}"
+
     # Signs the session cookie. Generated once and then preserved — regenerating it
     # invalidates every existing session.
     session_secret="$(read_env SESSION_SECRET)"
@@ -208,6 +222,11 @@ env-sync:
         echo "# Service accounts allowed to call the API with a bearer ID token, for"
         echo "# callers with no browser. Empty means only signed-in people get in."
         echo "ALLOWED_SERVICE_ACCOUNTS=$allowed_service_accounts"
+        echo ""
+        echo "# The pantry database. Defaults to the container \`just db-up\` starts;"
+        echo "# production gets its own from Parameter Store, built from the Aurora"
+        echo "# endpoint. Not a secret — the local database is on loopback only."
+        echo "DATABASE_URL=$database_url"
         echo ""
         if [ -n "$api_key" ]; then
             echo "ANTHROPIC_API_KEY=$api_key"
@@ -335,8 +354,8 @@ env-sync:
     echo "    $redirect_uri"
     echo "    https://console.cloud.google.com/apis/credentials?project=${client_id%%-*}"
 
-# Start both dev servers with live reload — open http://localhost:3000
-dev:
+# Start Postgres and both dev servers with live reload — open http://localhost:3000
+dev: db-up
     #!/usr/bin/env bash
     set -euo pipefail
     # Next proxies /api to the backend, so :3000 mirrors production's single origin.
@@ -396,6 +415,185 @@ dev-stop:
     fi
     echo "stopped dev servers on :3000 and :8000"
 
+# ── Database ───────────────────────────────────────────────────────────────────
+#
+# The pantry lives in Postgres — Aurora in production, a container here. `just dev`
+# starts it, so most of the time none of these need running by hand.
+
+# Start the local Postgres on :5432, creating it if it does not exist yet
+db-up:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    if [ -z "$(docker ps -q --filter "name=^/{{ db_container }}$")" ]; then
+        # Start the existing container if there is one, so a stop/start cycle keeps the
+        # data; otherwise create it. A named volume rather than a bind mount, because the
+        # data directory has to be owned by the postgres user inside the container and a
+        # host directory would arrive owned by whoever ran this.
+        docker start {{ db_container }} >/dev/null 2>&1 || docker run -d \
+            --name {{ db_container }} \
+            -e POSTGRES_USER=agents \
+            -e POSTGRES_PASSWORD=agents \
+            -e POSTGRES_DB=agents \
+            -p 127.0.0.1:{{ db_port }}:5432 \
+            -v agents-pgdata:/var/lib/postgresql/data \
+            {{ postgres_image }} >/dev/null
+    fi
+
+    # `docker run` returns once the container is started, which is well before postgres
+    # is accepting connections — without this the backend loses the race on a cold start.
+    #
+    # -h 127.0.0.1 forces the check over TCP, and that is the whole point rather than a
+    # detail. On a first run the entrypoint brings up a temporary server to run initdb
+    # and CREATE DATABASE, then shuts it down and starts the real one; a socket check
+    # answers "ready" against that temporary server and returns just in time for the
+    # shutdown. The init server is started with listen_addresses='' precisely so it is
+    # invisible over TCP, so this cannot mistake it for the real thing.
+    for _ in $(seq 1 120); do
+        if docker exec {{ db_container }} pg_isready -h 127.0.0.1 -U agents -d agents >/dev/null 2>&1; then
+            echo "postgres ready on :{{ db_port }}"
+            exit 0
+        fi
+        sleep 0.5
+    done
+
+    echo "error: postgres did not become ready" >&2
+    docker logs {{ db_container }} 2>&1 | tail -20 >&2
+    exit 1
+
+# Stop the local Postgres, keeping its data
+db-down:
+    -docker stop {{ db_container }}
+
+# Delete the local Postgres and everything in it, then start a fresh one
+db-reset:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    docker rm -f {{ db_container }} >/dev/null 2>&1 || true
+
+    # A volume that is not there is already in the state this recipe wants — that is the
+    # normal case on a fresh clone, and treating it as an error made `just db-reset` fail
+    # on any machine that had never run `just db-up`. A volume that exists and *cannot* be
+    # removed is the real problem: db-up would then start against the old data and report
+    # success, so a command whose whole job is to wipe the database silently would not.
+    if docker volume inspect agents-pgdata >/dev/null 2>&1; then
+        if ! docker volume rm agents-pgdata >/dev/null 2>&1; then
+            echo "error: could not remove volume agents-pgdata — is another container using it?" >&2
+            docker ps -a --filter volume=agents-pgdata --format '  still attached: {{{{.Names}}}} ({{{{.Status}}}})' >&2
+            exit 1
+        fi
+    fi
+
+    {{ just_executable() }} db-up
+
+# Open a psql shell on the local database — or pipe SQL in: `echo 'select …' | just db-psql`
+db-psql *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    # -t only when there is a terminal to attach: docker refuses it otherwise, which is
+    # what would break piping SQL in. just flattens *args into one whitespace-split
+    # string, so a quoted `-c "select …"` does not survive — pipe it instead.
+    tty_flags=(-i)
+    [ -t 0 ] && tty_flags+=(-t)
+    exec docker exec "${tty_flags[@]}" {{ db_container }} psql -U agents -d agents {{ args }}
+
+# Forward a local port to Aurora through the instance over SSM (Ctrl-C to close)
+db-tunnel local_port="15432":
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    # Aurora sits in a private subnet with no route off the VPC, so the instance is the
+    # only thing that can reach it. Session Manager forwards a port through that instance
+    # without opening one on it — same trust path as `just ssh`, no inbound rule, no key.
+    instance="$(terraform -chdir=infrastructure output -raw ec2_instance_id 2>/dev/null || true)"
+    region="$(terraform -chdir=infrastructure output -raw aws_region 2>/dev/null || true)"
+    endpoint="$(terraform -chdir=infrastructure output -raw db_cluster_endpoint 2>/dev/null || true)"
+    if [ -z "$instance" ] || [ -z "$region" ] || [ -z "$endpoint" ]; then
+        echo "error: missing terraform outputs — run 'terraform -chdir=infrastructure apply' first" >&2
+        exit 1
+    fi
+
+    echo "forwarding 127.0.0.1:{{ local_port }} -> $endpoint:5432 via $instance"
+    exec aws ssm start-session \
+        --target "$instance" \
+        --region "$region" \
+        --document-name AWS-StartPortForwardingSessionToRemoteHost \
+        --parameters "host=$endpoint,portNumber=5432,localPortNumber={{ local_port }}"
+
+# One-time: create the IAM-authenticated database role the deployed app connects as
+db-bootstrap local_port="15433":
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    # Run once after the first apply, and again only if db_app_username changes. The app
+    # cannot create this role itself: it has no password anywhere, and a role that can
+    # grant rds_iam is exactly what we are avoiding giving it.
+    #
+    # The master password is read here, on your machine, from the Secrets Manager secret
+    # AWS generates and rotates. It is never given to the instance — the instance role
+    # has no secretsmanager permission — so this is the one operation that needs your
+    # own AWS credentials rather than the instance's.
+    region="$(terraform -chdir=infrastructure output -raw aws_region)"
+    endpoint="$(terraform -chdir=infrastructure output -raw db_cluster_endpoint)"
+    database="$(terraform -chdir=infrastructure output -raw db_name)"
+    master="$(terraform -chdir=infrastructure output -raw db_master_secret_arn)"
+    app_user="$(terraform -chdir=infrastructure output -raw db_app_username)"
+    instance="$(terraform -chdir=infrastructure output -raw ec2_instance_id)"
+
+    password="$(aws secretsmanager get-secret-value --secret-id "$master" --region "$region" \
+        --query SecretString --output text | python3 -c 'import json,sys; print(json.load(sys.stdin)["password"])')"
+    username="$(aws secretsmanager get-secret-value --secret-id "$master" --region "$region" \
+        --query SecretString --output text | python3 -c 'import json,sys; print(json.load(sys.stdin)["username"])')"
+
+    echo "opening a tunnel to $endpoint"
+    aws ssm start-session \
+        --target "$instance" \
+        --region "$region" \
+        --document-name AWS-StartPortForwardingSessionToRemoteHost \
+        --parameters "host=$endpoint,portNumber=5432,localPortNumber={{ local_port }}" \
+        >/dev/null 2>&1 &
+    tunnel=$!
+    trap 'kill $tunnel 2>/dev/null || true' EXIT INT TERM
+
+    for _ in $(seq 1 30); do
+        nc -z 127.0.0.1 {{ local_port }} 2>/dev/null && break
+        sleep 1
+    done
+    nc -z 127.0.0.1 {{ local_port }} 2>/dev/null || {
+        echo "error: port forward to $endpoint never opened" >&2
+        exit 1
+    }
+
+    # psql comes from the postgres image rather than the host, which already has to have
+    # Docker for `just db-up`. sslmode=require, not verify-full: through the tunnel the
+    # certificate names the Aurora endpoint, not localhost, so verification would fail
+    # on a hostname mismatch that means nothing here.
+    #
+    # GRANT rds_iam is what makes the role token-authenticated; a role holding it cannot
+    # log in with a password at all, which is the property being bought. The grants on
+    # the schema are needed because the app creates its own table on first start, and
+    # Postgres 15 stopped letting PUBLIC create in `public`.
+    docker run --rm -i \
+        --add-host=host.docker.internal:host-gateway \
+        -e PGPASSWORD="$password" \
+        {{ postgres_image }} \
+        psql -v ON_ERROR_STOP=1 \
+            "host=host.docker.internal port={{ local_port }} dbname=$database user=$username sslmode=require" <<SQL
+    DO \$\$
+    BEGIN
+        IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '$app_user') THEN
+            CREATE ROLE $app_user WITH LOGIN;
+        END IF;
+    END
+    \$\$;
+
+    GRANT rds_iam TO $app_user;
+    GRANT CONNECT ON DATABASE $database TO $app_user;
+    GRANT USAGE, CREATE ON SCHEMA public TO $app_user;
+    SQL
+
+    echo "'$app_user' can now sign in with an IAM token — restart the app with 'just restart'"
+
 # Build the frontend into backend/static, where the app serves it from
 build: frontend-build
     rm -rf backend/static
@@ -409,37 +607,77 @@ serve: build
 docker-build:
     docker build -f backend/Dockerfile -t agents:local .
 
-# Smoke-test an already-built image (CI passes the tag it just built)
+# Smoke-test an already-built image against a throwaway Postgres (CI passes the tag it just built)
 smoke image="agents:local" port="8080":
     #!/usr/bin/env bash
     set -euo pipefail
     name="agents-smoke-{{ port }}"
-    docker rm -f "$name" >/dev/null 2>&1 || true
+    db="$name-db"
+    network="$name-net"
+
+    # A Postgres of its own rather than the `just db-up` one: this has to pass on a
+    # machine that has never run the dev database, it must not touch real data, and
+    # every run has to start from an empty schema so the app's own migration is what
+    # creates it. Named per-port so two smoke runs can overlap.
+    docker rm -f "$name" "$db" >/dev/null 2>&1 || true
+    docker network rm "$network" >/dev/null 2>&1 || true
 
     cleanup() {
         rc=$?
         if [ "$rc" -ne 0 ]; then
-            echo "--- container logs ---" >&2
+            echo "--- app logs ---" >&2
             docker logs "$name" 2>&1 | tail -40 >&2 || true
+            echo "--- postgres logs ---" >&2
+            docker logs "$db" 2>&1 | tail -20 >&2 || true
         fi
-        docker rm -f "$name" >/dev/null 2>&1 || true
+        docker rm -f "$name" "$db" >/dev/null 2>&1 || true
+        docker network rm "$network" >/dev/null 2>&1 || true
         exit "$rc"
     }
     trap cleanup EXIT
 
-    docker run -d --name "$name" -p {{ port }}:8080 \
+    # A user-defined network gives the containers DNS, so the app can reach the database
+    # by container name. Postgres itself is not published to the host — nothing outside
+    # this network needs it.
+    docker network create "$network" >/dev/null
+    docker run -d --name "$db" --network "$network" \
+        -e POSTGRES_USER=agents \
+        -e POSTGRES_PASSWORD=agents \
+        -e POSTGRES_DB=agents \
+        {{ postgres_image }} >/dev/null
+
+    # -h 127.0.0.1 to check over TCP rather than the socket. The entrypoint's temporary
+    # init server listens on the socket only, so a socket check reports ready during
+    # initdb and then the server shuts down to restart for real — which is exactly the
+    # race that failed in CI, where the image was pulled cold. See `db-up` above.
+    for _ in $(seq 1 120); do
+        docker exec "$db" pg_isready -h 127.0.0.1 -U agents -d agents >/dev/null 2>&1 && break
+        sleep 0.5
+    done
+    docker exec "$db" pg_isready -h 127.0.0.1 -U agents -d agents >/dev/null 2>&1 || {
+        echo "error: smoke-test postgres did not become ready" >&2
+        exit 1
+    }
+
+    docker run -d --name "$name" --network "$network" -p {{ port }}:8080 \
         -e GOOGLE_CLIENT_ID=smoke-test \
         -e GOOGLE_CLIENT_SECRET=smoke-test \
         -e ALLOWED_EMAILS=smoke@example.com \
+        -e DATABASE_URL="postgresql://agents:agents@$db:5432/agents" \
         {{ image }} >/dev/null
     python3 scripts/smoke_test.py "http://127.0.0.1:{{ port }}"
 
 # Build the production image and smoke-test it
 docker-check: docker-build smoke
 
-# Run the production image at http://localhost:8080
-docker-run: docker-build
+# Run the production image at http://localhost:8080, against the local Postgres
+docker-run: docker-build db-up
+    # DATABASE_URL is set here rather than passed through from .env, whose value points
+    # at 127.0.0.1 — which inside the container is the container. host.docker.internal
+    # is what reaches the daemon's host, and --add-host provides it on Linux, where it
+    # is not built in as it is on Docker Desktop.
     docker run --rm -p 8080:8080 \
+        --add-host=host.docker.internal:host-gateway \
         -e ANTHROPIC_API_KEY \
         -e GOOGLE_CLIENT_ID \
         -e GOOGLE_CLIENT_SECRET \
@@ -447,7 +685,7 @@ docker-run: docker-build
         -e ALLOWED_EMAILS \
         -e ALLOWED_SERVICE_ACCOUNTS \
         -e APP_BASE_URL="${APP_BASE_URL:-http://localhost:8080}" \
-        -v "$PWD/backend/data:/app/data" \
+        -e DATABASE_URL="postgresql://agents:agents@host.docker.internal:{{ db_port }}/agents" \
         agents:local
 
 # Remove build output

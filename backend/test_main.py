@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
+import main
 from main import app, authenticated
 
 
@@ -128,3 +129,49 @@ def test_chat_skips_empty_messages(client):
     called_messages = mock_call.call_args.kwargs["messages"]
     assert len(called_messages) == 1
     assert called_messages[0]["content"] == "keep"
+
+
+# --- Health ---
+#
+# /health is the gate user_data.sh waits on at boot and `just restart` waits on after a
+# rollout, so what it does when the database is missing is load-bearing, not cosmetic.
+
+
+def test_health_is_unhealthy_without_a_database(client):
+    """No pool means the app came up without its data — that is not 'ok'."""
+    assert main.pool is None
+    resp = client.get("/health")
+    assert resp.status_code == 503
+    assert resp.json()["status"] == "error"
+
+
+def test_health_is_unhealthy_when_the_database_does_not_answer(client, monkeypatch):
+    monkeypatch.setattr(main, "pool", MagicMock())
+    monkeypatch.setattr(main.db, "ping", MagicMock(side_effect=OSError("no route")))
+
+    resp = client.get("/health")
+    assert resp.status_code == 503
+    assert resp.json()["database"] == "unreachable"
+
+
+def test_lifespan_opens_the_pool_and_creates_the_schema(database_url, monkeypatch):
+    """The startup path end to end: connect, migrate, then answer /health.
+
+    Exercises what production actually runs, rather than the dependency override the
+    pantry API tests use — nothing else would catch a schema statement that Postgres
+    rejects or a pool that is never opened.
+    """
+    monkeypatch.setenv("DATABASE_URL", database_url)
+
+    with TestClient(app) as started:
+        assert main.pool is not None
+        resp = started.get("/health")
+        assert resp.status_code == 200
+        assert resp.json() == {"status": "ok", "database": "ok"}
+
+        with main.pool.connection() as conn:
+            row = conn.execute("SELECT to_regclass('pantry_items') AS table").fetchone()
+            assert row["table"] == "pantry_items"
+
+    # Shut down cleanly, so a later test cannot pick up a closed pool.
+    assert main.pool is None

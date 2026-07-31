@@ -71,6 +71,16 @@ resource "aws_iam_role_policy" "ec2_agents" {
           aws_ssm_parameter.google_client_id.arn,
           aws_ssm_parameter.app_base_url.arn,
           aws_ssm_parameter.allowed_emails.arn,
+          # Where the database is: endpoint, port, database name, and the role to
+          # connect as. No credential — the DSN has no password in it, which is why
+          # rds.tf declares this parameter a String rather than a SecureString.
+          #
+          # Reading it grants no access to the data. That comes from the
+          # rds-db:connect policy in rds.tf, which lets the instance sign its own
+          # short-lived token, plus the security group in security_groups.tf. Without
+          # this parameter the app would not know where to connect; with it and nothing
+          # else, it still could not get in.
+          aws_ssm_parameter.database_url.arn,
         ], aws_ssm_parameter.allowed_service_accounts[*].arn)
       },
     ]
@@ -123,7 +133,9 @@ resource "aws_ssm_parameter" "tailscale_auth_key" {
 # rendered into the systemd unit lands in user_data, and user_data_replace_on_change
 # turns every edit into a new EC2 instance. Held here instead, the unit references only
 # the (fixed) parameter names, so changing a value is an in-place SSM update followed by
-# `systemctl restart agents.service` — no replacement, and /opt/agents/data survives.
+# `systemctl restart agents.service` — no replacement, so the app is down only for the
+# few seconds the container takes to come back. The pantry is in Aurora and unaffected
+# either way; keeping the instance is now about downtime rather than about data.
 
 resource "aws_ssm_parameter" "app_version" {
   name        = "/agents/app-version"
@@ -208,6 +220,7 @@ resource "aws_instance" "app" {
       app_base_url_parameter_name             = aws_ssm_parameter.app_base_url.name
       allowed_emails_parameter_name           = aws_ssm_parameter.allowed_emails.name
       allowed_service_accounts_parameter_name = local.allowed_service_accounts_parameter
+      database_url_parameter_name             = aws_ssm_parameter.database_url.name
     })
 
     tailscale_service_content = templatefile("${path.module}/files/tailscale.service", {
@@ -220,9 +233,18 @@ resource "aws_instance" "app" {
 
   # IMDSv2 enforced: prevents SSRF attacks from stealing instance credentials via metadata API
   metadata_options {
-    http_endpoint               = "enabled"
-    http_tokens                 = "required"
-    http_put_response_hop_limit = 1
+    http_endpoint = "enabled"
+    http_tokens   = "required"
+
+    # 2, not 1, because the app runs in a container and mints its own RDS IAM tokens.
+    # Docker's bridge network puts one extra hop between the process and IMDS, so a
+    # limit of 1 silently blocks the container from ever reading instance credentials —
+    # the app would come up and fail every database connection.
+    #
+    # The cost is that any container on this host can reach IMDS, not just this one.
+    # That is acceptable here because the host runs exactly one workload; it would not
+    # be on a box running untrusted or multi-tenant containers.
+    http_put_response_hop_limit = 2
   }
 
   root_block_device {

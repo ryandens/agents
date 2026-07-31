@@ -28,7 +28,7 @@ variable "ec2_instance_type" {
 }
 
 variable "app_version" {
-  description = "Image tag and digest to deploy, e.g. '0.1.0@sha256:abc123'. Tag is human-readable; digest pins the exact manifest. To upgrade: set the new tag@digest, run terraform apply (which updates the SSM parameter in place), then restart agents.service — `just deploy` does both. The instance is not replaced and /opt/agents/data survives."
+  description = "Image tag and digest to deploy, e.g. '0.1.0@sha256:abc123'. Tag is human-readable; digest pins the exact manifest. To upgrade: set the new tag@digest, run terraform apply (which updates the SSM parameter in place), then restart agents.service — `just deploy` does both. The instance is not replaced, so the app is down only for the few seconds the container takes to restart."
   type        = string
 }
 
@@ -138,5 +138,99 @@ variable "app_port" {
   validation {
     condition     = var.app_port >= 1024 && var.app_port <= 65535
     error_message = "app_port must be an unprivileged port (1024–65535)."
+  }
+}
+
+# ── Database ──────────────────────────────────────────────────────────────────
+
+variable "db_name" {
+  description = "Name of the database inside the Aurora cluster."
+  type        = string
+  default     = "agents"
+
+  validation {
+    # RDS accepts "up to 64 alphanumeric characters" beginning with a letter, which is
+    # narrower than Postgres identifier rules — an underscore here passes `terraform
+    # validate` and then fails at cluster creation.
+    #
+    # Lowercase only, which RDS does not require but this does: the name is interpolated
+    # into the DSN path, where it is matched case-sensitively, so a mixed-case name that
+    # Postgres folds to lowercase would leave the app connecting to a database that does
+    # not exist.
+    condition     = can(regex("^[a-z][a-z0-9]{0,63}$", var.db_name))
+    error_message = "db_name must start with a lowercase letter and contain only lowercase letters and digits (1-64 characters) — RDS rejects underscores here."
+  }
+}
+
+variable "db_app_username" {
+  description = "Database role the app connects as, using an RDS IAM token rather than a password. Separate from the master user because a role granted rds_iam can only authenticate by token — keeping the two apart leaves the master usable for administration. Created by `just db-bootstrap`, which is a one-time step after the first apply; the IAM policy grants rds-db:connect for this name specifically, so changing it means re-running that bootstrap."
+  type        = string
+  default     = "agents_app"
+
+  validation {
+    # Postgres identifier rules. Also interpolated into an IAM resource ARN, where a
+    # '/' or a wildcard character would widen the grant beyond the single user intended.
+    condition     = can(regex("^[a-z_][a-z0-9_]{0,62}$", var.db_app_username))
+    error_message = "db_app_username must be a lowercase Postgres identifier: letters, digits and underscores, not starting with a digit."
+  }
+}
+
+variable "db_username" {
+  description = "Master username on the Aurora cluster, for administration only — the app connects as db_app_username with an IAM token. Its password is generated and rotated by AWS in Secrets Manager and never passes through Terraform."
+  type        = string
+  default     = "agents"
+
+  validation {
+    # RDS constrains a cluster's MasterUsername to "1 to 16 letters or numbers", first
+    # character a letter — not the 63 a Postgres identifier allows, and no underscores.
+    # Both halves matter: either one lets a value pass `terraform validate` and then fail
+    # at cluster creation, which is the slowest possible place to learn about a typo.
+    # 'rdsadmin' and friends are reserved by RDS on top of that.
+    condition     = can(regex("^[a-z][a-z0-9]{0,15}$", var.db_username)) && !contains(["rdsadmin", "admin", "postgres"], var.db_username)
+    error_message = "db_username must be 1-16 characters, start with a lowercase letter, contain only lowercase letters and digits (RDS rejects underscores), and must not be a name RDS reserves ('rdsadmin', 'admin', 'postgres')."
+  }
+}
+
+variable "db_engine_version" {
+  description = "Aurora PostgreSQL version. Pinned rather than auto-upgraded, so a minor bump is a reviewed change like the app image is. List what is available with: aws rds describe-db-engine-versions --engine aurora-postgresql --query 'DBEngineVersions[].EngineVersion'."
+  type        = string
+  default     = "17.4"
+
+  validation {
+    condition     = can(regex("^[0-9]+\\.[0-9]+$", var.db_engine_version))
+    error_message = "db_engine_version must be a major.minor Aurora PostgreSQL version, e.g. '17.4'."
+  }
+}
+
+variable "db_min_capacity" {
+  description = "Aurora Serverless v2 floor, in ACUs. 0 lets the cluster pause when idle and is what makes this affordable for a household-sized app; the cost is roughly fifteen seconds to resume on the first connection afterwards. Set 0.5 or more to keep it always warm."
+  type        = number
+  default     = 0
+
+  validation {
+    condition     = var.db_min_capacity == 0 || (var.db_min_capacity >= 0.5 && var.db_min_capacity <= 256 && var.db_min_capacity * 2 == floor(var.db_min_capacity * 2))
+    error_message = "db_min_capacity must be 0 (auto-pause) or between 0.5 and 256 ACUs in 0.5 ACU increments."
+  }
+}
+
+variable "db_max_capacity" {
+  description = "Aurora Serverless v2 ceiling, in ACUs. The workload is a handful of single-row queries, so this is a runaway-cost backstop rather than a target."
+  type        = number
+  default     = 4
+
+  validation {
+    condition     = var.db_max_capacity >= 1 && var.db_max_capacity <= 256 && var.db_max_capacity >= var.db_min_capacity && var.db_max_capacity * 2 == floor(var.db_max_capacity * 2)
+    error_message = "db_max_capacity must be between 1 and 256 ACUs in 0.5 ACU increments, and not below db_min_capacity."
+  }
+}
+
+variable "db_seconds_until_auto_pause" {
+  description = "How long the cluster stays idle before pausing, when db_min_capacity is 0. Ignored otherwise. An hour keeps a day's normal use on a warm cluster while still pausing overnight."
+  type        = number
+  default     = 3600
+
+  validation {
+    condition     = var.db_seconds_until_auto_pause >= 300 && var.db_seconds_until_auto_pause <= 86400
+    error_message = "db_seconds_until_auto_pause must be between 300 and 86400 seconds — the range Aurora accepts."
   }
 }

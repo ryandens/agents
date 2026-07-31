@@ -8,6 +8,7 @@ import requests
 from fastapi.testclient import TestClient
 
 import auth
+import main
 from main import app
 
 ALLOWED = "cook@example.com"
@@ -27,10 +28,24 @@ def oauth_config(monkeypatch):
     monkeypatch.setenv("ALLOWED_EMAILS", f" {ALLOWED.upper()} , other@example.com")
 
 
+class EmptyPantry:
+    """Stands in for the store on the route these tests use as a protected endpoint.
+
+    /api/pantry is incidental here — what is under test is who gets past
+    `authenticated` — so the route is handed an empty pantry rather than a database,
+    which keeps this whole file free of Postgres.
+    """
+
+    def list_items(self, location=None):
+        return []
+
+
 @pytest.fixture
 def client():
+    app.dependency_overrides[main.store] = EmptyPantry
     # follow_redirects=False so the 302s the flow is built on can be asserted directly.
-    return TestClient(app, follow_redirects=False)
+    yield TestClient(app, follow_redirects=False)
+    app.dependency_overrides.clear()
 
 
 def token_response(status=200, id_token_value="fake-id-token"):

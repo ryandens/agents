@@ -14,6 +14,8 @@ An AI-powered meal planning and kitchen management app. Chat with the agent to p
 |---|---|
 | Backend | Python 3.14, FastAPI, Anthropic SDK (`claude-opus-4-7`) |
 | Frontend | Next.js 16 (App Router), React 19, Tailwind CSS v4, Vercel AI SDK v6 |
+| Database | PostgreSQL 17 — Aurora Serverless v2 in production, a container locally |
+| Database auth | RDS IAM tokens in production (no stored password); password locally |
 | Package managers | `uv` (backend), `npm` (frontend) |
 | Task runner | `just` |
 
@@ -22,6 +24,7 @@ An AI-powered meal planning and kitchen management app. Chat with the agent to p
 - [just](https://github.com/casey/just)
 - [uv](https://docs.astral.sh/uv/)
 - Node.js 24 (use `nvm` — `.nvmrc` is included)
+- Docker — runs the local Postgres, and the one the tests start
 - An Anthropic API key
 
 ## Setup
@@ -139,6 +142,27 @@ proxies `/api/*` to the backend on `http://localhost:8000`, which runs with
 `uvicorn --reload`. Both halves reload on save, and the app sees a single origin — the
 same shape as production.
 
+`just dev` also starts the Postgres the backend stores the pantry in, as a container on
+`:5432`, and waits for it to accept connections before the servers come up. The backend
+creates its schema on startup, so there is no migration step to remember. The data lives
+in a Docker volume and outlives the container:
+
+```sh
+just db-up      # start it on its own (`just dev` does this for you)
+just db-down    # stop it, keeping the data
+just db-reset   # throw the database away and start a clean one
+just db-psql    # psql shell — or pipe SQL in: echo 'select * from pantry_items;' | just db-psql
+```
+
+`DATABASE_URL` in `.env` selects the database; unset, the backend falls back to the same
+local container, so nothing has to be configured to get started.
+
+The container publishes Postgres on `127.0.0.1` only. If you have an `agents-postgres`
+container from before that change, it kept the port binding it was created with — which
+was every interface, with the password `agents` — because `docker start` cannot rebind a
+port. Run `just db-reset` once to recreate it, or check with `docker port
+agents-postgres` that it says `127.0.0.1:5432` rather than `0.0.0.0:5432`.
+
 To run it exactly as production does, with the static export served by the backend:
 
 ```sh
@@ -174,7 +198,10 @@ Track everything in your kitchen:
 - **Category filter pills** — narrow the view without leaving the tab
 - Items sorted by expiration date, soonest first
 
-Data is stored in `backend/data/pantry.json`. The storage layer is designed to be swapped for a relational database or DynamoDB without changing the API.
+Items live in a single `pantry_items` table in Postgres — Aurora Serverless v2 in
+production, a container in development and in tests. `backend/db.py` owns the pool and
+creates the schema at startup; `backend/pantry_store.py` is the only module that writes
+SQL, so the API layer is unchanged from when this was a file on disk.
 
 ## Deployment
 
@@ -190,6 +217,63 @@ publishes that port on loopback only, so `tailscale serve` is the sole way in. O
 container serves both halves of the app: the frontend's static export at `/`, and the API
 under `/api/...`. Same origin, so there is no CORS and no CDN to invalidate.
 Infrastructure is managed with Terraform in `infrastructure/`.
+
+### The database
+
+The pantry lives in an Aurora PostgreSQL Serverless v2 cluster named `agents`, defined in
+`infrastructure/rds.tf`. It sits in private subnets whose route table has no routes at
+all — no internet gateway, no NAT — so there is no path to it from outside the VPC, and
+its security group accepts port 5432 from exactly one source: the app instance's own
+security group. Nothing else in the account can open a connection, and neither can a
+laptop. To get a psql prompt, go through the instance with `just ssh`.
+
+The instance's permission to read and write is two things together, and it needs both:
+
+- **Network** — the ingress rule in `infrastructure/security_groups.tf`, which references
+  the EC2 security group rather than a CIDR, so it keeps working when the instance is
+  replaced and comes back on a different address.
+- **Identity** — there is no database password for the app. It authenticates with an
+  **RDS IAM token**: a 15-minute credential the app signs itself, at connect time, from
+  the instance profile's credentials. The IAM policy in `infrastructure/rds.tf` allows
+  `rds-db:connect` for one database user on one cluster, so revoking the app's access is
+  deleting that statement.
+
+That means nothing has to be rotated and there is no credential at rest anywhere — not
+in Parameter Store, not in the image, not in Terraform state. `/agents/database-url` is a
+plain `String` parameter holding a DSN with no password in it; it is no more sensitive
+than a hostname.
+
+The master user still exists for administration, but the app never uses it and neither
+do you, day to day. Its password is created and **rotated by AWS** in Secrets Manager
+(`manage_master_user_password`), so it never passes through Terraform — it is absent from
+the plan and from state — and the instance role has no permission to read it.
+
+Two consequences worth knowing:
+
+- The instance's IMDS hop limit is **2**, not the usual 1, because the app runs in a
+  container and Docker's bridge adds a hop. At 1 the container silently cannot read
+  instance credentials and every database connection fails. The trade-off is that any
+  container on that host could reach IMDS, which is fine on a box running one workload.
+- A role granted `rds_iam` cannot log in with a password at all. That is the property
+  being bought, and it is why the app's role is separate from the master.
+
+Connect to it yourself over an SSM port forward through the instance — no inbound port,
+no key, same trust path as `just ssh`:
+
+```sh
+just db-tunnel      # 127.0.0.1:15432 -> Aurora, until you Ctrl-C
+```
+
+The cluster scales to **zero** ACUs after an hour idle, which is what makes it affordable
+for a household-sized app. The cost is that the first connection after a quiet stretch
+waits roughly fifteen seconds for the cluster to resume — `db.py` opens its pool with a
+60-second timeout for exactly this reason. Set `db_min_capacity = 0.5` to keep it warm
+instead. Backups are retained for 7 days, storage is encrypted, and deletion protection is
+on, so a `terraform destroy` fails rather than quietly taking the pantry with it.
+
+`/health` now reports the database, not just the process, so a container that starts
+without being able to reach Aurora fails the boot gate in `user_data.sh` and the rollout
+gate in `just restart` instead of serving a broken pantry.
 
 ### Tailnet prerequisites
 
@@ -232,8 +316,9 @@ Wait for the workflow to go green before deploying.
 Deploying does **not** replace the EC2 instance. The image tag and every config value live
 in SSM Parameter Store; the systemd unit reads them on start, so a release is an in-place
 parameter update followed by a restart of `agents.service`. The app is down only for the
-few seconds the container takes to come back, and **`/opt/agents/data` survives** — pantry
-data is no longer lost on every deploy.
+few seconds the container takes to come back, and the pantry is untouched — it lives in
+Aurora, outside the instance entirely, so it now survives instance *replacement* too, not
+just a restart.
 
 **Step 1 — get the new image digest**
 
@@ -266,8 +351,30 @@ Changing config works exactly the same way. `allowed_emails`, `allowed_service_a
 `google_client_id` and the derived `app_base_url` are all parameters now, so editing one
 in `terraform.tfvars` and running `just deploy` takes effect on the restart.
 
+### One-time: create the app's database role
+
+After the **first** apply, the IAM-authenticated role has to be created once. The app
+cannot do it itself — it holds no password, and a role that could grant `rds_iam` is
+exactly what it must not have:
+
+```sh
+just db-bootstrap
+```
+
+That reads the AWS-managed master password from Secrets Manager **on your machine**,
+opens an SSM port forward through the instance, and runs the `CREATE ROLE` /
+`GRANT rds_iam` SQL. The master password is never given to the instance, so this is the
+one operation that uses your own AWS credentials rather than the instance's. It is
+idempotent, and only needs re-running if `db_app_username` changes.
+
+Until it has run, the app starts and fails its health check with an authentication
+error — which is the boot gate doing its job.
+
 **What still replaces the instance:** rotating `google_client_secret` or the session
-secret, and changing the AMI, instance type or the Tailscale settings. Secret rotation is
+secret, and changing the AMI, instance type or the Tailscale settings — plus anything
+else that edits the systemd unit, which is why the move to Aurora replaced it once. That
+is now a downtime event and nothing more: the pantry lives in the database, so an
+instance can be rebuilt without losing anything. Secret rotation is
 deliberate — a hash of each secret is embedded in `user_data` so the instance is rebuilt
 rather than relying on someone remembering to restart it. Those are the cases the
 paragraph below applies to.
@@ -314,19 +421,41 @@ just docker-run     # build and run the production image on :8080
 just docker-check   # build the production image and smoke-test it (mirrors the CI docker job)
 just check          # run all checks (mirrors CI)
 
-just backend-test   # pytest
+just backend-test   # pytest (starts a throwaway Postgres container)
 just backend-lint   # ruff check
 just backend-fmt    # ruff format --check
+
+just db-up          # local Postgres on :5432
+just db-reset       # wipe it and start clean
+just db-psql        # psql shell on it
+
+just db-tunnel      # forward a local port to Aurora through the instance (SSM)
+just db-bootstrap   # one-time: create the IAM-authenticated role in Aurora
 
 just frontend-test  # vitest
 just frontend-lint  # eslint
 just frontend-build # next build (type-check + compile)
 ```
 
-`scripts/smoke_test.py` checks a running container end to end: that `/` serves the React
-app, `/api/*` still reaches FastAPI rather than the static mount, `/pantry` redirects to
-`/pantry/`, and the Google client ID reached the browser bundle. It is stdlib-only, so CI
-runs it without installing anything. Point it at any deployment:
+### How the tests use Postgres
+
+The store is almost entirely SQL, so testing it against a fake would test the fake.
+`backend/conftest.py` starts a `postgres:17-alpine` container once per session with
+[testcontainers](https://testcontainers.com/) and truncates between tests — the same
+major version Aurora runs. That makes Docker a prerequisite for `just backend-test`. Set
+`TEST_DATABASE_URL` to use a server you already have instead, bearing in mind the
+fixtures truncate, so do not point it at anything you want to keep.
+
+`just smoke` starts a Postgres container of its own — separate from the `just db-up` one,
+on a private Docker network, empty every run — and points the image at it. That is the
+seam neither unit test can see: whether the built image can really open a connection and
+create its schema, rather than whether the SQL is right. `just docker-check` builds the
+image and runs it, which is what the CI `docker` job does.
+
+`scripts/smoke_test.py` checks a running container end to end: that `/health` reports a
+database it actually reached, `/` serves the React app, `/api/*` still reaches FastAPI
+rather than the static mount, and `/pantry` redirects to `/pantry/`. It is stdlib-only, so
+CI runs it without installing anything. Point it at any deployment:
 
 ```sh
 python3 scripts/smoke_test.py "$(terraform -chdir=infrastructure output -raw app_url)"

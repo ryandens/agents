@@ -11,9 +11,20 @@ readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
     "anthropic>=0.120.2",
+    # Mints the RDS IAM auth token the app connects with, signed locally from the
+    # instance profile's credentials. The only reason an AWS SDK is in the runtime image.
+    #
+    # Floor is the version this was verified against — boto3 and botocore ship in
+    # lockstep, so this pins botocore 1.43.62 too. That matters more than usual here:
+    # botocore's own region resolution reads AWS_DEFAULT_REGION and not AWS_REGION, and
+    # db.aws_region() bridges that difference. See test_db.py.
+    "boto3>=1.43.62",
     "fastapi>=0.141.1",
     "google-auth[requests]>=2.56.2",
     "itsdangerous>=2.2.0",
+    # [binary] ships a prebuilt libpq so the runtime image needs no C toolchain or
+    # system libpq; [pool] is the connection pool db.py opens at startup.
+    "psycopg[binary,pool]>=3.2.10",
     "python-dotenv>=1.2.2",
     "requests>=2.34.2",
     "uvicorn[standard]>=0.52.0",
@@ -31,4 +42,8 @@ dev = [
     "pytest>=9.1.1",
     "pytest-asyncio>=1.4.0",
     "ruff>=0.16.1",
+    # Starts the Postgres the store tests run against. See backend/conftest.py — the
+    # store is worth testing against the real thing, and a container is the only way to
+    # do that without asking every developer to install and run a server by hand.
+    "testcontainers[postgres]>=4.9.0",
 ]

@@ -35,3 +35,35 @@ resource "aws_vpc_security_group_egress_rule" "ec2_all_outbound" {
   ip_protocol       = "-1"
   cidr_ipv4         = "0.0.0.0/0"
 }
+
+
+# --- Aurora: reachable from the app instance and from nothing else ---
+#
+# The instance's own group is unchanged. It already egresses everywhere, so granting it
+# database access needs no rule on its side — which matters, because the
+# `no_public_app_ingress` check in checks.tf asserts the EC2 group holds exactly the two
+# rules Terraform manages and would fail if a third were added here.
+
+resource "aws_security_group" "rds" {
+  name        = "${var.project_name}-rds"
+  description = "Aurora: Postgres from the app instance only, no egress"
+  vpc_id      = aws_vpc.main.id
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
+# Source is the instance's security group rather than a CIDR, so the rule keeps working
+# if the instance is replaced and comes back on a different private address.
+resource "aws_vpc_security_group_ingress_rule" "rds_from_ec2" {
+  security_group_id            = aws_security_group.rds.id
+  description                  = "Postgres from the app instance"
+  from_port                    = 5432
+  to_port                      = 5432
+  ip_protocol                  = "tcp"
+  referenced_security_group_id = aws_security_group.ec2.id
+}
+
+# No egress rules at all. Aurora only ever answers connections; anything it did try to
+# open would be a sign something is wrong.
