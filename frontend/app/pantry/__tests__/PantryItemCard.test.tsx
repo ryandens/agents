@@ -122,15 +122,27 @@ describe("PantryItemCard", () => {
     expect(onEdit).toHaveBeenCalledWith(BASE);
   });
 
-  it("calls fetch DELETE and onDeleted when delete is confirmed", async () => {
-    // Real timers needed so Promise resolution isn't blocked
-    vi.useRealTimers();
-    vi.stubGlobal("confirm", vi.fn(() => true));
+  it("asks for confirmation before deleting rather than deleting outright", () => {
     vi.stubGlobal("fetch", vi.fn(() => Promise.resolve({ ok: true })));
     const onDeleted = vi.fn();
 
     render(<PantryItemCard item={BASE} onEdit={vi.fn()} onDeleted={onDeleted} />);
     fireEvent.click(screen.getByTitle("Delete"));
+
+    expect(screen.getByTitle("Confirm delete")).toBeInTheDocument();
+    expect(fetch).not.toHaveBeenCalled();
+    expect(onDeleted).not.toHaveBeenCalled();
+  });
+
+  it("calls fetch DELETE and onDeleted when delete is confirmed", async () => {
+    // Real timers needed so Promise resolution isn't blocked
+    vi.useRealTimers();
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve({ ok: true })));
+    const onDeleted = vi.fn();
+
+    render(<PantryItemCard item={BASE} onEdit={vi.fn()} onDeleted={onDeleted} />);
+    fireEvent.click(screen.getByTitle("Delete"));
+    fireEvent.click(screen.getByTitle("Confirm delete"));
 
     await waitFor(() => expect(onDeleted).toHaveBeenCalledWith("abc-123"));
     expect(fetch).toHaveBeenCalledWith(
@@ -140,12 +152,15 @@ describe("PantryItemCard", () => {
   });
 
   it("does not call onDeleted when delete is cancelled", () => {
-    vi.stubGlobal("confirm", vi.fn(() => false));
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve({ ok: true })));
     const onDeleted = vi.fn();
 
     render(<PantryItemCard item={BASE} onEdit={vi.fn()} onDeleted={onDeleted} />);
     fireEvent.click(screen.getByTitle("Delete"));
+    fireEvent.click(screen.getByTitle("Cancel delete"));
 
+    expect(screen.getByTitle("Delete")).toBeInTheDocument();
+    expect(fetch).not.toHaveBeenCalled();
     expect(onDeleted).not.toHaveBeenCalled();
   });
 
