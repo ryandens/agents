@@ -71,9 +71,15 @@ resource "aws_iam_role_policy" "ec2_agents" {
           aws_ssm_parameter.google_client_id.arn,
           aws_ssm_parameter.app_base_url.arn,
           aws_ssm_parameter.allowed_emails.arn,
-          # Carries the Aurora credentials. Reading this is what lets the instance —
-          # and only the instance — read and write the pantry; the security group in
-          # security_groups.tf is the other half, and neither works without the other.
+          # Where the database is: endpoint, port, database name, and the role to
+          # connect as. No credential — the DSN has no password in it, which is why
+          # rds.tf declares this parameter a String rather than a SecureString.
+          #
+          # Reading it grants no access to the data. That comes from the
+          # rds-db:connect policy in rds.tf, which lets the instance sign its own
+          # short-lived token, plus the security group in security_groups.tf. Without
+          # this parameter the app would not know where to connect; with it and nothing
+          # else, it still could not get in.
           aws_ssm_parameter.database_url.arn,
         ], aws_ssm_parameter.allowed_service_accounts[*].arn)
       },
