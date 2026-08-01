@@ -650,7 +650,7 @@ build: frontend-build
     cp -R frontend/out backend/static
 
 # Serve the built frontend and API from one origin at http://localhost:8000, as production does
-serve: build
+serve: build db-up db-migrate
     uv run --project backend uvicorn main:app --app-dir backend --port 8000
 
 # Build the production image (frontend export + API in one container)
@@ -834,7 +834,11 @@ backend-install:
     uv sync --dev --project backend
 
 # Start backend dev server on :8000 (also serves backend/static if `just build` ran)
-backend-dev:
+#
+# Migrates first, like every other recipe that starts the app: the schema belongs to
+# Alembic now, so a backend started against an unmigrated database comes up healthy and
+# then 500s on the first pantry query.
+backend-dev: db-up db-migrate
     uv run --project backend uvicorn main:app --app-dir backend --reload --port 8000
 
 # Run backend linter (scripts/ holds the smoke test, held to the same standard)

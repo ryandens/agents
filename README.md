@@ -212,7 +212,7 @@ Track everything in your kitchen:
 Items live in a single `pantry_items` table in Postgres — Aurora Serverless v2 in
 production, a container in development and in tests. `backend/db.py` owns the pool,
 `backend/migrations/` owns the schema, and `backend/pantry_store.py` is the only module
-that writes SQL, so the API layer is unchanged from when this was a file on disk.
+that writes SQL — the API layer knows nothing about how any of it is stored.
 
 ## Deployment
 
@@ -492,8 +492,9 @@ fixtures truncate, so do not point it at anything you want to keep.
 
 `just smoke` starts a Postgres container of its own — separate from the `just db-up` one,
 on a private Docker network, empty every run — and points the image at it. That is the
-seam neither unit test can see: whether the built image can really open a connection and
-create its schema, rather than whether the SQL is right. `just docker-check` builds the
+seam neither unit test can see: whether the built image can really connect and apply its
+migrations, rather than whether the SQL is right. It runs `alembic upgrade head` from the
+image first, exactly as `agents-migrate.service` does on the instance. `just docker-check` builds the
 image and runs it, which is what the CI `docker` job does.
 
 `scripts/smoke_test.py` checks a running container end to end: that `/health` reports a
