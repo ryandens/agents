@@ -71,7 +71,10 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     global pool, pantry_store
 
     pool = db.open_pool()
-    db.apply_schema(pool)
+    # No schema creation here on purpose. Migrations are a separate deploy step run by a
+    # role that owns the schema; this process connects with DML rights only, so it could
+    # not create a table even if it tried. A missing table surfaces as a failing query
+    # rather than being silently papered over at startup.
     pantry_store = PantryStore(pool)
     logger.info("connected to the pantry database")
     try:

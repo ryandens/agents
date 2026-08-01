@@ -154,14 +154,15 @@ def test_health_is_unhealthy_when_the_database_does_not_answer(client, monkeypat
     assert resp.json()["database"] == "unreachable"
 
 
-def test_lifespan_opens_the_pool_and_creates_the_schema(database_url, monkeypatch):
-    """The startup path end to end: connect, migrate, then answer /health.
+def test_lifespan_serves_health_against_a_migrated_database(
+    migrated_database, monkeypatch
+):
+    """The startup path end to end: connect, then answer /health.
 
     Exercises what production actually runs, rather than the dependency override the
-    pantry API tests use — nothing else would catch a schema statement that Postgres
-    rejects or a pool that is never opened.
+    pantry API tests use — nothing else would catch a pool that is never opened.
     """
-    monkeypatch.setenv("DATABASE_URL", database_url)
+    monkeypatch.setenv("DATABASE_URL", migrated_database)
 
     with TestClient(app) as started:
         assert main.pool is not None
@@ -169,9 +170,26 @@ def test_lifespan_opens_the_pool_and_creates_the_schema(database_url, monkeypatc
         assert resp.status_code == 200
         assert resp.json() == {"status": "ok", "database": "ok"}
 
-        with main.pool.connection() as conn:
-            row = conn.execute("SELECT to_regclass('pantry_items') AS table").fetchone()
-            assert row["table"] == "pantry_items"
-
     # Shut down cleanly, so a later test cannot pick up a closed pool.
     assert main.pool is None
+
+
+def test_lifespan_does_not_create_the_schema(unmigrated_database, monkeypatch):
+    """Starting the app against an empty database must not migrate it.
+
+    This is the invariant the whole migration split rests on: schema ownership belongs
+    to Alembic, run by a separate DDL role in its own deploy step. If startup created
+    tables again, the runtime role would need CREATE back and the migration history
+    would stop being the only source of truth for what the schema is.
+    """
+    monkeypatch.setenv("DATABASE_URL", unmigrated_database)
+
+    with TestClient(app) as started:
+        assert main.pool is not None
+        # The process is up and the database answers, which is all /health claims.
+        assert started.get("/health").status_code == 200
+
+        with main.pool.connection() as conn:
+            for table in ("pantry_items", "alembic_version"):
+                row = conn.execute("SELECT to_regclass(%s) AS t", (table,)).fetchone()
+                assert row["t"] is None, f"the app created {table}; migrations own it"

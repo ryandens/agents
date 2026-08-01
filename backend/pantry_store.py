@@ -26,9 +26,8 @@ _COLUMNS = (
 
 _COLUMN_LIST = sql.SQL(", ").join(sql.Identifier(c) for c in _COLUMNS)
 
-# Rows come back in creation order, which is what the file-backed store happened to
-# produce and what the pantry page renders. id breaks ties so two items created in the
-# same microsecond still sort deterministically.
+# Rows come back in creation order, which is the order the pantry page renders. id breaks
+# ties so two items created in the same microsecond still sort deterministically.
 _ORDER_BY = sql.SQL("ORDER BY created_at, id")
 
 
@@ -95,7 +94,7 @@ class PantryStore:
         # request never gets this far — the API answers 422 first. This catches a caller
         # that builds the model directly, in which case failing here beats a NOT NULL
         # violation from Postgres, which is harder to read and leaves the error to the
-        # driver. Keep the two lists in step with the NOT NULL columns in db.SCHEMA.
+        # driver. Keep this list in step with the NOT NULL columns in the migrations.
         not_null_columns = ("name", "category", "storage_location", "quantity", "unit")
         for column in not_null_columns:
             if column in patch and patch[column] is None:

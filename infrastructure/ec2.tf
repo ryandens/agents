@@ -81,6 +81,8 @@ resource "aws_iam_role_policy" "ec2_agents" {
           # this parameter the app would not know where to connect; with it and nothing
           # else, it still could not get in.
           aws_ssm_parameter.database_url.arn,
+          # The migrator's DSN, read by agents-migrate.service. Also passwordless.
+          aws_ssm_parameter.migrator_database_url.arn,
         ], aws_ssm_parameter.allowed_service_accounts[*].arn)
       },
     ]
@@ -221,6 +223,17 @@ resource "aws_instance" "app" {
       allowed_emails_parameter_name           = aws_ssm_parameter.allowed_emails.name
       allowed_service_accounts_parameter_name = local.allowed_service_accounts_parameter
       database_url_parameter_name             = aws_ssm_parameter.database_url.name
+    })
+
+    # Same image, different command. Rendered here so it lands in user_data with the
+    # others; like them it carries only parameter *names*, so a release leaves user_data
+    # byte-identical and does not replace the instance.
+    migrate_service_content = templatefile("${path.module}/files/agents-migrate.service", {
+      aws_region                           = var.aws_region
+      ecr_registry                         = split("/", aws_ecr_repository.main.repository_url)[0]
+      ecr_repository_url                   = aws_ecr_repository.main.repository_url
+      app_version_parameter_name           = aws_ssm_parameter.app_version.name
+      migrator_database_url_parameter_name = aws_ssm_parameter.migrator_database_url.name
     })
 
     tailscale_service_content = templatefile("${path.module}/files/tailscale.service", {

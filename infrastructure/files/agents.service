@@ -1,8 +1,13 @@
 [Unit]
 Description=Kitchen Agent
-After=docker.service network-online.target
+After=docker.service network-online.target agents-migrate.service
 Requires=docker.service
 Wants=network-online.target
+# The schema this app expects is applied by agents-migrate.service, from the same image.
+# Requires= means a failed migration stops the app from starting at all rather than
+# letting it serve against a schema it does not match; After= orders the two so the
+# migration has finished before the first request can arrive.
+Requires=agents-migrate.service
 
 [Service]
 Type=simple
@@ -80,10 +85,8 @@ ExecStartPre=/bin/bash -c 'exec /usr/bin/docker pull "$(cat /run/agents.image)"'
 # would not work here: systemd reads it once when the unit starts, before ExecStartPre
 # runs, so a value written by ExecStartPre is not visible to ExecStart in the same start.
 #
-# No volume mount any more: the pantry lives in Aurora, so the container holds nothing
-# worth keeping and an instance can be replaced without taking data with it. That was
-# the point of moving off the disk — /opt/agents/data only ever survived because the
-# unit was careful not to trigger a replacement.
+# No volume: the container is stateless. The pantry is in Aurora, so an instance can be
+# replaced without taking data with it.
 ExecStart=/bin/bash -c 'exec /usr/bin/docker run \
     --name agents \
     --rm \

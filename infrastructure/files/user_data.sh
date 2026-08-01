@@ -21,10 +21,6 @@ curl -fsSL https://pkgs.tailscale.com/stable/amazon-linux/2023/tailscale.repo \
 dnf install -y tailscale
 systemctl enable --now tailscaled
 
-# /opt/agents/data used to be bind-mounted into the container to hold the pantry. It is
-# in Aurora now, so nothing on this disk is worth keeping and the directory is no longer
-# created.
-
 # Quoted delimiter, like the unit below it. Terraform interpolates $${service_content}
 # before this script ever runs, so the unit's text is inlined here — and an unquoted
 # delimiter would leave bash to command-substitute the `$(aws ssm get-parameter ...)`
@@ -35,11 +31,19 @@ cat > /etc/systemd/system/agents.service <<'EOF_UNIT'
 ${service_content}
 EOF_UNIT
 
+cat > /etc/systemd/system/agents-migrate.service <<'EOF_UNIT'
+${migrate_service_content}
+EOF_UNIT
+
 cat > /etc/systemd/system/tailscale-agents.service <<'EOF_UNIT'
 ${tailscale_service_content}
 EOF_UNIT
 
 systemctl daemon-reload
+
+# Enabled but not started here: agents.service Requires= it, so starting the app pulls
+# the migration in and orders it first. Starting it separately would just run it twice.
+systemctl enable agents-migrate.service
 systemctl enable --now agents.service
 
 # Started after the app so `tailscale serve` has something behind it the moment the node

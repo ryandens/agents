@@ -1,0 +1,20 @@
+Hand-written SQL migrations, applied by Alembic.
+
+There is no autogenerate here: the app has no SQLAlchemy models — it is raw psycopg and
+pydantic — so there is nothing for Alembic to diff the database against. Write the SQL
+yourself.
+
+    just db-revision "add recipes table"     # creates an empty revision to fill in
+    just db-migrate                          # apply to the local database
+    just db-migrate-sql                      # print the SQL without applying it
+
+Conventions worth keeping:
+
+  * One transaction per revision (env.py sets transaction_per_migration). Anything that
+    cannot run inside a transaction — CREATE INDEX CONCURRENTLY is the usual one — needs
+    `with op.get_context().autocommit_block():`.
+  * Additive first. Add a nullable column, deploy, backfill, then tighten. A migration
+    that a rollback of the app cannot survive is a migration that makes rollback
+    impossible.
+  * Always write downgrade(). It is rarely run in anger, but writing it is what forces
+    you to notice a change that cannot be undone.

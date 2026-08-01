@@ -354,8 +354,8 @@ env-sync:
     echo "    $redirect_uri"
     echo "    https://console.cloud.google.com/apis/credentials?project=${client_id%%-*}"
 
-# Start Postgres and both dev servers with live reload — open http://localhost:3000
-dev: db-up
+# Start Postgres, apply migrations, and run both dev servers — open http://localhost:3000
+dev: db-up db-migrate
     #!/usr/bin/env bash
     set -euo pipefail
     # Next proxies /api to the backend, so :3000 mirrors production's single origin.
@@ -497,6 +497,27 @@ db-psql *args:
     [ -t 0 ] && tty_flags+=(-t)
     exec docker exec "${tty_flags[@]}" {{ db_container }} psql -U agents -d agents {{ args }}
 
+# Apply pending migrations to the local database
+db-migrate: db-up
+    uv run --project backend alembic -c backend/alembic.ini upgrade head
+
+# Show the SQL a migration would run, without touching the database
+db-migrate-sql:
+    uv run --project backend alembic -c backend/alembic.ini upgrade head --sql
+
+# Roll the local database back one revision
+db-rollback: db-up
+    uv run --project backend alembic -c backend/alembic.ini downgrade -1
+
+# What the local database is at, and what exists
+db-migration-status: db-up
+    uv run --project backend alembic -c backend/alembic.ini current
+    uv run --project backend alembic -c backend/alembic.ini history
+
+# Create an empty revision to fill in by hand (there is no autogenerate — see migrations/README)
+db-revision message: db-up
+    uv run --project backend alembic -c backend/alembic.ini revision -m "{{ message }}"
+
 # Forward a local port to Aurora through the instance over SSM (Ctrl-C to close)
 db-tunnel local_port="15432":
     #!/usr/bin/env bash
@@ -538,6 +559,7 @@ db-bootstrap local_port="15433":
     database="$(terraform -chdir=infrastructure output -raw db_name)"
     master="$(terraform -chdir=infrastructure output -raw db_master_secret_arn)"
     app_user="$(terraform -chdir=infrastructure output -raw db_app_username)"
+    migrator="$(terraform -chdir=infrastructure output -raw db_migrator_username)"
     instance="$(terraform -chdir=infrastructure output -raw ec2_instance_id)"
 
     password="$(aws secretsmanager get-secret-value --secret-id "$master" --region "$region" \
@@ -581,18 +603,46 @@ db-bootstrap local_port="15433":
             "host=host.docker.internal port={{ local_port }} dbname=$database user=$username sslmode=require" <<SQL
     DO \$\$
     BEGIN
+        IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '$migrator') THEN
+            CREATE ROLE $migrator WITH LOGIN;
+        END IF;
         IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '$app_user') THEN
             CREATE ROLE $app_user WITH LOGIN;
         END IF;
     END
     \$\$;
 
+    -- Both authenticate by token. A role holding rds_iam cannot log in with a password
+    -- at all, which is the property being bought: there is no password to leak.
+    GRANT rds_iam TO $migrator;
     GRANT rds_iam TO $app_user;
+
+    GRANT CONNECT ON DATABASE $database TO $migrator;
     GRANT CONNECT ON DATABASE $database TO $app_user;
-    GRANT USAGE, CREATE ON SCHEMA public TO $app_user;
+
+    -- The migrator owns the schema; it is the only role that may change it.
+    ALTER SCHEMA public OWNER TO $migrator;
+    GRANT USAGE, CREATE ON SCHEMA public TO $migrator;
+
+    -- The app may read and write rows and nothing else. Deliberately no CREATE: a bug
+    -- or an injection in the running app cannot reach the schema.
+    GRANT USAGE ON SCHEMA public TO $app_user;
+    REVOKE CREATE ON SCHEMA public FROM $app_user;
+
+    -- Tables the migrator creates are owned by the migrator, so the app would have no
+    -- rights on them without this. Covers future migrations; the GRANTs below cover
+    -- anything that already exists.
+    ALTER DEFAULT PRIVILEGES FOR ROLE $migrator IN SCHEMA public
+        GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO $app_user;
+    ALTER DEFAULT PRIVILEGES FOR ROLE $migrator IN SCHEMA public
+        GRANT USAGE, SELECT ON SEQUENCES TO $app_user;
+
+    GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO $app_user;
+    GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO $app_user;
     SQL
 
-    echo "'$app_user' can now sign in with an IAM token — restart the app with 'just restart'"
+    echo "'$migrator' owns the schema; '$app_user' has DML only. Both sign in with IAM tokens."
+    echo "next: 'just deploy' — agents-migrate.service applies migrations before the app starts"
 
 # Build the frontend into backend/static, where the app serves it from
 build: frontend-build
@@ -600,7 +650,7 @@ build: frontend-build
     cp -R frontend/out backend/static
 
 # Serve the built frontend and API from one origin at http://localhost:8000, as production does
-serve: build
+serve: build db-up db-migrate
     uv run --project backend uvicorn main:app --app-dir backend --port 8000
 
 # Build the production image (frontend export + API in one container)
@@ -659,6 +709,15 @@ smoke image="agents:local" port="8080":
         exit 1
     }
 
+    # Migrate from the image before starting it, which is what agents-migrate.service
+    # does on the box. This is the only place the image's migration path is exercised:
+    # the app no longer creates its own schema, so without this the container would come
+    # up against an empty database and every pantry query would fail.
+    docker run --rm --network "$network" \
+        -e DATABASE_URL="postgresql://agents:agents@$db:5432/agents" \
+        --entrypoint /app/.venv/bin/alembic \
+        {{ image }} -c /app/alembic.ini upgrade head
+
     docker run -d --name "$name" --network "$network" -p {{ port }}:8080 \
         -e GOOGLE_CLIENT_ID=smoke-test \
         -e GOOGLE_CLIENT_SECRET=smoke-test \
@@ -671,7 +730,7 @@ smoke image="agents:local" port="8080":
 docker-check: docker-build smoke
 
 # Run the production image at http://localhost:8080, against the local Postgres
-docker-run: docker-build db-up
+docker-run: docker-build db-up db-migrate
     # DATABASE_URL is set here rather than passed through from .env, whose value points
     # at 127.0.0.1 — which inside the container is the container. host.docker.internal
     # is what reaches the daemon's host, and --add-host provides it on Linux, where it
@@ -775,7 +834,11 @@ backend-install:
     uv sync --dev --project backend
 
 # Start backend dev server on :8000 (also serves backend/static if `just build` ran)
-backend-dev:
+#
+# Migrates first, like every other recipe that starts the app: the schema belongs to
+# Alembic now, so a backend started against an unmigrated database comes up healthy and
+# then 500s on the first pantry query.
+backend-dev: db-up db-migrate
     uv run --project backend uvicorn main:app --app-dir backend --reload --port 8000
 
 # Run backend linter (scripts/ holds the smoke test, held to the same standard)
