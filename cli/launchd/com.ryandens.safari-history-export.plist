@@ -55,7 +55,16 @@
     <key>Nice</key>
     <integer>5</integer>
 
-    <!-- Deliberately absent: RunAtLoad. Every login would otherwise trigger a run, and
-         the calendar interval plus catch-up already covers a machine that was off. -->
+    <!-- launchd coalesces calendar events missed while the machine was *asleep*, but
+         events missed while it was powered off are simply skipped until the next
+         occurrence. A Mac that is shut down overnight would therefore never reach
+         00:15, and catch-up cannot help: catch-up only runs once the tool does.
+         RunAtLoad closes that gap by running at login too.
+
+         The cost is a run per login, which is cheap and idempotent — the high-water
+         mark means an already-exported day is a no-op, and re-uploading a day the API
+         already has is deduplicated server-side. -->
+    <key>RunAtLoad</key>
+    <true/>
 </dict>
 </plist>

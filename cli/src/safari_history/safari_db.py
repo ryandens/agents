@@ -11,6 +11,7 @@ from __future__ import annotations
 import shutil
 import sqlite3
 import tempfile
+import urllib.parse
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -96,27 +97,76 @@ def _check_reachable(database: Path) -> None:
         raise DatabaseUnreadable.damaged(database, str(exc)) from exc
 
 
+def _backup_into(database: Path, snapshot: Path) -> bool:
+    """Snapshot with SQLite's online backup API. True if it worked.
+
+    Preferred over copying the files because it is the only way to get a *consistent*
+    view of a database someone else is writing. SQLite takes a read lock for each step
+    and restarts the copy if the source changes underneath it, so what lands is always
+    a single point in time — WAL contents included, already merged in.
+
+    Opened read-only so this cannot alter Safari's real history even by accident.
+    """
+    # quote() because a URI filename gives ? and # their URL meanings, and a home
+    # directory can contain either.
+    uri = f"file:{urllib.parse.quote(str(database))}?mode=ro"
+    try:
+        source = sqlite3.connect(uri, uri=True)
+    except sqlite3.Error:
+        # Most likely a WAL database whose -shm cannot be created, which is what
+        # read-only access to a database nobody has open looks like. The file copy
+        # below handles that case.
+        return False
+    # Deliberately not `with sqlite3.connect(...) as destination`: a Connection used as
+    # a context manager commits on exit, so closing inside the block makes that commit
+    # raise ProgrammingError — which this function would catch and report as "the backup
+    # API is unavailable", silently downgrading every export to the inconsistent copy.
+    destination = sqlite3.connect(snapshot)
+    try:
+        source.backup(destination)
+        return True
+    except sqlite3.Error:
+        # Leave nothing half-written for the fallback to trip over.
+        snapshot.unlink(missing_ok=True)
+        return False
+    finally:
+        destination.close()
+        source.close()
+
+
+def _copy_into(database: Path, snapshot: Path) -> None:
+    """Fallback snapshot: copy the database and its sidecars.
+
+    Not consistent under a concurrent writer — the main file and the -wal are separate
+    copies, so a checkpoint landing between them can produce a snapshot holding neither
+    the checkpointed pages nor the WAL frames that carried them. Used only when the
+    backup API could not open the source at all, where the alternative is not exporting.
+    """
+    shutil.copy2(database, snapshot)
+    # The -wal holds visits Safari has committed but not yet checkpointed — usually
+    # everything from the last few minutes. Skipping it is how an exporter ends up
+    # missing the most recent browsing. Both sidecars are absent when Safari has
+    # checkpointed cleanly, which is normal.
+    for suffix in ("-wal", "-shm"):
+        sidecar = database.with_name(database.name + suffix)
+        if sidecar.exists():
+            shutil.copy2(sidecar, snapshot.with_name(snapshot.name + suffix))
+
+
 @contextmanager
 def _snapshot(database: Path) -> Iterator[Path]:
-    """Copy the database aside and hand back the copy.
+    """Take a private snapshot of the database and hand back its path.
 
     Safari runs History.db in WAL mode and holds it open all day. Reading it in place
     means either contending with those locks or opening it immutable and quietly missing
-    everything still in the write-ahead log. A private copy is consistent, cannot
-    disturb Safari, and makes it impossible for a bug here to modify real history.
+    everything still in the write-ahead log. A private snapshot cannot disturb Safari,
+    and makes it impossible for a bug here to modify real history.
     """
     with tempfile.TemporaryDirectory(prefix="safari-history-export-") as workspace:
         snapshot = Path(workspace) / "History.db"
         try:
-            shutil.copy2(database, snapshot)
-            # The -wal holds visits Safari has committed but not yet checkpointed —
-            # usually everything from the last few minutes. Skipping it is how an
-            # exporter ends up missing the most recent browsing. Both sidecars are
-            # absent when Safari has checkpointed cleanly, which is normal.
-            for suffix in ("-wal", "-shm"):
-                sidecar = database.with_name(database.name + suffix)
-                if sidecar.exists():
-                    shutil.copy2(sidecar, snapshot.with_name(snapshot.name + suffix))
+            if not _backup_into(database, snapshot):
+                _copy_into(database, snapshot)
         except PermissionError as exc:
             raise FullDiskAccessRequired.for_path(database) from exc
         except OSError as exc:
@@ -130,10 +180,11 @@ def read_visits(day: date, database: Path = DEFAULT_DATABASE) -> list[Visit]:
     start, end = day_bounds(day)
 
     with _snapshot(database) as snapshot:
-        # Opened read-write even though nothing here writes: recovering the -wal into
-        # the snapshot is itself a write, and a read-only open of a WAL database fails
-        # when SQLite cannot create its -shm. This is a throwaway copy, so letting
-        # SQLite fix it up costs nothing and Safari's real file is untouched either way.
+        # Opened read-write even though nothing here writes. The backup API leaves a
+        # snapshot with no -wal at all, but the copy fallback does not: recovering that
+        # -wal is itself a write, and a read-only open of a WAL database fails when
+        # SQLite cannot create its -shm. This is a throwaway copy either way, so letting
+        # SQLite fix it up costs nothing and Safari's real file is untouched.
         try:
             connection = sqlite3.connect(snapshot)
         except sqlite3.Error as exc:

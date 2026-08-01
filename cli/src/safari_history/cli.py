@@ -60,6 +60,26 @@ def _valid_day(text: str) -> date:
         ) from None
 
 
+def _positive_days(text: str) -> int:
+    """A day count of at least 1.
+
+    Rejected at the boundary rather than clamped: `--max-catchup-days 0` asks for a run
+    that cannot make progress, and silently treating it as 1 would export a day the
+    caller explicitly asked not to. Without this the run exits 0 having done nothing,
+    which reads as "already up to date".
+    """
+    try:
+        days = int(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"'{text}' is not a whole number") from None
+    if days < 1:
+        raise argparse.ArgumentTypeError(
+            f"must be at least 1, got {days} — a run capped at {days} days would "
+            "report success without exporting anything"
+        )
+    return days
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="export-safari-history",
@@ -136,7 +156,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     export.add_argument(
         "--max-catchup-days",
-        type=int,
+        type=_positive_days,
         default=DEFAULT_MAX_CATCHUP_DAYS,
         help=f"most days to export in one run (default: {DEFAULT_MAX_CATCHUP_DAYS})",
     )

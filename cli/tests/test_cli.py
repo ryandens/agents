@@ -330,3 +330,29 @@ def test_status_reports_pending_uploads(workspace, uploads, capsys) -> None:
     capsys.readouterr()
     run(workspace, "status")
     assert "pending upload: 1" in capsys.readouterr().out
+
+
+# --- Argument validation (Macroscope review) ---
+
+
+@pytest.mark.parametrize("value", ["0", "-1"])
+def test_a_non_positive_catchup_cap_is_a_usage_error(workspace, capsys, value) -> None:
+    """Silently exporting nothing and exiting 0 reads as "already up to date"."""
+    with pytest.raises(SystemExit) as caught:
+        run(workspace, "export", "--max-catchup-days", value, upload=False)
+    assert caught.value.code == 2
+    assert "at least 1" in capsys.readouterr().err
+
+
+def test_a_positive_catchup_cap_is_accepted(workspace, uploads) -> None:
+    assert (
+        run(
+            workspace,
+            "export",
+            "--no-upload",
+            "--max-catchup-days",
+            "1",
+            upload=False,
+        )
+        == 0
+    )

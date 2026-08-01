@@ -39,15 +39,33 @@ def day_from_file_name(name: str) -> date | None:
 
 
 def exported_days(export_dir: Path) -> dict[date, Path]:
-    """Every day that has a CSV on disk, by date."""
+    """Every day that has a CSV on disk, by date.
+
+    A directory that cannot be scanned is an error rather than an empty result: every
+    caller treats "no CSV for this day" as ordinary, so swallowing the OSError here
+    would report an unreadable export directory as a tidy "nothing to upload".
+    """
     if not export_dir.is_dir():
         return {}
     found = {}
-    for path in export_dir.iterdir():
-        day = day_from_file_name(path.name)
-        if day is not None and path.is_file():
-            found[day] = path
+    try:
+        for path in export_dir.iterdir():
+            day = day_from_file_name(path.name)
+            # is_file() stats the entry, so it can fail on its own if the file is
+            # removed mid-scan; that one entry is skipped rather than failing the sweep.
+            if day is not None and _is_file(path):
+                found[day] = path
+    except OSError as exc:
+        raise ExportFailed(f"could not read {export_dir}: {exc}") from exc
     return dict(sorted(found.items()))
+
+
+def _is_file(path: Path) -> bool:
+    """path.is_file(), treating a vanished entry as "not a file" rather than an error."""
+    try:
+        return path.is_file()
+    except OSError:
+        return False
 
 
 def write_csv(visits: Iterable[Visit], destination: Path) -> None:
@@ -111,7 +129,10 @@ def read_csv(path: Path) -> list[dict[str, str]]:
                 for row in reader
                 if row.get("url")
             ]
-    except OSError as exc:
+    # csv.Error covers a field past the module's size limit; UnicodeDecodeError covers a
+    # file that is not the UTF-8 this tool writes. Both mean one damaged export, which
+    # the upload sweep should count and step over, not a crash that abandons the rest.
+    except (OSError, UnicodeDecodeError, csv.Error) as exc:
         raise ExportFailed(f"could not read {path}: {exc}") from exc
 
     for row in rows:
@@ -132,5 +153,14 @@ def read_csv(path: Path) -> list[dict[str, str]]:
 
 
 def digest(path: Path) -> str:
-    """A content hash, so a re-exported day can be recognised and re-uploaded."""
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+    """A content hash, so a re-exported day can be recognised and re-uploaded.
+
+    Raises ExportFailed rather than OSError so that a file deleted between the
+    directory scan and this read fails that one day, which the upload sweep counts and
+    carries on from, instead of aborting every remaining day with a traceback.
+    """
+    try:
+        content = path.read_bytes()
+    except OSError as exc:
+        raise ExportFailed(f"could not read {path}: {exc}") from exc
+    return hashlib.sha256(content).hexdigest()

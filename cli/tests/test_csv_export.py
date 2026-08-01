@@ -1,3 +1,5 @@
+import csv
+import os
 from datetime import date, datetime
 from pathlib import Path
 
@@ -179,3 +181,54 @@ def test_the_digest_changes_when_the_export_does(tmp_path: Path) -> None:
     before = csv_export.digest(destination)
     csv_export.write_csv([visit(), visit(url="https://new.example/")], destination)
     assert csv_export.digest(destination) != before
+
+
+# --- Damaged exports (Macroscope review) ---
+#
+# The upload sweep counts a failed day and carries on to the rest. Anything that escapes
+# as a bare OSError/UnicodeDecodeError/csv.Error breaks that contract by killing the
+# whole run, so each of these has to surface as ExportFailed.
+
+
+def test_a_digest_of_a_missing_file_is_reported(tmp_path: Path) -> None:
+    """The file can vanish between the directory scan and the hash."""
+    with pytest.raises(ExportFailed, match="could not read"):
+        csv_export.digest(tmp_path / "Safari History - 2026-07-29.csv")
+
+
+def test_reading_a_non_utf8_export_is_reported(tmp_path: Path) -> None:
+    path = tmp_path / "Safari History - 2026-07-29.csv"
+    path.write_bytes(
+        b"visited_at,title,url\n2026-07-29T09:00:00-04:00,\xff\xfe,http://a/\n"
+    )
+    with pytest.raises(ExportFailed, match="could not read"):
+        csv_export.read_csv(path)
+
+
+def test_reading_an_export_with_an_oversized_field_is_reported(tmp_path: Path) -> None:
+    """csv.Error, not OSError — a different escape from the same function."""
+    path = tmp_path / "Safari History - 2026-07-29.csv"
+    huge = "a" * (csv.field_size_limit() + 1)
+    path.write_text(
+        f'visited_at,title,url\n2026-07-29T09:00:00-04:00,"{huge}",http://a/\n'
+    )
+    with pytest.raises(ExportFailed, match="could not read"):
+        csv_export.read_csv(path)
+
+
+@pytest.mark.skipif(
+    os.geteuid() == 0, reason="root ignores the mode bits, so the read would succeed"
+)
+def test_an_unreadable_export_directory_is_reported(tmp_path: Path) -> None:
+    """Not an empty result: that would read as "nothing to upload"."""
+    export_dir = tmp_path / "exports"
+    export_dir.mkdir()
+    (export_dir / "Safari History - 2026-07-29.csv").write_text(
+        "visited_at,title,url\n"
+    )
+    export_dir.chmod(0o000)
+    try:
+        with pytest.raises(ExportFailed, match="could not read"):
+            csv_export.exported_days(export_dir)
+    finally:
+        export_dir.chmod(0o755)

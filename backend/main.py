@@ -17,7 +17,9 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from psycopg_pool import ConnectionPool
 from pydantic import BaseModel
+from starlette.datastructures import Headers
 from starlette.middleware.sessions import SessionMiddleware
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 import auth
 import db
@@ -113,6 +115,58 @@ def visit_store() -> BrowserHistoryStore:
 Pantry = Annotated[PantryStore, Depends(store)]
 History = Annotated[BrowserHistoryStore, Depends(visit_store)]
 
+# A day of heavy browsing is a few thousand visits, so this bounds one request at
+# roughly a week of it. The exporter chunks well below the limit.
+#
+# This is an API contract, NOT a memory bound: it is checked in the handler, which runs
+# only after FastAPI has already read the body and built every SiteVisit in the list. By
+# then the allocation has happened. MAX_REQUEST_BYTES below is what actually bounds it.
+MAX_VISITS_PER_REQUEST = 10_000
+
+# The real limit on what one request can allocate, enforced before the body is read.
+#
+# There is nowhere else to put it: the app sits behind `tailscale serve` on loopback,
+# with no ALB and no nginx, so the usual advice to cap body size at the proxy has no
+# proxy to apply to. 16 MiB is far above a legitimate batch — 500 visits at a few
+# hundred bytes each is well under 1 MiB — and far below what would trouble the host.
+MAX_REQUEST_BYTES = 16 * 1024 * 1024
+
+
+class LimitRequestBody:
+    """Reject an over-large request before anything reads its body.
+
+    Plain ASGI rather than BaseHTTPMiddleware: the latter buffers responses, which would
+    break the SSE stream /api/chat returns.
+
+    Enforced on Content-Length, which every real client sends — requests, httpx and
+    urllib all set it for a bytes body. A chunked upload without the header slips past
+    this and is bounded only by MAX_VISITS_PER_REQUEST after parsing; closing that would
+    mean counting bytes as they arrive and abandoning a partly-read request, which is a
+    lot of machinery for a route only authenticated callers can reach.
+    """
+
+    def __init__(self, app: ASGIApp, max_bytes: int) -> None:
+        self.app = app
+        self.max_bytes = max_bytes
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] == "http":
+            declared = Headers(scope=scope).get("content-length", "")
+            if declared.isdigit() and int(declared) > self.max_bytes:
+                response = JSONResponse(
+                    status_code=413,
+                    content={
+                        "detail": (
+                            f"request body is {declared} bytes, over the "
+                            f"{self.max_bytes} byte limit; send it in smaller batches"
+                        )
+                    },
+                )
+                await response(scope, receive, send)
+                return
+        await self.app(scope, receive, send)
+
+
 app = FastAPI(lifespan=lifespan)
 # Production is same-origin, so CORS only matters for `next dev` talking to a backend
 # started without the dev proxy. allow_credentials is required for the browser to send
@@ -134,16 +188,15 @@ app.add_middleware(
     same_site="lax",  # "strict" would drop the cookie on the redirect back from Google
     https_only=auth.cookie_secure(),
 )
+# Added last, so it is the outermost layer and runs before all of the above: an
+# oversized request should be turned away before anything decodes a session cookie or
+# reads a byte of the body.
+app.add_middleware(LimitRequestBody, max_bytes=MAX_REQUEST_BYTES)
 
 app.include_router(auth.router)
 
 # Depends() called in an argument default trips B008, so carry it in the type.
 AuthenticatedUser = Annotated[dict, Depends(authenticated)]
-
-# A day of heavy browsing is a few thousand visits, so this bounds one request at
-# roughly a week of it. The exporter chunks well below the limit; the cap is here so
-# an unbounded array cannot be parsed into memory before anything gets to reject it.
-MAX_VISITS_PER_REQUEST = 10_000
 
 client = anthropic.AsyncAnthropic()
 

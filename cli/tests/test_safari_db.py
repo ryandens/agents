@@ -1,5 +1,6 @@
 import builtins
 import sqlite3
+import tempfile
 from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
 
@@ -186,3 +187,43 @@ def test_a_changed_schema_is_reported_as_such(tmp_path: Path) -> None:
     with pytest.raises(DatabaseUnreadable) as caught:
         read_visits(DAY, database=database)
     assert "schema" in caught.value.message or "no such table" in caught.value.message
+
+
+# --- Snapshot consistency (Macroscope review) ---
+
+
+def test_the_backup_api_is_what_takes_the_snapshot(safari: FakeSafari) -> None:
+    """Regression test for a silent downgrade.
+
+    _backup_into returning False is not a visible failure — the file copy takes over and
+    every test still passes, while every real export quietly loses the consistency
+    guarantee. So assert the backup path is actually the one being used.
+    """
+    with tempfile.TemporaryDirectory() as workspace:
+        snapshot = Path(workspace) / "snap.db"
+        assert safari_db._backup_into(safari.path, snapshot) is True
+        assert snapshot.exists()
+
+
+def test_the_snapshot_holds_visits_still_in_the_wal(safari: FakeSafari) -> None:
+    """Committed but un-checkpointed visits are the ones a naive copy loses."""
+    day = date(2026, 7, 29)
+    safari.add_visit(day, time(9, 0), "https://wal.example/", "In the WAL")
+
+    with tempfile.TemporaryDirectory() as workspace:
+        snapshot = Path(workspace) / "snap.db"
+        assert safari_db._backup_into(safari.path, snapshot) is True
+        rows = (
+            sqlite3.connect(snapshot)
+            .execute("SELECT url FROM history_items")
+            .fetchall()
+        )
+    assert ("https://wal.example/",) in rows
+
+
+def test_a_source_that_cannot_be_opened_falls_back(tmp_path: Path) -> None:
+    """Not every database can be opened read-only; the copy is the safety net."""
+    assert (
+        safari_db._backup_into(tmp_path / "does-not-exist.db", tmp_path / "s.db")
+        is False
+    )

@@ -138,6 +138,40 @@ def test_an_oversized_batch_is_refused(client: TestClient) -> None:
     assert "smaller batches" in resp.text
 
 
+def test_an_oversized_body_is_refused_before_it_is_read(client: TestClient) -> None:
+    """The memory bound, which the visit-count cap is not.
+
+    The count is checked in the handler, by which point FastAPI has already parsed the
+    body and built every model in it. This is enforced on Content-Length, before any of
+    that — so it has to reject a body whose declared size is over the limit even though
+    the bytes actually sent are trivial.
+    """
+    resp = client.post(
+        "/api/browser-history",
+        content=b"[]",
+        headers={"content-length": str(main.MAX_REQUEST_BYTES + 1)},
+    )
+    assert resp.status_code == 413
+    assert "byte limit" in resp.text
+
+
+def test_the_body_limit_runs_before_authentication(history_store) -> None:
+    """Outermost middleware: an oversized request is turned away without a session."""
+    main.app.dependency_overrides.clear()
+    anonymous = TestClient(main.app)
+    resp = anonymous.post(
+        "/api/browser-history",
+        content=b"[]",
+        headers={"content-length": str(main.MAX_REQUEST_BYTES + 1)},
+    )
+    assert resp.status_code == 413
+
+
+def test_a_normal_batch_is_not_affected_by_the_body_limit(client: TestClient) -> None:
+    """Guards against a limit low enough to break ordinary use."""
+    assert client.post("/api/browser-history", json=[VISIT]).status_code == 201
+
+
 # --- Reading back ---
 
 

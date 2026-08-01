@@ -948,10 +948,22 @@ cli-install-agent:
     mkdir -p "$HOME/Library/LaunchAgents"
     # launchd never expands ~ or reads a shell profile, so every path in the plist has
     # to be absolute before it is written.
-    sed -e "s|__HOME__|$HOME|g" \
-        -e "s|__API_URL__|$api_url|g" \
-        -e "s|__CREDENTIALS__|$credentials|g" \
-        cli/launchd/{{ cli_label }}.plist > "{{ cli_plist }}"
+    #
+    # Rendered by safari_history.launch_agent rather than sed: sed reads `&` in a
+    # replacement as "the text that matched", so an API URL with a query string would
+    # write the __API_URL__ placeholder back into the plist instead of the URL. See that
+    # module for the rest of the reasoning.
+    rendered="$(mktemp)"
+    trap 'rm -f "$rendered"' EXIT
+    AGENT_HOME="$HOME" AGENT_API_URL="$api_url" AGENT_CREDENTIALS="$credentials" \
+        "{{ cli_venv }}/bin/python" -m safari_history.launch_agent \
+        cli/launchd/{{ cli_label }}.plist > "$rendered"
+
+    # Catches a malformed plist here, with a line number, rather than as launchctl's
+    # much vaguer "Bootstrap failed: 5: Input/output error".
+    plutil -lint "$rendered" >/dev/null
+    mv "$rendered" "{{ cli_plist }}"
+    trap - EXIT
 
     # bootout first so re-running this picks up an edited plist; ignore "not loaded".
     launchctl bootout "gui/$(id -u)/{{ cli_label }}" 2>/dev/null || true

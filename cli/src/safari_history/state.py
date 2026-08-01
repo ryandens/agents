@@ -44,38 +44,47 @@ class State:
     def load(cls, path: Path) -> State:
         if not path.exists():
             return cls(path=path)
+        # Everything that interprets the decoded JSON is inside the same guard as the
+        # parse. Valid JSON of the wrong shape — a bare `[]`, a `last_exported_date` of
+        # "bad", a non-mapping `uploads` — is exactly as unusable as a truncated file,
+        # and reaches the user through the same message instead of an AttributeError or
+        # a ValueError traceback with no hint that deleting the file is the way out.
         try:
             raw = json.loads(path.read_text())
-        except (OSError, ValueError) as exc:
+            if not isinstance(raw, dict):
+                # TypeError rather than ValueError because it is the shape that is
+                # wrong, not the value; the handler below catches both alike.
+                raise TypeError(f"expected a JSON object, found {type(raw).__name__}")
+
+            last_exported = raw.get("last_exported_date")
+            uploads = {}
+            for day, entry in (raw.get("uploads") or {}).items():
+                try:
+                    uploads[date.fromisoformat(day)] = Upload(
+                        digest=str(entry.get("digest", "")),
+                        visits=int(entry.get("visits", 0)),
+                        uploaded_at=str(entry.get("uploaded_at", "")),
+                    )
+                except (AttributeError, TypeError, ValueError):
+                    # One unreadable ledger entry means that day gets uploaded again.
+                    # The API deduplicates, so the cost is a wasted request rather than
+                    # duplicated data — much better than refusing to run at all.
+                    continue
+
+            return cls(
+                path=path,
+                last_exported_date=date.fromisoformat(last_exported)
+                if last_exported
+                else None,
+                uploads=uploads,
+            )
+        except (OSError, ValueError, AttributeError, TypeError) as exc:
             raise ExportFailed(
                 f"the state file {path} could not be read: {exc}\n"
                 "\n"
                 "Delete it to start over — the next run will then export yesterday "
                 "only, and re-upload any CSV it no longer has a record of."
             ) from exc
-
-        last_exported = raw.get("last_exported_date")
-        uploads = {}
-        for day, entry in (raw.get("uploads") or {}).items():
-            try:
-                uploads[date.fromisoformat(day)] = Upload(
-                    digest=str(entry.get("digest", "")),
-                    visits=int(entry.get("visits", 0)),
-                    uploaded_at=str(entry.get("uploaded_at", "")),
-                )
-            except (AttributeError, TypeError, ValueError):
-                # One unreadable ledger entry means that day gets uploaded again. The
-                # API deduplicates, so the cost is a wasted request rather than
-                # duplicated data — much better than refusing to run at all.
-                continue
-
-        return cls(
-            path=path,
-            last_exported_date=date.fromisoformat(last_exported)
-            if last_exported
-            else None,
-            uploads=uploads,
-        )
 
     def save(self) -> None:
         payload = {
@@ -93,12 +102,16 @@ class State:
             },
         }
 
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        descriptor, raw_path = tempfile.mkstemp(
-            dir=self.path.parent, prefix=f".{self.path.name}.", suffix=".tmp"
-        )
-        temporary = Path(raw_path)
+        # mkdir and mkstemp are inside the guard, not before it: a read-only or missing
+        # parent directory fails here just as much as the write does, and it deserves
+        # the same message rather than a bare OSError.
+        temporary: Path | None = None
         try:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            descriptor, raw_path = tempfile.mkstemp(
+                dir=self.path.parent, prefix=f".{self.path.name}.", suffix=".tmp"
+            )
+            temporary = Path(raw_path)
             # Written aside and renamed: a truncated state file reads as "nothing has
             # ever been exported", which would re-export and re-upload from scratch.
             with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
@@ -114,7 +127,9 @@ class State:
                 "repeat it."
             ) from exc
         finally:
-            temporary.unlink(missing_ok=True)
+            # None when mkdir or mkstemp is what failed, so there is nothing to remove.
+            if temporary is not None:
+                temporary.unlink(missing_ok=True)
 
     def record_upload(self, day: date, digest: str, visits: int) -> None:
         self.uploads[day] = Upload(

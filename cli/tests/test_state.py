@@ -130,3 +130,60 @@ def test_a_re_exported_day_is_sent_again(tmp_path: Path) -> None:
     state = State.load(tmp_path / "state.json")
     state.record_upload(YESTERDAY, digest="abc123", visits=1)
     assert state.needs_upload(YESTERDAY, "different")
+
+
+# --- Malformed state files (Macroscope review) ---
+#
+# A state file is machine-written, so these shapes only arise from a crashed writer, a
+# hand-edit, or a disk fault. All of them used to escape as an AttributeError or
+# ValueError traceback, which is the one moment the recovery hint matters most.
+
+
+@pytest.mark.parametrize(
+    ("content", "why"),
+    [
+        ("[]", "a JSON array where an object belongs"),
+        ('"nope"', "a bare JSON string"),
+        ("null", "JSON null"),
+        ('{"last_exported_date": "bad"}', "an unparseable date"),
+        ('{"last_exported_date": 20260729}', "a date that is not a string"),
+        ('{"uploads": "not-a-mapping"}', "uploads that is not a mapping"),
+        ('{"uploads": [1, 2]}', "uploads as a list"),
+    ],
+)
+def test_a_malformed_state_file_is_reported_not_raised(
+    tmp_path: Path, content: str, why: str
+) -> None:
+    path = tmp_path / "state.json"
+    path.write_text(content)
+
+    with pytest.raises(ExportFailed) as caught:
+        State.load(path)
+
+    # The recovery instruction is the point of routing these through ExportFailed.
+    assert "Delete it to start over" in str(caught.value), why
+
+
+def test_save_reports_a_directory_it_cannot_create(tmp_path: Path) -> None:
+    """mkdir and mkstemp run before the write, so they need the same guard."""
+    blocker = tmp_path / "blocker"
+    blocker.write_text("I am a file, not a directory")
+
+    state = State(path=blocker / "nested" / "state.json")
+    with pytest.raises(ExportFailed) as caught:
+        state.save()
+    assert "could not be written" in str(caught.value)
+
+
+def test_an_empty_uploads_value_is_not_an_error(tmp_path: Path) -> None:
+    """Falsy uploads degrades to "no ledger", which is recoverable, not corrupt.
+
+    Every day then gets uploaded again and the API deduplicates, so this is a wasted
+    request rather than a reason to refuse to run.
+    """
+    path = tmp_path / "state.json"
+    path.write_text('{"last_exported_date": "2026-07-29", "uploads": []}')
+
+    state = State.load(path)
+    assert state.last_exported_date == date(2026, 7, 29)
+    assert state.uploads == {}

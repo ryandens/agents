@@ -210,15 +210,24 @@ That writes `~/Library/LaunchAgents/com.ryandens.safari-history-export.plist` fr
 and loads it. `launchd` does not expand `~`, so the template's placeholders are replaced
 with absolute paths at install time.
 
-By hand:
+By hand — the substitution is deliberately not `sed`. In a `sed` replacement `&` means
+"the text that matched", so an API URL carrying a query string (`...?a=1&b=2`) writes
+the `__API_URL__` placeholder back into the plist instead of the URL, and `|` or a
+backslash breaks the expression outright. The result is a plist `launchctl` rejects with
+a message that points nowhere near the cause. The values also land inside XML, so `&`
+and `<` need escaping there too:
 
 ```sh
-sed -e "s|__HOME__|$HOME|g" \
-    -e "s|__API_URL__|$SAFARI_HISTORY_API_URL|g" \
-    -e "s|__CREDENTIALS__|$GOOGLE_APPLICATION_CREDENTIALS|g" \
-    cli/launchd/com.ryandens.safari-history-export.plist \
-    > ~/Library/LaunchAgents/com.ryandens.safari-history-export.plist
+venv="$HOME/Library/Application Support/safari-history-export/venv"
 
+AGENT_HOME="$HOME" \
+AGENT_API_URL="$SAFARI_HISTORY_API_URL" \
+AGENT_CREDENTIALS="$GOOGLE_APPLICATION_CREDENTIALS" \
+  "$venv/bin/python" -m safari_history.launch_agent \
+  cli/launchd/com.ryandens.safari-history-export.plist \
+  > ~/Library/LaunchAgents/com.ryandens.safari-history-export.plist
+
+plutil -lint ~/Library/LaunchAgents/com.ryandens.safari-history-export.plist
 launchctl bootstrap "gui/$(id -u)" ~/Library/LaunchAgents/com.ryandens.safari-history-export.plist
 ```
 
