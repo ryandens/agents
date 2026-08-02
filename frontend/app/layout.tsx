@@ -48,6 +48,12 @@ export default function RootLayout({
             >
               Pantry
             </Link>
+            <Link
+              href="/shorts"
+              className="px-3 py-1.5 text-sm font-medium rounded-lg text-stone-700 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors"
+            >
+              Shorts
+            </Link>
             <UserMenu />
           </nav>
           <div className="flex-1 flex flex-col min-h-0">{children}</div>

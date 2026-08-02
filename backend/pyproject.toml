@@ -32,6 +32,16 @@ dependencies = [
     "psycopg[binary,pool]>=3.3.4",
     "python-dotenv>=1.2.2",
     "requests>=2.34.2",
+    # The IANA time zone database, as a package rather than as files on the host.
+    #
+    # zoneinfo reads /usr/share/zoneinfo and falls back to this package when there is
+    # nothing there. The Chainguard runtime image in backend/Dockerfile carries no
+    # zoneinfo directory at all (verified: all four of zoneinfo.TZPATH are absent), so
+    # without this dependency ZoneInfo("America/New_York") raises in the image while
+    # working on every developer machine — the /api/youtube-shorts/daily handler would
+    # 500 for every zone except UTC, and nothing short of running the image would say
+    # so. test_youtube_shorts.py asserts the package is installed for that reason.
+    "tzdata>=2026.1",
     "uvicorn[standard]>=0.52.1",
 ]
 

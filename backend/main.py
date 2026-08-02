@@ -4,14 +4,16 @@ import os
 import secrets
 from collections.abc import AsyncGenerator, AsyncIterator
 from contextlib import asynccontextmanager
+from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Any, cast
 from uuid import UUID
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import anthropic
 from anthropic.types import MessageParam
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -28,6 +30,7 @@ from browser_history import SiteVisit
 from browser_history_store import BrowserHistoryStore
 from pantry import PantryItem, PantryItemCreate, PantryItemUpdate, StorageLocation
 from pantry_store import PantryStore
+from youtube_shorts import DEFAULT_DAYS, MAX_DAYS, ShortsDay, fill_gaps, window
 
 # Search from this file's location up through the repo root
 load_dotenv(dotenv_path=Path(__file__).parent.parent / ".env")
@@ -353,6 +356,43 @@ def record_browser_history(
 def list_browser_history(_: AuthenticatedUser, history: History, limit: int = 100):
     """Recent visits, newest first — enough to confirm an upload actually landed."""
     return history.list_visits(limit=max(0, min(limit, 1000)))
+
+
+@app.get("/api/youtube-shorts/daily", response_model=list[ShortsDay])
+def daily_youtube_shorts(
+    _: AuthenticatedUser,
+    history: History,
+    days: Annotated[int, Query(ge=1, le=MAX_DAYS)] = DEFAULT_DAYS,
+    tz: str = "UTC",
+) -> list[ShortsDay]:
+    """Shorts watched per day for the last `days` days, oldest first.
+
+    Always exactly `days` entries, including the ones that are zero: the caller is
+    drawing a time axis, and a gap it has to reconstruct itself is a gap it can get
+    wrong.
+
+    `tz` names the zone the days are cut in — the browser's own, so "today" on the
+    graph is the day the person reading it is having. It has to be a zone name both
+    Python and Postgres know; the two ship separate copies of the IANA database, which
+    agree on every zone that has existed long enough to have visits in it.
+
+    `days` is rejected outside 1..MAX_DAYS rather than clamped. Clamping would answer a
+    request for two years with one year of data and no indication it had done so, and
+    the caller would draw it as if it were the range it asked for.
+    """
+    try:
+        zone = ZoneInfo(tz)
+    except ZoneInfoNotFoundError, ValueError:
+        # ValueError too: ZoneInfo raises it for a key that is not a zone name at all
+        # (absolute, or containing ".."), which it refuses before ever looking it up.
+        raise HTTPException(
+            status_code=400, detail=f"unknown time zone: {tz!r}"
+        ) from None
+
+    # "Today" comes from the same zone the buckets do, so the last column of the graph
+    # is the day in progress rather than a UTC day that may have already rolled over.
+    start, end = window(days, datetime.now(zone).date())
+    return fill_gaps(history.daily_shorts(start, end, tz), start, end)
 
 
 # Mounted last so it only sees paths no API route claimed. html=True resolves
