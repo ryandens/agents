@@ -150,12 +150,15 @@ def nested_route_is_served(base_url):
 
 
 @check
-def nested_route_redirects_to_trailing_slash(base_url):
-    """/pantry redirects to /pantry/, matching the trailingSlash export"""
-    status, headers, _ = fetch(f"{base_url}/pantry", follow_redirects=False)
-    assert status in (301, 307, 308), f"expected a redirect, got {status}"
-    location = headers.get("Location", "")
-    assert location.endswith("/pantry/"), f"expected /pantry/, got {location!r}"
+def nested_routes_redirect_to_trailing_slash(base_url):
+    """/pantry and /shorts redirect to their trailing-slash form, as the export needs"""
+    for route in ("/pantry", "/shorts"):
+        status, headers, _ = fetch(f"{base_url}{route}", follow_redirects=False)
+        assert status in (301, 307, 308), f"{route}: expected a redirect, got {status}"
+        location = headers.get("Location", "")
+        assert location.endswith(f"{route}/"), (
+            f"{route}: expected {route}/, got {location!r}"
+        )
 
 
 @check
@@ -169,6 +172,11 @@ def api_is_not_shadowed_by_static_files(base_url):
         # reached by a machine rather than a browser, so nobody would notice the
         # static mount swallowing it by clicking around.
         ("POST", "/api/browser-history", b"[]"),
+        # Two path segments under /api, unlike every route above it. `trailingSlash`
+        # makes the export a tree of directories, so a nested API path is the shape
+        # most likely to be answered by a 404 page from the static mount instead of by
+        # FastAPI — and it would look like an empty graph rather than like an error.
+        ("GET", "/api/youtube-shorts/daily", None),
     ):
         status, headers, payload = fetch(
             f"{base_url}{path}", method=method, body=body, follow_redirects=False

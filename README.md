@@ -230,6 +230,36 @@ two exporters uploading the same day at once still store it once. That key is
 entry may not, so the digest — a generated column, `sha256(url::bytea)` — is what makes
 a long URL storable at all.
 
+### YouTube Shorts (`/shorts`)
+
+A column per day of how many YouTube Shorts you opened, over the last 7, 30, or 90
+days, with today's count led out at the top and the daily average, the busiest day, and
+the number of days with none alongside it. Every chart has a table twin behind **Show
+table** — the same numbers, without needing to hover or to see colour.
+
+It reads the browser history above; there is nothing extra to install once the exporter
+is running. `GET /api/youtube-shorts/daily?days=30&tz=America/New_York` is the endpoint,
+and it always answers with exactly `days` entries, zeroes included, so the caller is
+never reconstructing a gap.
+
+Three decisions worth knowing about:
+
+- **A Short is `^https?://(www.|m.)?youtube.com/shorts/<id>`**, anchored at the start so
+  a search result that merely contains a Shorts link is not counted as watching one. The
+  same pattern captures the video id, so `?feature=share` on the end does not turn one
+  video into two.
+- **Days are cut in the browser's time zone**, which the page sends with every request.
+  Visits are stored in UTC, and a UTC day ends at 8pm on the US east coast — bucketing
+  in UTC would file an evening of scrolling under tomorrow, which is precisely the
+  reading the graph exists to give.
+- **`visits` is not quite "watched"**. It counts Shorts pages Safari recorded, so
+  swiping through the feed without the address bar changing is one count, not ten. The
+  page says so under the chart rather than implying a precision it does not have.
+
+Note that `tzdata` is a backend dependency for this: the deployed image is distroless
+and carries no `/usr/share/zoneinfo`, so without it every zone but UTC would fail in
+production while working on every developer machine.
+
 ### Safari history export (`cli/`)
 
 A macOS command line tool that exports Safari's browsing history to one CSV per day in

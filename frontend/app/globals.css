@@ -3,6 +3,21 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+
+  /* Chart palette.
+   *
+   * Named by role rather than by colour so the light and dark values swap in one
+   * place and the chart is written against what each one is for. The hexes are
+   * literal rather than Tailwind's emerald ramp because they were validated as
+   * exact values — lightness band, chroma floor and >= 3:1 against the surface the
+   * chart actually renders on — and `emerald-600` is free to change under us.
+   *
+   * --chart-series is the one data colour: a single series, so identity is not a
+   * job any colour here has to do. The rest is chrome, deliberately recessive.
+   */
+  --chart-series: #059669;
+  --chart-gridline: #e7e5e4;
+  --chart-axis: #d6d3d1;
 }
 
 @theme inline {
@@ -16,6 +31,13 @@
   :root {
     --background: #0a0a0a;
     --foreground: #ededed;
+
+    /* Stepped for the dark surface, not flipped onto it: #059669 stays legible on
+     * white and goes muddy on stone-900, and emerald-500 is too light for the dark
+     * band. #0ea87a was picked and validated against #1c1917 the same way. */
+    --chart-series: #0ea87a;
+    --chart-gridline: #292524;
+    --chart-axis: #44403c;
   }
 }
 
