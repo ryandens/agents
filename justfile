@@ -593,8 +593,8 @@ db-bootstrap local_port="15433":
     #
     # GRANT rds_iam is what makes the role token-authenticated; a role holding it cannot
     # log in with a password at all, which is the property being bought. The grants on
-    # the schema are needed because the app creates its own table on first start, and
-    # Postgres 15 stopped letting PUBLIC create in `public`.
+    # the schema give the migrator somewhere to create tables — Postgres 15 stopped
+    # letting PUBLIC create in `public` — and leave the app with USAGE and no CREATE.
     docker run --rm -i \
         --add-host=host.docker.internal:host-gateway \
         -e PGPASSWORD="$password" \
@@ -611,6 +611,17 @@ db-bootstrap local_port="15433":
         END IF;
     END
     \$\$;
+
+    -- Everything below this line acts on the migrator's behalf — handing it the schema,
+    -- setting its default privileges, granting on tables it owns — and all of it requires
+    -- membership in the role, not merely the right to have created it. Postgres 16+
+    -- records the creation grant as ADMIN only, with SET and INHERIT both false: the
+    -- master may hand out membership in the role without holding it. So ALTER SCHEMA
+    -- ... OWNER TO is refused with "must be able to SET ROLE", and ALTER DEFAULT
+    -- PRIVILEGES FOR ROLE with "permission denied to change default privileges". ADMIN is
+    -- exactly enough to grant ourselves the membership those need, which is what this
+    -- does; it is dropped again at the end of the script.
+    GRANT $migrator TO $username;
 
     -- Both authenticate by token. A role holding rds_iam cannot log in with a password
     -- at all, which is the property being bought: there is no password to leak.
@@ -637,8 +648,17 @@ db-bootstrap local_port="15433":
     ALTER DEFAULT PRIVILEGES FOR ROLE $migrator IN SCHEMA public
         GRANT USAGE, SELECT ON SEQUENCES TO $app_user;
 
+    -- Still inside the membership, because these tables are owned by the migrator. On a
+    -- first run the schema is empty and this is a no-op; it matters on a re-run after
+    -- db_app_username changes, which is the case the catch-up exists for.
     GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO $app_user;
     GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO $app_user;
+
+    -- The membership was only needed to issue the statements above; what they wrote —
+    -- pg_default_acl entries and table grants — outlives it. Dropping it again leaves the
+    -- master able to administer the cluster but not to act as the schema owner, which is
+    -- the separation the two roles exist for.
+    REVOKE $migrator FROM $username;
     SQL
 
     echo "'$migrator' owns the schema; '$app_user' has DML only. Both sign in with IAM tokens."
