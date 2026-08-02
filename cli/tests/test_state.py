@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from safari_history.errors import ExportFailed
-from safari_history.state import State, catch_up_days
+from safari_history.state import FIRST_EXPORT_DATE, State, catch_up_days
 
 TODAY = date(2026, 7, 30)
 YESTERDAY = date(2026, 7, 29)
@@ -13,9 +13,30 @@ YESTERDAY = date(2026, 7, 29)
 # --- Catch-up planning ---
 
 
-def test_a_first_run_exports_yesterday_only() -> None:
-    """Not a year of history: installing something should not trigger a huge backfill."""
-    assert catch_up_days(None, TODAY, max_days=30) == [YESTERDAY]
+def test_a_first_run_backfills_from_the_fixed_start_date() -> None:
+    """A fresh install backfills a known window, not just last night."""
+    days = catch_up_days(None, TODAY, max_days=90)
+    assert days[0] == FIRST_EXPORT_DATE
+    assert days[-1] == YESTERDAY
+    assert len(days) == (YESTERDAY - FIRST_EXPORT_DATE).days + 1
+
+
+def test_a_first_run_before_the_start_date_asks_for_nothing() -> None:
+    """Nothing to back-fill until the start date has a complete day behind it."""
+    assert catch_up_days(None, FIRST_EXPORT_DATE, max_days=30) == []
+    assert catch_up_days(None, FIRST_EXPORT_DATE - timedelta(days=7), max_days=30) == []
+
+
+def test_the_first_run_backfill_is_capped_like_any_other() -> None:
+    """The fixed start date must not let one run export an unbounded span."""
+    days = catch_up_days(None, TODAY, max_days=5)
+    assert days == [FIRST_EXPORT_DATE + timedelta(days=offset) for offset in range(5)]
+
+
+def test_a_mark_behind_the_start_date_is_not_clamped_forward() -> None:
+    """Days exported by name before the start date must not be skipped back over."""
+    earlier = FIRST_EXPORT_DATE - timedelta(days=3)
+    assert catch_up_days(earlier, TODAY, max_days=90)[0] == earlier + timedelta(days=1)
 
 
 def test_today_is_never_exported() -> None:

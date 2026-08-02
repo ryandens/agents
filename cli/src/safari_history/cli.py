@@ -1,6 +1,7 @@
 """Command line entry point.
 
-export-safari-history                 catch up: every day since the last export
+export-safari-history                 catch up: every day since the last export,
+                                      or from the fixed start date on a first run
 export-safari-history 2026-07-29      one specific day
 export-safari-history upload          re-send anything the API has not acknowledged
 export-safari-history status          what is installed, granted, and pending
@@ -11,7 +12,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from safari_history import csv_export, safari_db
@@ -301,10 +302,14 @@ def command_export(args: argparse.Namespace) -> int:
     if args.day is not None:
         days = [args.day]
     else:
-        days = catch_up_days(
-            state.last_exported_date, local_today(), args.max_catchup_days
-        )
-        if len(days) == args.max_catchup_days and state.last_exported_date is not None:
+        # Read once: two calls either side of midnight would plan against one calendar
+        # and report against another.
+        today = local_today()
+        days = catch_up_days(state.last_exported_date, today, args.max_catchup_days)
+        # Capped exactly when the plan stops short of yesterday. Tested that way rather
+        # than `len(days) == max_catchup_days`, which also fires when the days that
+        # remain happen to land on the limit and there is nothing further back to get.
+        if days and days[-1] < today - timedelta(days=1):
             _log(
                 f"catching up {len(days)} days (the per-run limit) — run again, or pass "
                 "--max-catchup-days, to go further back"

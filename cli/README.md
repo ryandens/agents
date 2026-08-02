@@ -16,6 +16,13 @@ visited_at,title,url
 Run nightly by a LaunchAgent, it exports yesterday, catches up on any days the Mac was
 asleep or switched off for, and uploads each day to `POST /api/browser-history`.
 
+The first run, with no state yet, backfills from a fixed start date — `FIRST_EXPORT_DATE`
+in `src/safari_history/state.py`, currently **2026-07-01** — rather than from yesterday.
+That backfill obeys `--max-catchup-days` (default 30) like any other catch-up, so a span
+longer than the cap takes more than one run; the tool says so when it stops short.
+Days before the start date are still reachable by naming them: `export-safari-history
+2026-06-14`.
+
 - **Private Browsing is never exported.** Safari does not write those windows to the
   history database at all, so there is nothing here to filter and no way for this tool
   to leak them.

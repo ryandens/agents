@@ -12,7 +12,7 @@ import pytest
 
 from safari_history import cli, csv_export
 from safari_history.errors import UploadFailed
-from safari_history.state import State, local_today
+from safari_history.state import FIRST_EXPORT_DATE, State, local_today
 from tests.conftest import FakeSafari
 
 
@@ -28,6 +28,22 @@ def uploads(monkeypatch) -> list[dict]:
     monkeypatch.setattr(cli, "upload_visits", fake_upload)
     monkeypatch.setattr(cli, "mint_id_token", lambda key, audience: "test-token")
     return recorded
+
+
+@pytest.fixture
+def caught_up(workspace) -> date:
+    """Seeds the export mark so a bare run covers exactly yesterday, and returns it.
+
+    Most tests here are about what happens to a single day — it uploads, it retries, it
+    shows up in `status` — not about where a fresh install begins. Without this they
+    would each plan the whole backfill from FIRST_EXPORT_DATE and assert against a
+    span that grows by a day every day.
+    """
+    yesterday = local_today() - timedelta(days=1)
+    state = State.load(workspace["state_file"])
+    state.last_exported_date = yesterday - timedelta(days=1)
+    state.save()
+    return yesterday
 
 
 @pytest.fixture
@@ -101,14 +117,15 @@ def test_an_invalid_date_is_a_usage_error(workspace, capsys) -> None:
 # --- Catching up ---
 
 
-def test_the_bare_command_exports_yesterday(workspace, uploads) -> None:
-    yesterday = local_today() - timedelta(days=1)
-    workspace["safari"].add_visit(yesterday, time(9, 0), "https://example.com/")
+def test_the_bare_command_backfills_from_the_start_date(workspace, uploads) -> None:
+    """With no state, the catch-up begins at the fixed start date, oldest day first."""
+    workspace["safari"].add_visit(FIRST_EXPORT_DATE, time(9, 0), "https://example.com/")
 
     assert run(workspace) == 0
 
-    assert (workspace["export_dir"] / csv_export.file_name(yesterday)).exists()
-    assert State.load(workspace["state_file"]).last_exported_date == yesterday
+    written = workspace["export_dir"] / csv_export.file_name(FIRST_EXPORT_DATE)
+    assert "https://example.com/" in written.read_text()
+    assert min(csv_export.exported_days(workspace["export_dir"])) == FIRST_EXPORT_DATE
 
 
 def test_missed_days_are_caught_up(workspace, uploads) -> None:
@@ -132,16 +149,16 @@ def test_missed_days_are_caught_up(workspace, uploads) -> None:
     )
 
 
-def test_a_second_run_does_nothing(workspace, uploads) -> None:
+def test_a_second_run_does_nothing(workspace, uploads, caught_up) -> None:
     run(workspace)
     before = len(uploads)
     assert run(workspace) == 0
     assert len(uploads) == before
 
 
-def test_a_day_with_no_browsing_still_exports(workspace, uploads) -> None:
+def test_a_day_with_no_browsing_still_exports(workspace, uploads, caught_up) -> None:
     """Otherwise a quiet day blocks the high-water mark forever."""
-    yesterday = local_today() - timedelta(days=1)
+    yesterday = caught_up
     assert run(workspace) == 0
 
     written = workspace["export_dir"] / csv_export.file_name(yesterday)
@@ -152,8 +169,8 @@ def test_a_day_with_no_browsing_still_exports(workspace, uploads) -> None:
 # --- Uploading ---
 
 
-def test_an_export_uploads_what_it_wrote(workspace, uploads) -> None:
-    yesterday = local_today() - timedelta(days=1)
+def test_an_export_uploads_what_it_wrote(workspace, uploads, caught_up) -> None:
+    yesterday = caught_up
     workspace["safari"].add_visit(
         yesterday, time(9, 0), "https://example.com/", "Example"
     )
@@ -170,14 +187,16 @@ def test_an_export_uploads_what_it_wrote(workspace, uploads) -> None:
     ]
 
 
-def test_no_upload_writes_nothing_to_the_network(workspace, uploads) -> None:
+def test_no_upload_writes_nothing_to_the_network(workspace, uploads, caught_up) -> None:
     assert run(workspace, "export", "--no-upload", upload=False) == 0
     assert uploads == []
 
 
-def test_an_upload_failure_does_not_lose_the_export(workspace, monkeypatch) -> None:
+def test_an_upload_failure_does_not_lose_the_export(
+    workspace, monkeypatch, caught_up
+) -> None:
     """The CSV stays on disk and the day stays pending, ready for `upload`."""
-    yesterday = local_today() - timedelta(days=1)
+    yesterday = caught_up
     workspace["safari"].add_visit(yesterday, time(9, 0), "https://example.com/")
 
     monkeypatch.setattr(cli, "mint_id_token", lambda key, audience: "test-token")
@@ -195,9 +214,9 @@ def test_an_upload_failure_does_not_lose_the_export(workspace, monkeypatch) -> N
 
 
 def test_upload_retries_what_the_api_never_acknowledged(
-    workspace, uploads, monkeypatch
+    workspace, uploads, monkeypatch, caught_up
 ) -> None:
-    yesterday = local_today() - timedelta(days=1)
+    yesterday = caught_up
     workspace["safari"].add_visit(yesterday, time(9, 0), "https://example.com/")
 
     monkeypatch.setattr(
@@ -223,24 +242,24 @@ def test_upload_retries_what_the_api_never_acknowledged(
     assert len(recorded) == 1
 
 
-def test_upload_skips_days_the_api_already_has(workspace, uploads) -> None:
+def test_upload_skips_days_the_api_already_has(workspace, uploads, caught_up) -> None:
     run(workspace)
     before = len(uploads)
     assert run(workspace, "upload") == 0
     assert len(uploads) == before
 
 
-def test_a_named_day_is_always_re_uploaded(workspace, uploads) -> None:
+def test_a_named_day_is_always_re_uploaded(workspace, uploads, caught_up) -> None:
     """An explicit `upload 2026-07-29` is a repair, so it re-sends unconditionally."""
-    yesterday = local_today() - timedelta(days=1)
+    yesterday = caught_up
     run(workspace)
     before = len(uploads)
     assert run(workspace, "upload", yesterday.isoformat()) == 0
     assert len(uploads) == before + 1
 
 
-def test_a_re_exported_day_is_uploaded_again(workspace, uploads) -> None:
-    yesterday = local_today() - timedelta(days=1)
+def test_a_re_exported_day_is_uploaded_again(workspace, uploads, caught_up) -> None:
+    yesterday = caught_up
     run(workspace)
     before = len(uploads)
 
@@ -325,7 +344,7 @@ def test_status_names_the_interpreter_to_grant(workspace, capsys) -> None:
     assert str(Path(sys.executable).resolve()) in output
 
 
-def test_status_reports_pending_uploads(workspace, uploads, capsys) -> None:
+def test_status_reports_pending_uploads(workspace, uploads, capsys, caught_up) -> None:
     run(workspace, "export", "--no-upload", upload=False)
     capsys.readouterr()
     run(workspace, "status")
