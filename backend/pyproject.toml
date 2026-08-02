@@ -26,6 +26,11 @@ dependencies = [
     "boto3>=1.43.62",
     "fastapi>=0.141.1",
     "google-auth[requests]>=2.56.2",
+    # No import anywhere in this codebase, and it still has to be here: Starlette's
+    # SessionMiddleware imports it at module load to sign the session cookie, and
+    # Starlette declares it only under its `full` extra — which plain `fastapi` (as
+    # opposed to `fastapi[standard]`) does not pull in. Dropping it as "unused" turns
+    # main.py's import of SessionMiddleware into an ImportError at startup.
     "itsdangerous>=2.2.0",
     # [binary] ships a prebuilt libpq so the runtime image needs no C toolchain or
     # system libpq; [pool] is the connection pool db.py opens at startup.

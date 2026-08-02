@@ -1,14 +1,12 @@
 'use client';
 
-import { useChat } from '@ai-sdk/react';
-import { DefaultChatTransport } from 'ai';
 import { useEffect, useRef, useState } from 'react';
+
+import { useChat } from './useChat';
 
 export default function Chat() {
   // No auth header: the session rides an HttpOnly cookie the browser attaches itself.
-  const { messages, sendMessage, status } = useChat({
-    transport: new DefaultChatTransport({ api: '/api/chat' }),
-  });
+  const { messages, sendMessage, status, error } = useChat({ api: '/api/chat' });
 
   const [input, setInput] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -23,7 +21,7 @@ export default function Chat() {
     const text = input.trim();
     if (!text || isStreaming) return;
     setInput('');
-    sendMessage({ text });
+    void sendMessage({ text });
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
@@ -70,7 +68,7 @@ export default function Chat() {
                   key={prompt}
                   onClick={() => {
                     setInput('');
-                    sendMessage({ text: prompt });
+                    void sendMessage({ text: prompt });
                   }}
                   className="px-3 py-1.5 text-sm rounded-full bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 text-stone-700 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-700 transition-colors"
                 >
@@ -124,6 +122,15 @@ export default function Chat() {
               </span>
             </div>
           </div>
+        )}
+
+        {error && (
+          <p
+            role="alert"
+            className="text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 rounded-lg px-3 py-2"
+          >
+            {error}
+          </p>
         )}
 
         <div ref={bottomRef} />
