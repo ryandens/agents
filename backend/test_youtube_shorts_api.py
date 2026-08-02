@@ -188,3 +188,35 @@ def test_the_endpoint_requires_authentication(
     finally:
         main.app.dependency_overrides.clear()
     assert response.status_code == 401
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        {"days": 0},
+        {"days": MAX_DAYS + 1},
+        {"tz": "Mars/Olympus_Mons"},
+        {"tz": "../../etc/passwd"},
+    ],
+)
+def test_a_bad_request_without_credentials_is_still_only_a_401(
+    history_store: BrowserHistoryStore, params: dict
+) -> None:
+    """Authentication settles before anything looks at the query string.
+
+    Every one of these is a request the endpoint would refuse on its merits — 422 for
+    the ranges, 400 for the zones. An anonymous caller must not be able to tell which:
+    answering "that zone does not exist" to someone who never authenticated turns the
+    endpoint into a free validity oracle, and it would mean the handler body ran before
+    the credential was checked.
+
+    This is ordering, not a rule written anywhere in the handler, so it is exactly the
+    kind of property that a refactor moving validation into a dependency would break
+    silently.
+    """
+    main.app.dependency_overrides[main.visit_store] = lambda: history_store
+    try:
+        response = TestClient(main.app).get("/api/youtube-shorts/daily", params=params)
+    finally:
+        main.app.dependency_overrides.clear()
+    assert response.status_code == 401, response.text
