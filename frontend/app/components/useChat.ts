@@ -58,8 +58,10 @@ async function* readSSE(body: ReadableStream<Uint8Array>): AsyncGenerator<Chunk>
 
       buffer += decoder.decode(value, { stream: true });
 
-      let split: number;
-      while ((split = buffer.indexOf('\n\n')) !== -1) {
+      for (;;) {
+        const split = buffer.indexOf('\n\n');
+        if (split === -1) break;
+
         const frame = buffer.slice(0, split);
         buffer = buffer.slice(split + 2);
 
