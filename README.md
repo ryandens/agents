@@ -17,7 +17,7 @@ An AI-powered meal planning and kitchen management app. Chat with the agent to p
 | Database | PostgreSQL 17 — Aurora Serverless v2 in production, a container locally |
 | Database auth | RDS IAM tokens in production (no stored password); password locally |
 | Migrations | Alembic, hand-written SQL, applied as a separate deploy step |
-| Package managers | `uv` (backend), `npm` (frontend) |
+| Package managers | `uv` (backend, cli), `npm` (frontend) |
 | Task runner | `just` |
 
 ## Prerequisites
@@ -213,6 +213,40 @@ Items live in a single `pantry_items` table in Postgres — Aurora Serverless v2
 production, a container in development and in tests. `backend/db.py` owns the pool,
 `backend/migrations/` owns the schema, and `backend/pantry_store.py` is the only module
 that writes SQL — the API layer knows nothing about how any of it is stored.
+
+### Browser history (`/api/browser-history`)
+
+`POST /api/browser-history` accepts an array of `SiteVisit` objects — a `timestamp` (with
+a UTC offset), a `url`, and an optional `title` — and reports how many were `received`
+and how many were `stored`. Visits are deduplicated on (timestamp, url), so re-sending a
+day is a no-op and a client can retry without tracking what already landed.
+`GET /api/browser-history?limit=100` reads them back, newest first. Both require auth;
+the machine path is what the exporter below uses.
+
+Visits live in a `browser_visits` table alongside the pantry, created by migration
+`0002`. The deduplication is the table's primary key rather than a check in Python, so
+two exporters uploading the same day at once still store it once. That key is
+`(visited_at, url_digest)` and not `(visited_at, url)`: a URL may be 8 kB and a btree
+entry may not, so the digest — a generated column, `sha256(url::bytea)` — is what makes
+a long URL storable at all.
+
+### Safari history export (`cli/`)
+
+A macOS command line tool that exports Safari's browsing history to one CSV per day in
+`~/Safari-History-Exports/`, then posts it to the endpoint above as a service account. A
+LaunchAgent runs it nightly; it catches up on any days the Mac was asleep or switched
+off. Private Browsing is never exported — Safari does not record it.
+
+```sh
+just cli-install         # install into its own virtualenv, then grant Full Disk Access
+just cli-install-agent   # render the LaunchAgent plist and load it
+just cli-status          # configuration, permissions, pending work
+```
+
+Reading `~/Library/Safari/History.db` requires Full Disk Access, which is granted to the
+interpreter rather than to the script. That is why this installs into a dedicated
+virtualenv instead of running through `uvx` — see [cli/README.md](cli/README.md) for the
+full explanation, the LaunchAgent, and troubleshooting.
 
 ## Deployment
 
@@ -479,6 +513,10 @@ just db-bootstrap   # one-time: create the IAM-authenticated role in Aurora
 just frontend-test  # vitest
 just frontend-lint  # eslint
 just frontend-build # next build (type-check + compile)
+
+just cli-test       # pytest
+just cli-lint       # ruff check
+just cli-fmt        # ruff format --check
 ```
 
 ### How the tests use Postgres

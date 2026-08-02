@@ -901,7 +901,162 @@ frontend-test:
 # Run all frontend checks
 frontend-check: frontend-lint frontend-build frontend-test
 
+# ── CLI (Safari history export) ────────────────────────────────────────────────
+
+# Where the dedicated virtualenv lives. It is dedicated, rather than shared or run
+# through uvx, because Full Disk Access is granted to the interpreter behind the
+# console script — see cli/README.md. Anything else would extend that grant to every
+# script the same interpreter runs.
+cli_home := join(env('HOME'), "Library/Application Support/safari-history-export")
+cli_venv := join(cli_home, "venv")
+cli_bin := join(cli_venv, "bin/export-safari-history")
+cli_label := "com.ryandens.safari-history-export"
+cli_plist := join(env('HOME'), "Library/LaunchAgents", cli_label + ".plist")
+
+# Install the exporter into its own virtualenv, then print the path to grant FDA to
+cli-install:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    # Built by an interpreter matching cli/.python-version rather than by whatever
+    # `python3` happens to be on PATH. Without this the venv silently takes the system
+    # version, and the install fails several steps later on requires-python with a
+    # message that never mentions the pin.
+    version="$(cat cli/.python-version)"
+    if ! interpreter="$(uv python find "$version" 2>/dev/null)"; then
+        echo "error: no Python $version found — install one with 'uv python install $version'" >&2
+        exit 1
+    fi
+
+    # --copies gives the virtualenv its own copy of the python binary at a stable path
+    # nothing else uses. A symlinked venv would point Full Disk Access back at the
+    # shared interpreter it was created from, which is the thing this avoids.
+    "$interpreter" -m venv --copies "{{ cli_venv }}"
+    "{{ cli_venv }}/bin/pip" install --quiet --upgrade pip
+    "{{ cli_venv }}/bin/pip" install --quiet --upgrade ./cli
+
+    # The virtualenv holds a Full Disk Access grant; anything that can write into it
+    # can run code under that grant.
+    chmod -R go-rwx "{{ cli_home }}"
+
+    echo
+    echo "installed: {{ cli_bin }}"
+    echo
+    "{{ cli_bin }}" status || true
+    echo
+    echo "Grant Full Disk Access to the interpreter printed above:"
+    echo "  System Settings → Privacy & Security → Full Disk Access → + (⌘⇧G to paste)"
+
+# Show configuration, permissions, and pending work
+cli-status:
+    "{{ cli_bin }}" status
+
+# Export and upload; pass a date to do one specific day (e.g. `just cli-run 2026-07-29`)
+cli-run *args:
+    "{{ cli_bin }}" {{ args }}
+
+# Render the LaunchAgent plist with absolute paths and load it
+cli-install-agent:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    if [ ! -x "{{ cli_bin }}" ]; then
+        echo "error: {{ cli_bin }} is not installed — run 'just cli-install' first" >&2
+        exit 1
+    fi
+
+    api_url="${SAFARI_HISTORY_API_URL:-}"
+    credentials="${GOOGLE_APPLICATION_CREDENTIALS:-}"
+    for name in api_url credentials; do
+        if [ -z "${!name}" ]; then
+            echo "error: set SAFARI_HISTORY_API_URL and GOOGLE_APPLICATION_CREDENTIALS" >&2
+            echo "       (in .env, which just loads, or in the environment)" >&2
+            exit 1
+        fi
+    done
+
+    mkdir -p "$HOME/Library/LaunchAgents"
+    # launchd never expands ~ or reads a shell profile, so every path in the plist has
+    # to be absolute before it is written.
+    #
+    # Rendered by safari_history.launch_agent rather than sed: sed reads `&` in a
+    # replacement as "the text that matched", so an API URL with a query string would
+    # write the __API_URL__ placeholder back into the plist instead of the URL. See that
+    # module for the rest of the reasoning.
+    rendered="$(mktemp)"
+    trap 'rm -f "$rendered"' EXIT
+    AGENT_HOME="$HOME" AGENT_API_URL="$api_url" AGENT_CREDENTIALS="$credentials" \
+        "{{ cli_venv }}/bin/python" -m safari_history.launch_agent \
+        cli/launchd/{{ cli_label }}.plist > "$rendered"
+
+    # Catches a malformed plist here, with a line number, rather than as launchctl's
+    # much vaguer "Bootstrap failed: 5: Input/output error".
+    plutil -lint "$rendered" >/dev/null
+    mv "$rendered" "{{ cli_plist }}"
+    trap - EXIT
+
+    # bootout first so re-running this picks up an edited plist; ignore "not loaded".
+    launchctl bootout "gui/$(id -u)/{{ cli_label }}" 2>/dev/null || true
+    launchctl bootstrap "gui/$(id -u)" "{{ cli_plist }}"
+
+    echo "loaded {{ cli_label }} — runs daily at 00:15"
+    echo "  just cli-agent-run     run it now"
+    echo "  just cli-logs          watch the log"
+
+# Run the LaunchAgent job now, the way launchd would
+cli-agent-run:
+    launchctl kickstart -p "gui/$(id -u)/{{ cli_label }}"
+
+# Show the LaunchAgent's state and last exit code
+cli-agent-status:
+    launchctl print "gui/$(id -u)/{{ cli_label }}"
+
+# Follow the exporter's logs
+cli-logs:
+    tail -f "$HOME/Library/Logs/safari-history-export.log" \
+            "$HOME/Library/Logs/safari-history-export.error.log"
+
+# Unload the LaunchAgent, leaving the install in place
+cli-uninstall-agent:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    launchctl bootout "gui/$(id -u)/{{ cli_label }}" 2>/dev/null || true
+    rm -f "{{ cli_plist }}"
+    echo "unloaded {{ cli_label }}"
+
+# Remove the LaunchAgent, the virtualenv, and the state (exported CSVs are kept)
+cli-uninstall: cli-uninstall-agent
+    #!/usr/bin/env bash
+    set -euo pipefail
+    rm -rf "{{ cli_home }}"
+    rm -f "$HOME/Library/Logs/safari-history-export.log" \
+          "$HOME/Library/Logs/safari-history-export.error.log"
+    echo "removed {{ cli_home }}"
+    echo
+    echo "Still to do by hand:"
+    echo "  - remove the Full Disk Access entry (System Settings → Privacy & Security)"
+    echo "  - delete ~/Safari-History-Exports if you no longer want the CSVs"
+
+# Install cli development dependencies
+cli-dev-install:
+    uv sync --dev --project cli
+
+# Run cli linter
+cli-lint:
+    uv run --project cli ruff check cli
+
+# Run cli format check
+cli-fmt:
+    uv run --project cli ruff format --check cli
+
+# Run cli tests
+cli-test:
+    uv run --project cli pytest cli
+
+# Run all cli checks
+cli-check: cli-lint cli-fmt cli-test
+
 # ── CI ─────────────────────────────────────────────────────────────────────────
 
 # Run all checks (mirrors CI)
-check: backend-check frontend-check
+check: backend-check frontend-check cli-check

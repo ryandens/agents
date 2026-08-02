@@ -17,11 +17,15 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from psycopg_pool import ConnectionPool
 from pydantic import BaseModel
+from starlette.datastructures import Headers
 from starlette.middleware.sessions import SessionMiddleware
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 import auth
 import db
 from auth import authenticated
+from browser_history import SiteVisit
+from browser_history_store import BrowserHistoryStore
 from pantry import PantryItem, PantryItemCreate, PantryItemUpdate, StorageLocation
 from pantry_store import PantryStore
 
@@ -64,11 +68,12 @@ STATIC_DIR = (
 # importing this module — which the tests do — never reaches for a database.
 pool: ConnectionPool | None = None
 pantry_store: PantryStore | None = None
+browser_history_store: BrowserHistoryStore | None = None
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
-    global pool, pantry_store
+    global pool, pantry_store, browser_history_store
 
     pool = db.open_pool()
     # No schema creation here on purpose. Migrations are a separate deploy step run by a
@@ -76,11 +81,13 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     # not create a table even if it tried. A missing table surfaces as a failing query
     # rather than being silently papered over at startup.
     pantry_store = PantryStore(pool)
+    browser_history_store = BrowserHistoryStore(pool)
     logger.info("connected to the pantry database")
     try:
         yield
     finally:
         pantry_store = None
+        browser_history_store = None
         pool.close()
         pool = None
 
@@ -96,7 +103,69 @@ def store() -> PantryStore:
     return pantry_store
 
 
+def visit_store() -> BrowserHistoryStore:
+    """The browser history store, on the same terms as store() above."""
+    if browser_history_store is None:
+        raise HTTPException(
+            status_code=503, detail="Browser history storage is unavailable"
+        )
+    return browser_history_store
+
+
 Pantry = Annotated[PantryStore, Depends(store)]
+History = Annotated[BrowserHistoryStore, Depends(visit_store)]
+
+# A day of heavy browsing is a few thousand visits, so this bounds one request at
+# roughly a week of it. The exporter chunks well below the limit.
+#
+# This is an API contract, NOT a memory bound: it is checked in the handler, which runs
+# only after FastAPI has already read the body and built every SiteVisit in the list. By
+# then the allocation has happened. MAX_REQUEST_BYTES below is what actually bounds it.
+MAX_VISITS_PER_REQUEST = 10_000
+
+# The real limit on what one request can allocate, enforced before the body is read.
+#
+# There is nowhere else to put it: the app sits behind `tailscale serve` on loopback,
+# with no ALB and no nginx, so the usual advice to cap body size at the proxy has no
+# proxy to apply to. 16 MiB is far above a legitimate batch — 500 visits at a few
+# hundred bytes each is well under 1 MiB — and far below what would trouble the host.
+MAX_REQUEST_BYTES = 16 * 1024 * 1024
+
+
+class LimitRequestBody:
+    """Reject an over-large request before anything reads its body.
+
+    Plain ASGI rather than BaseHTTPMiddleware: the latter buffers responses, which would
+    break the SSE stream /api/chat returns.
+
+    Enforced on Content-Length, which every real client sends — requests, httpx and
+    urllib all set it for a bytes body. A chunked upload without the header slips past
+    this and is bounded only by MAX_VISITS_PER_REQUEST after parsing; closing that would
+    mean counting bytes as they arrive and abandoning a partly-read request, which is a
+    lot of machinery for a route only authenticated callers can reach.
+    """
+
+    def __init__(self, app: ASGIApp, max_bytes: int) -> None:
+        self.app = app
+        self.max_bytes = max_bytes
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] == "http":
+            declared = Headers(scope=scope).get("content-length", "")
+            if declared.isdigit() and int(declared) > self.max_bytes:
+                response = JSONResponse(
+                    status_code=413,
+                    content={
+                        "detail": (
+                            f"request body is {declared} bytes, over the "
+                            f"{self.max_bytes} byte limit; send it in smaller batches"
+                        )
+                    },
+                )
+                await response(scope, receive, send)
+                return
+        await self.app(scope, receive, send)
+
 
 app = FastAPI(lifespan=lifespan)
 # Production is same-origin, so CORS only matters for `next dev` talking to a backend
@@ -119,6 +188,10 @@ app.add_middleware(
     same_site="lax",  # "strict" would drop the cookie on the redirect back from Google
     https_only=auth.cookie_secure(),
 )
+# Added last, so it is the outermost layer and runs before all of the above: an
+# oversized request should be turned away before anything decodes a session cookie or
+# reads a byte of the body.
+app.add_middleware(LimitRequestBody, max_bytes=MAX_REQUEST_BYTES)
 
 app.include_router(auth.router)
 
@@ -252,6 +325,34 @@ def update_pantry_item(
 def delete_pantry_item(item_id: UUID, _: AuthenticatedUser, pantry: Pantry):
     if not pantry.delete_item(item_id):
         raise HTTPException(status_code=404, detail="Item not found")
+
+
+@app.post("/api/browser-history", status_code=201)
+def record_browser_history(
+    visits: list[SiteVisit], _: AuthenticatedUser, history: History
+) -> dict:
+    """Accept a batch of browser visits.
+
+    Reports `received` and `stored` separately rather than just succeeding, because the
+    store drops duplicates silently and a client re-sending a day it already uploaded
+    deserves to be able to tell that apart from a day that genuinely had no new visits.
+    """
+    if len(visits) > MAX_VISITS_PER_REQUEST:
+        raise HTTPException(
+            status_code=413,
+            detail=(
+                f"too many visits in one request: {len(visits)} > "
+                f"{MAX_VISITS_PER_REQUEST}; send them in smaller batches"
+            ),
+        )
+    stored = history.record_visits(visits)
+    return {"received": len(visits), "stored": stored}
+
+
+@app.get("/api/browser-history", response_model=list[SiteVisit])
+def list_browser_history(_: AuthenticatedUser, history: History, limit: int = 100):
+    """Recent visits, newest first — enough to confirm an upload actually landed."""
+    return history.list_visits(limit=max(0, min(limit, 1000)))
 
 
 # Mounted last so it only sees paths no API route claimed. html=True resolves

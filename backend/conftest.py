@@ -21,6 +21,7 @@ from psycopg_pool import ConnectionPool
 from testcontainers.community.postgres import PostgresContainer
 
 import db
+from browser_history_store import BrowserHistoryStore
 from pantry_store import PantryStore
 
 BACKEND_DIR = Path(__file__).parent
@@ -79,15 +80,20 @@ def pool(migrated_database: str) -> Iterator[ConnectionPool]:
 
 @pytest.fixture
 def clean_database(pool: ConnectionPool) -> ConnectionPool:
-    """Empty the pantry before each test, so tests do not see each other's rows."""
+    """Empty every table before each test, so tests do not see each other's rows."""
     with pool.connection() as conn:
-        conn.execute("TRUNCATE pantry_items")
+        conn.execute("TRUNCATE pantry_items, browser_visits")
     return pool
 
 
 @pytest.fixture
 def store(clean_database: ConnectionPool) -> PantryStore:
     return PantryStore(clean_database)
+
+
+@pytest.fixture
+def history_store(clean_database: ConnectionPool) -> BrowserHistoryStore:
+    return BrowserHistoryStore(clean_database)
 
 
 @pytest.fixture

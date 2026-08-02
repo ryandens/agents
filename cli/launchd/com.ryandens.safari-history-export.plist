@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Template. launchd does not expand ~ or read your shell environment, so the
+  placeholders below are replaced with absolute paths at install time by
+  `just cli-install-agent`.
+
+  The program is the dedicated virtualenv's console script, and it is what launchd
+  execs directly. Full Disk Access must be granted to the interpreter behind it —
+  .../venv/bin/python3.x — which `export-safari-history status` prints.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.ryandens.safari-history-export</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>__HOME__/Library/Application Support/safari-history-export/venv/bin/export-safari-history</string>
+    </array>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>SAFARI_HISTORY_API_URL</key>
+        <string>__API_URL__</string>
+        <key>GOOGLE_APPLICATION_CREDENTIALS</key>
+        <string>__CREDENTIALS__</string>
+    </dict>
+
+    <!--
+      00:15 rather than 00:00: the exporter only ever reads days that have finished, and
+      a quarter past leaves room for the clock and for anything else scheduled on the
+      hour. A missed run — asleep or powered off — is executed once when the machine
+      comes back, and the catch-up logic covers however many days were skipped.
+    -->
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>0</integer>
+        <key>Minute</key>
+        <integer>15</integer>
+    </dict>
+
+    <key>StandardOutPath</key>
+    <string>__HOME__/Library/Logs/safari-history-export.log</string>
+    <key>StandardErrorPath</key>
+    <string>__HOME__/Library/Logs/safari-history-export.error.log</string>
+
+    <!-- Nothing here is urgent, and it runs while the machine may be doing something
+         the user cares about. Background gets it throttled I/O and low CPU priority. -->
+    <key>ProcessType</key>
+    <string>Background</string>
+    <key>LowPriorityIO</key>
+    <true/>
+    <key>Nice</key>
+    <integer>5</integer>
+
+    <!-- launchd coalesces calendar events missed while the machine was *asleep*, but
+         events missed while it was powered off are simply skipped until the next
+         occurrence. A Mac that is shut down overnight would therefore never reach
+         00:15, and catch-up cannot help: catch-up only runs once the tool does.
+         RunAtLoad closes that gap by running at login too.
+
+         The cost is a run per login, which is cheap and idempotent — the high-water
+         mark means an already-exported day is a no-op, and re-uploading a day the API
+         already has is deduplicated server-side. -->
+    <key>RunAtLoad</key>
+    <true/>
+</dict>
+</plist>
