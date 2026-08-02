@@ -898,10 +898,20 @@ cli-install:
     #!/usr/bin/env bash
     set -euo pipefail
 
+    # Built by an interpreter matching cli/.python-version rather than by whatever
+    # `python3` happens to be on PATH. Without this the venv silently takes the system
+    # version, and the install fails several steps later on requires-python with a
+    # message that never mentions the pin.
+    version="$(cat cli/.python-version)"
+    if ! interpreter="$(uv python find "$version" 2>/dev/null)"; then
+        echo "error: no Python $version found — install one with 'uv python install $version'" >&2
+        exit 1
+    fi
+
     # --copies gives the virtualenv its own copy of the python binary at a stable path
     # nothing else uses. A symlinked venv would point Full Disk Access back at the
     # shared interpreter it was created from, which is the thing this avoids.
-    python3 -m venv --copies "{{ cli_venv }}"
+    "$interpreter" -m venv --copies "{{ cli_venv }}"
     "{{ cli_venv }}/bin/pip" install --quiet --upgrade pip
     "{{ cli_venv }}/bin/pip" install --quiet --upgrade ./cli
 

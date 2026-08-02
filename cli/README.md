@@ -59,7 +59,7 @@ pipeline behind the network.
 
 ## Install
 
-Requires macOS and Python 3.13+. From the repo root:
+Requires macOS and Python 3.14+, matching the backend. From the repo root:
 
 ```sh
 just cli-install
@@ -114,7 +114,7 @@ Grant it to this tool's own interpreter:
 
 ```sh
 "$HOME/Library/Application Support/safari-history-export/venv/bin/export-safari-history" status
-# interpreter (needs Full Disk Access): /Users/you/Library/Application Support/safari-history-export/venv/bin/python3.13
+# interpreter (needs Full Disk Access): /Users/you/Library/Application Support/safari-history-export/venv/bin/python3.14
 ```
 
 1. **System Settings → Privacy & Security → Full Disk Access**
@@ -127,7 +127,7 @@ a shared interpreter instead of this tool's own.
 ### Why a dedicated virtualenv
 
 Full Disk Access on an interpreter extends to every script that interpreter runs. Granted
-to `/opt/homebrew/bin/python3.13`, `/usr/bin/python3`, or a `uvx` cache binary, any
+to `/opt/homebrew/bin/python3.14`, `/usr/bin/python3`, or a `uvx` cache binary, any
 Python script anyone runs — including one downloaded and executed by mistake — inherits
 the ability to read every file on the machine, silently. That is the same objection as
 granting it to `/bin/zsh`.

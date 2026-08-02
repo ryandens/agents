@@ -5,7 +5,7 @@ description = "Export Safari browsing history to daily CSVs and post it to the a
 readme = "README.md"
 # Same minor-granularity floor as backend/pyproject.toml, for the same reason: a
 # patch-level floor breaks Dependabot's uv updater. See renovate.json.
-requires-python = ">=3.13"
+requires-python = ">=3.14"
 dependencies = [
     "google-auth[requests]>=2.56.2",
     "requests>=2.34.2",

@@ -65,7 +65,7 @@ class State:
                         visits=int(entry.get("visits", 0)),
                         uploaded_at=str(entry.get("uploaded_at", "")),
                     )
-                except (AttributeError, TypeError, ValueError):
+                except AttributeError, TypeError, ValueError:
                     # One unreadable ledger entry means that day gets uploaded again.
                     # The API deduplicates, so the cost is a wasted request rather than
                     # duplicated data — much better than refusing to run at all.

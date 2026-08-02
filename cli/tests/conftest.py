@@ -1,8 +1,21 @@
 """A stand-in for Safari's history database.
 
-The real one cannot be used in tests: it needs Full Disk Access, it differs per machine,
-and CI has no Safari at all. What these tests do need is the part of the schema the
-query touches and the timestamp convention, both reproduced here.
+Not a mock — a *real* SQLite database, the same engine Safari uses, holding synthetic
+rows under a trimmed copy of Safari's schema. Only the contents and the unused columns
+are invented. Every query, the CFAbsoluteTime conversion, the day-boundary arithmetic
+and the WAL snapshot all run for real against it. This mirrors backend/conftest.py,
+which starts a real Postgres for the same reason: the code under test is mostly SQL, so
+a fake engine would only test the fake.
+
+It exists because the real database cannot be reached from a test. Reading
+~/Library/Safari/History.db needs Full Disk Access, its contents differ per machine and
+per run, and CI is Linux with no Safari at all. Without this the whole of safari_db.py —
+the epoch conversion, the DST-aware day bounds, the snapshot of a live WAL database —
+would have no coverage, and those are the parts most worth having it.
+
+The honest limitation: the schema below is a copy, so if Safari ever renames a column
+these tests keep passing while the real export breaks. Nothing here can catch that; the
+first real run would, because the query would fail loudly rather than return bad rows.
 """
 
 from __future__ import annotations
