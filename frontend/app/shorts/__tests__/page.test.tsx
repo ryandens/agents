@@ -169,7 +169,9 @@ describe("ShortsPage", () => {
 
   it("reports a failure and offers to try again", async () => {
     const user = userEvent.setup();
-    const fetch = vi.fn(() => Promise.resolve({ ok: false, status: 503, json: () => {} }));
+    // No `json` on the response: the page throws on !ok before it reads a body, and a
+    // stub method here would suggest it is reached.
+    const fetch = vi.fn(() => Promise.resolve({ ok: false, status: 503 }));
     vi.stubGlobal("fetch", fetch);
     render(<ShortsPage />);
 
@@ -187,15 +189,20 @@ describe("ShortsPage", () => {
     // No skeleton and no layout jump on a range change — the columns and the tiles
     // stay where they are and fade rather than disappearing.
     const user = userEvent.setup();
-    let release: (value: unknown) => void = () => {};
+    // A second response held open, so the assertions below run while the refetch is
+    // still in flight. The executor runs synchronously, so `release` is assigned by
+    // the time anything can call it — hence the definite assignment rather than a
+    // placeholder function standing in until then.
+    let release!: (response: unknown) => void;
+    const pending = new Promise((resolve) => {
+      release = resolve;
+    });
     vi.stubGlobal(
       "fetch",
       vi
         .fn()
         .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve(WEEK) })
-        .mockImplementationOnce(
-          () => new Promise((resolve) => (release = resolve))
-        )
+        .mockImplementationOnce(() => pending)
     );
     render(<ShortsPage />);
     const chart = await screen.findByTestId("chart");
