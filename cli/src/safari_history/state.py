@@ -26,6 +26,13 @@ DEFAULT_STATE_FILE = (
     / "state.json"
 )
 
+# The first day a run with no state will export. Fixed rather than "yesterday" so that a
+# fresh install backfills a known window instead of only last night, and fixed rather
+# than "everything Safari remembers" so the backfill has a floor that does not grow every
+# time the tool is reinstalled. Days before this are still reachable by naming them:
+# `export-safari-history 2026-06-14`.
+FIRST_EXPORT_DATE = date(2026, 7, 1)
+
 
 @dataclass
 class Upload:
@@ -82,8 +89,9 @@ class State:
             raise ExportFailed(
                 f"the state file {path} could not be read: {exc}\n"
                 "\n"
-                "Delete it to start over — the next run will then export yesterday "
-                "only, and re-upload any CSV it no longer has a record of."
+                f"Delete it to start over — the next run will then backfill from "
+                f"{FIRST_EXPORT_DATE.isoformat()}, and re-upload any CSV it no longer "
+                "has a record of."
             ) from exc
 
     def save(self) -> None:
@@ -164,16 +172,20 @@ def catch_up_days(last_exported: date | None, today: date, max_days: int) -> lis
     """
     yesterday = today - timedelta(days=1)
 
-    # No state: export yesterday alone. The alternative — everything Safari still
-    # remembers, up to a year — is a surprising amount of work and network traffic to
-    # trigger by installing something.
-    if last_exported is None:
-        return [yesterday]
+    # No state: begin the backfill at FIRST_EXPORT_DATE. With state, resume the day after
+    # the high-water mark — which may be earlier than FIRST_EXPORT_DATE if days before it
+    # were exported by name, and that is left alone rather than clamped forward, since
+    # skipping back over an already-exported day would leave a permanent hole.
+    first_missing = (
+        FIRST_EXPORT_DATE
+        if last_exported is None
+        else last_exported + timedelta(days=1)
+    )
 
-    if last_exported >= yesterday:
+    # Also covers a first run before FIRST_EXPORT_DATE has any complete day behind it.
+    if first_missing > yesterday:
         return []
 
-    first_missing = last_exported + timedelta(days=1)
     # A machine that was off for months would otherwise try to export and upload every
     # one of those days in one run. This bounds any single run; the next one picks up
     # where this stopped.
