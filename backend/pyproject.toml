@@ -25,7 +25,7 @@ dependencies = [
     # db.aws_region() bridges that difference. See test_db.py.
     "boto3>=1.43.62",
     "fastapi>=0.141.1",
-    "google-auth[requests]>=2.56.2",
+    "google-auth[requests]>=2.56.3",
     "itsdangerous>=2.2.0",
     # [binary] ships a prebuilt libpq so the runtime image needs no C toolchain or
     # system libpq; [pool] is the connection pool db.py opens at startup.
