@@ -23,7 +23,7 @@ dependencies = [
     # lockstep, so this pins botocore 1.43.62 too. That matters more than usual here:
     # botocore's own region resolution reads AWS_DEFAULT_REGION and not AWS_REGION, and
     # db.aws_region() bridges that difference. See test_db.py.
-    "boto3>=1.43.62",
+    "boto3>=1.43.78",
     "fastapi>=0.141.1",
     "google-auth[requests]>=2.56.3",
     "itsdangerous>=2.2.0",
