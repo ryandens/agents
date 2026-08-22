@@ -30,7 +30,7 @@ dependencies = [
     # [binary] ships a prebuilt libpq so the runtime image needs no C toolchain or
     # system libpq; [pool] is the connection pool db.py opens at startup.
     "psycopg[binary,pool]>=3.3.4",
-    "python-dotenv>=1.2.2",
+    "python-dotenv>=1.2.3",
     "requests>=2.34.2",
     # The IANA time zone database, as a package rather than as files on the host.
     #
