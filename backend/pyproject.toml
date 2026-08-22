@@ -15,7 +15,7 @@ dependencies = [
     # models here, so `alembic revision --autogenerate` does not apply. Migrations are
     # hand-written SQL in backend/migrations/versions/.
     "alembic>=1.19.1",
-    "anthropic>=0.125.0",
+    "anthropic>=1.0.0",
     # Mints the RDS IAM auth token the app connects with, signed locally from the
     # instance profile's credentials. The only reason an AWS SDK is in the runtime image.
     #
