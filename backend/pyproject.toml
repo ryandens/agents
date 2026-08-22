@@ -42,7 +42,7 @@ dependencies = [
     # 500 for every zone except UTC, and nothing short of running the image would say
     # so. test_youtube_shorts.py asserts the package is installed for that reason.
     "tzdata>=2026.3",
-    "uvicorn[standard]>=0.52.1",
+    "uvicorn[standard]>=0.52.4",
 ]
 
 [tool.ruff]
