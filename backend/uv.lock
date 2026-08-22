@@ -33,7 +33,7 @@ dev = [
 requires-dist = [
     { name = "alembic", specifier = ">=1.19.1" },
     { name = "anthropic", specifier = ">=0.125.0" },
-    { name = "boto3", specifier = ">=1.43.62" },
+    { name = "boto3", specifier = ">=1.43.78" },
     { name = "fastapi", specifier = ">=0.141.1" },
     { name = "google-auth", extras = ["requests"], specifier = ">=2.56.3" },
     { name = "itsdangerous", specifier = ">=2.2.0" },
