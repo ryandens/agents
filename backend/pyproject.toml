@@ -14,7 +14,7 @@ dependencies = [
     # layer Alembic needs — the app itself stays on raw psycopg, and there are no ORM
     # models here, so `alembic revision --autogenerate` does not apply. Migrations are
     # hand-written SQL in backend/migrations/versions/.
-    "alembic>=1.18.5",
+    "alembic>=1.19.1",
     "anthropic>=0.120.2",
     # Mints the RDS IAM auth token the app connects with, signed locally from the
     # instance profile's credentials. The only reason an AWS SDK is in the runtime image.
