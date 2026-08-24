@@ -133,8 +133,14 @@ def open_pool(
         connection_class=IamConnection if iam_auth else psycopg.Connection,
         # Rows come back as dicts so pydantic can validate them straight into models.
         kwargs={"row_factory": dict_row},
-        min_size=1,
+        # Aurora can only auto-pause after every client connection closes. Keeping even
+        # one warm connection here pins Serverless v2 at 0.5 ACU around the clock.
+        min_size=0,
         max_size=8,
+        # Shrink an idle pool back to zero promptly so Aurora's own auto-pause timer can
+        # start. The next request pays the documented cold-start latency instead of the
+        # household app paying for an always-on database.
+        max_idle=60.0,
         # Hands out a connection only after checking it is still alive. Long-lived
         # pooled connections otherwise survive an Aurora failover or scale-down event
         # as sockets that error on first use. Under IAM auth it matters more: a
