@@ -117,6 +117,8 @@ def test_pool_uses_iam_connections_when_asked(database_url: str, monkeypatch) ->
     pool = db.open_pool(database_url, timeout=15.0, iam_auth=True)
     try:
         assert pool.connection_class is db.IamConnection
+        assert pool.min_size == 0
+        assert pool.max_idle == 60.0
         with pool.connection() as conn:
             # dict_row, because open_pool configures it — unlike the direct connects above.
             assert conn.execute("SELECT 1 AS ok").fetchone()["ok"] == 1

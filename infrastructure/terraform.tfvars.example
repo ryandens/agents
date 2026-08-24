@@ -19,8 +19,8 @@ allowed_emails = ["you@example.com"]
 # real cost/latency trade-off behind it.
 #
 # db_min_capacity = 0     # 0 pauses the cluster when idle (cheap, ~15s to resume)
-# db_max_capacity = 4
-# db_seconds_until_auto_pause = 3600
+# db_max_capacity = 2
+# db_seconds_until_auto_pause = 300
 # db_engine_version = "17.4"
 #
 # The app authenticates with an RDS IAM token, so there is no database password to set

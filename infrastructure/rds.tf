@@ -6,6 +6,8 @@
 # idle stretch, which is why db.py opens its pool with a generous timeout and why the
 # boot health check in user_data.sh polls for two minutes rather than a few seconds.
 #
+# The application pool must also be allowed to shrink to zero connections; otherwise
+# one idle client pins Aurora at its active 0.5-ACU floor and this setting cannot pause.
 # Set db_min_capacity above 0 to trade the money back for a cluster that is always warm.
 
 resource "aws_db_subnet_group" "main" {

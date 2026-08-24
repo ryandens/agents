@@ -230,7 +230,7 @@ variable "db_min_capacity" {
 variable "db_max_capacity" {
   description = "Aurora Serverless v2 ceiling, in ACUs. The workload is a handful of single-row queries, so this is a runaway-cost backstop rather than a target."
   type        = number
-  default     = 4
+  default     = 2
 
   validation {
     condition     = var.db_max_capacity >= 1 && var.db_max_capacity <= 256 && var.db_max_capacity >= var.db_min_capacity && var.db_max_capacity * 2 == floor(var.db_max_capacity * 2)
@@ -239,9 +239,9 @@ variable "db_max_capacity" {
 }
 
 variable "db_seconds_until_auto_pause" {
-  description = "How long the cluster stays idle before pausing, when db_min_capacity is 0. Ignored otherwise. An hour keeps a day's normal use on a warm cluster while still pausing overnight."
+  description = "How long the cluster stays idle before pausing, when db_min_capacity is 0. Ignored otherwise. Five minutes keeps sporadic household use from turning into hours of idle compute."
   type        = number
-  default     = 3600
+  default     = 300
 
   validation {
     condition     = var.db_seconds_until_auto_pause >= 300 && var.db_seconds_until_auto_pause <= 86400
