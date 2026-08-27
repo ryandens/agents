@@ -85,7 +85,7 @@ jobs:
       # release tags; see the customManager in renovate.json.
       - name: Install datadog-static-analyzer
         env:
-          DDSA_VERSION: 0.9.1
+          DDSA_VERSION: 0.9.3
         run: |
           case "${{ runner.arch }}" in
             X64)   DDSA_ARCH="x86_64" ;;
