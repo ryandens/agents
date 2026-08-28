@@ -1,5 +1,8 @@
 # cli — Safari history export
 
+Operational and design findings from production debugging are collected in
+[`LESSONS_LEARNED.md`](LESSONS_LEARNED.md).
+
 Exports Safari's browsing history to one CSV per day and posts it to the agents API as a
 Google service account.
 
