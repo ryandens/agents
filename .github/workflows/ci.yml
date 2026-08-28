@@ -73,11 +73,17 @@ jobs:
   # uploads results, which needs DD_API_KEY/DD_APP_KEY org credentials this repo does not
   # have. The analyzer binary ships its own rulesets and needs no credentials to scan, so
   # the install logic below is lifted from that action's `Set up environment` and
-  # `Install datadog-static-analyzer` steps and the upload is dropped.
+  # `Install datadog-static-analyzer` steps. Results go to GitHub code scanning instead.
   static-analysis:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          # PR scans need both sides of the diff. Pushes to main still scan the full tree.
+          fetch-depth: 0
 
       # Pinned rather than the action's `releases/latest`, which silently changes the
       # analyzer and its bundled rulesets underneath us — a new ruleset could turn CI
@@ -114,16 +120,46 @@ jobs:
           unzip -q "$tmpdir/$filename" -d "$HOME/.local/bin"
           chmod +x "$HOME/.local/bin/datadog-static-analyzer"
 
+      # Datadog's native --diff-aware mode requires Datadog credentials and previously
+      # uploaded Datadog results. This repo publishes to GitHub instead, so build a scan
+      # tree containing only added or modified PR files while preserving their paths.
+      - name: Prepare pull request diff
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          scan_dir="$RUNNER_TEMP/datadog-scan"
+          mkdir -p "$scan_dir"
+          cp code-security.datadog.yaml "$scan_dir/"
+
+          while IFS= read -r -d '' changed_file; do
+            if [ -f "$changed_file" ]; then
+              cp --parents -- "$changed_file" "$scan_dir/"
+            fi
+          done < <(git diff --name-only --diff-filter=ACMRTUXB -z "$BASE_SHA" "$HEAD_SHA")
+
+          echo "DDSA_INPUT=$scan_dir" >> "$GITHUB_ENV"
+
       # Rules and path exclusions come from code-security.datadog.yaml at the repo root,
       # so this run matches what the same binary reports locally.
       - name: Run static analysis
         run: |
           datadog-static-analyzer \
-            -i "$GITHUB_WORKSPACE" \
+            -i "${DDSA_INPUT:-$GITHUB_WORKSPACE}" \
             -o "$RUNNER_TEMP/results.sarif" \
             -f sarif \
             --print-violations \
             --fail-on-any-violation error,warning
+
+      # Run even when the analyzer reports violations (and therefore exits nonzero) so
+      # those findings are still available in pull requests and the Security tab.
+      - name: Upload results to GitHub code scanning
+        if: ${{ !cancelled() }}
+        uses: github/codeql-action/upload-sarif@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
+        with:
+          sarif_file: ${{ runner.temp }}/results.sarif
+          category: datadog-static-analyzer
 
   # Builds the same image the release workflow ships and checks that one container
   # really does serve the frontend at / and the API under /api, backed by a Postgres
