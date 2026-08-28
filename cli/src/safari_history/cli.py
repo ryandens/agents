@@ -15,7 +15,7 @@ import sys
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
-from safari_history import csv_export, safari_db
+from safari_history import csv_export, safari_app, safari_db
 from safari_history.errors import ConfigurationError, DatabaseStale, SafariHistoryError
 from safari_history.state import (
     DEFAULT_STATE_FILE,
@@ -317,6 +317,15 @@ def command_export(args: argparse.Namespace) -> int:
 
     if not days and not args.quiet:
         _log("nothing to export — already up to date")
+
+    if days:
+        try:
+            launched = safari_app.refresh_history(args.database)
+        except SafariHistoryError as exc:
+            _log_error(exc.message)
+            return exc.exit_code
+        if launched and not args.quiet:
+            _log("opened Safari in the background to refresh history, then closed it")
 
     exported: list[date] = []
 

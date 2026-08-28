@@ -127,6 +127,10 @@ class DatabaseStale(DatabaseUnreadable):
         )
 
 
+class SafariRefreshFailed(DatabaseUnreadable):
+    """Safari could not be run long enough to refresh its history database."""
+
+
 class ExportFailed(SafariHistoryError):
     exit_code = 1
 

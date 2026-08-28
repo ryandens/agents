@@ -48,7 +48,8 @@ def caught_up(workspace) -> date:
 
 
 @pytest.fixture
-def workspace(tmp_path: Path, safari: FakeSafari) -> dict:
+def workspace(tmp_path: Path, safari: FakeSafari, monkeypatch) -> dict:
+    monkeypatch.setattr(cli.safari_app, "refresh_history", lambda database: False)
     key = tmp_path / "service-account.json"
     key.write_text("{}")
     return {

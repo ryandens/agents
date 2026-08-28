@@ -35,11 +35,12 @@ Days before the start date are still reachable by naming them: `export-safari-hi
 ```
 launchd (00:15 daily)
   └── ~/Library/Application Support/safari-history-export/venv/bin/export-safari-history
-        ├── 1. copy  ~/Library/Safari/History.db (+ -wal, -shm) to a temp dir   ← needs FDA
-        ├── 2. query history_visits ⋈ history_items for one local day
-        ├── 3. write ~/Safari-History-Exports/Safari History - YYYY-MM-DD.csv   (atomic)
-        ├── 4. mint a Google ID token from the service account key
-        └── 5. POST the visits to /api/browser-history
+        ├── 1. briefly open Safari in the background if it is not already running
+        ├── 2. copy  ~/Library/Safari/History.db (+ -wal, -shm) to a temp dir   ← needs FDA
+        ├── 3. query history_visits ⋈ history_items for one local day
+        ├── 4. write ~/Safari-History-Exports/Safari History - YYYY-MM-DD.csv   (atomic)
+        ├── 5. mint a Google ID token from the service account key
+        └── 6. POST the visits to /api/browser-history
 ```
 
 Safari holds `History.db` open in WAL mode all day, so the exporter never reads it in
@@ -47,6 +48,10 @@ place: it copies the database and both sidecar files to a temporary directory an
 the copy. That avoids fighting Safari's locks, picks up visits still sitting in the
 write-ahead log (the last few minutes of browsing), and makes it impossible for a bug
 here to modify your real history.
+
+Before exporting pending days, the exporter checks whether Safari is running. If it is
+closed, the exporter opens it hidden and backgrounded, waits briefly for history to load
+or sync, and closes it again. An already-running Safari is never closed by the exporter.
 
 Timestamps come out of SQLite as `CFAbsoluteTime` — seconds since 2001-01-01 UTC — and
 are converted to local time with an explicit UTC offset, so a visit at 23:30 belongs to
