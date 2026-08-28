@@ -112,6 +112,21 @@ class DatabaseUnreadable(SafariHistoryError):
         )
 
 
+class DatabaseStale(DatabaseUnreadable):
+    """Safari has not made the source current enough to prove a day was empty."""
+
+    @classmethod
+    def for_day(cls, path: Path, day: str, last_updated: str) -> DatabaseStale:
+        return cls(
+            f"Safari's history database at {path} was last updated {last_updated}, "
+            f"before {day}.\n"
+            "\n"
+            "The exporter cannot treat an out-of-date database as proof that no "
+            "browsing happened. Open Safari so it loads and syncs its history, then "
+            "run the exporter again. This day was not marked as exported."
+        )
+
+
 class ExportFailed(SafariHistoryError):
     exit_code = 1
 

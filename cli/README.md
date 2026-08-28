@@ -315,6 +315,11 @@ be damaged.
 Safari's schema changed — normally a macOS upgrade that renamed something in
 `history_visits` or `history_items`. The query lives in `src/safari_history/safari_db.py`.
 
+**`history database ... was last updated ... before YYYY-MM-DD` (exit 5)**
+Safari has not loaded or synced history for the day being exported. The exporter does
+not turn that stale view into an empty CSV or advance its high-water mark. Open Safari,
+then run the exporter again; the same day will be retried.
+
 **`the API rejected this service account` (401/403, exit 6)**
 Either the account's email is missing from the backend's `ALLOWED_SERVICE_ACCOUNTS`, or
 the token audience does not match the backend's `APP_BASE_URL`. `status` prints the

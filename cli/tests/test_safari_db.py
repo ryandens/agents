@@ -1,4 +1,5 @@
 import builtins
+import os
 import sqlite3
 import tempfile
 from datetime import UTC, date, datetime, time, timedelta
@@ -9,6 +10,7 @@ import pytest
 from safari_history import safari_db
 from safari_history.errors import (
     DatabaseMissing,
+    DatabaseStale,
     DatabaseUnreadable,
     FullDiskAccessRequired,
 )
@@ -101,6 +103,31 @@ def test_a_visit_with_no_history_item_is_dropped(safari: FakeSafari) -> None:
 
 
 def test_an_empty_day_is_not_an_error(safari: FakeSafari) -> None:
+    assert read_visits(DAY, database=safari.path) == []
+
+
+def test_a_database_older_than_the_day_is_not_evidence_of_no_visits(
+    safari: FakeSafari,
+) -> None:
+    stale = datetime.combine(DAY - timedelta(days=1), time(12)).astimezone().timestamp()
+    os.utime(safari.path, (stale, stale))
+
+    with pytest.raises(DatabaseStale) as caught:
+        read_visits(DAY, database=safari.path)
+
+    assert caught.value.exit_code == 5
+    assert "cannot treat an out-of-date database" in caught.value.message
+    assert "Open Safari" in caught.value.message
+
+
+def test_a_fresh_wal_proves_safari_updated_the_database(safari: FakeSafari) -> None:
+    stale = datetime.combine(DAY - timedelta(days=1), time(12)).astimezone().timestamp()
+    fresh = datetime.combine(DAY, time(12)).astimezone().timestamp()
+    os.utime(safari.path, (stale, stale))
+    wal = safari.path.with_name(safari.path.name + "-wal")
+    wal.touch()
+    os.utime(wal, (fresh, fresh))
+
     assert read_visits(DAY, database=safari.path) == []
 
 

@@ -5,7 +5,8 @@ Uploads are intercepted at `upload_visits`, so nothing here reaches Google or th
 
 from __future__ import annotations
 
-from datetime import date, time, timedelta
+import os
+from datetime import date, datetime, time, timedelta
 from pathlib import Path
 
 import pytest
@@ -166,6 +167,26 @@ def test_a_day_with_no_browsing_still_exports(workspace, uploads, caught_up) -> 
     assert State.load(workspace["state_file"]).last_exported_date == yesterday
 
 
+def test_a_stale_database_does_not_write_or_advance_the_export_mark(
+    workspace, uploads, caught_up, capsys
+) -> None:
+    stale = (
+        datetime.combine(caught_up - timedelta(days=1), time(12))
+        .astimezone()
+        .timestamp()
+    )
+    os.utime(workspace["database"], (stale, stale))
+
+    assert run(workspace) == 5
+
+    assert not (workspace["export_dir"] / csv_export.file_name(caught_up)).exists()
+    assert State.load(
+        workspace["state_file"]
+    ).last_exported_date == caught_up - timedelta(days=1)
+    assert uploads == []
+    assert "Open Safari" in capsys.readouterr().err
+
+
 # --- Uploading ---
 
 
@@ -275,7 +296,12 @@ def test_dry_run_sends_nothing(workspace, uploads) -> None:
     assert uploads == []
 
 
-def test_upload_without_an_api_url_explains_itself(workspace, capsys) -> None:
+def test_upload_without_an_api_url_explains_itself(
+    workspace, capsys, monkeypatch
+) -> None:
+    # `just` loads the repository's .env before running pytest. This test is about the
+    # missing-configuration path, so make that precondition explicit and deterministic.
+    monkeypatch.delenv("SAFARI_HISTORY_API_URL", raising=False)
     run(workspace, "export", "--no-upload", upload=False)
     assert (
         cli.main(

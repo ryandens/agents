@@ -16,7 +16,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from safari_history import csv_export, safari_db
-from safari_history.errors import ConfigurationError, SafariHistoryError
+from safari_history.errors import ConfigurationError, DatabaseStale, SafariHistoryError
 from safari_history.state import (
     DEFAULT_STATE_FILE,
     State,
@@ -339,7 +339,7 @@ def command_export(args: argparse.Namespace) -> int:
             # A missing database or a revoked grant fails identically for every
             # remaining day; stopping keeps one broken run from writing thirty copies
             # of the same message into the log.
-            if exc.exit_code in (3, 4):
+            if exc.exit_code in (3, 4) or isinstance(exc, DatabaseStale):
                 return exc.exit_code
             continue
 
