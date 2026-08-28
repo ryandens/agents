@@ -15,7 +15,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Setup Just
-        uses: taiki-e/install-action@b26cc013e76beb516535a4ec5e36e7d9608babab # just
+        uses: taiki-e/install-action@3a1069079419057412fa883b4bb65d021c87a455 # just
 
       # Python version comes from backend/.python-version, which uv reads itself.
       - name: Install uv
@@ -35,7 +35,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Setup Just
-        uses: taiki-e/install-action@b26cc013e76beb516535a4ec5e36e7d9608babab # just
+        uses: taiki-e/install-action@3a1069079419057412fa883b4bb65d021c87a455 # just
 
       # Python version comes from cli/.python-version, which uv reads itself.
       - name: Install uv
@@ -53,7 +53,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Setup Just
-        uses: taiki-e/install-action@b26cc013e76beb516535a4ec5e36e7d9608babab # just
+        uses: taiki-e/install-action@3a1069079419057412fa883b4bb65d021c87a455 # just
 
       - name: Setup Node
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
@@ -135,7 +135,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Setup Just
-        uses: taiki-e/install-action@b26cc013e76beb516535a4ec5e36e7d9608babab # just
+        uses: taiki-e/install-action@3a1069079419057412fa883b4bb65d021c87a455 # just
 
       # The smoke test runs the Safari exporter against the container to check that what
       # the CLI posts is what the API accepts. Without uv those checks skip rather than
