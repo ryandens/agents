@@ -56,7 +56,7 @@ dev = [
     "httpx>=0.28.1",
     "pytest>=9.1.1",
     "pytest-asyncio>=1.4.0",
-    "ruff>=0.16.4",
+    "ruff>=0.16.5",
     # Starts the Postgres the store tests run against. See backend/conftest.py — the
     # store is worth testing against the real thing, and a container is the only way to
     # do that without asking every developer to install and run a server by hand.
