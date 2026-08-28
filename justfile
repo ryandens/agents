@@ -851,7 +851,7 @@ deploy *args:
 
 # Install backend dependencies
 backend-install:
-    uv sync --dev --project backend
+    sfw uv sync --dev --project backend
 
 # Start backend dev server on :8000 (also serves backend/static if `just build` ran)
 #
@@ -880,7 +880,7 @@ backend-check: backend-lint backend-fmt backend-test
 
 # Install frontend dependencies
 frontend-install:
-    npm install --prefix frontend
+    sfw npm install --prefix frontend
 
 # Start frontend dev server on :3000, proxying /api to the backend on :8000
 frontend-dev:
@@ -932,8 +932,8 @@ cli-install:
     # nothing else uses. A symlinked venv would point Full Disk Access back at the
     # shared interpreter it was created from, which is the thing this avoids.
     "$interpreter" -m venv --copies "{{ cli_venv }}"
-    "{{ cli_venv }}/bin/pip" install --quiet --upgrade pip
-    "{{ cli_venv }}/bin/pip" install --quiet --upgrade ./cli
+    sfw "{{ cli_venv }}/bin/pip" install --quiet --upgrade pip
+    sfw "{{ cli_venv }}/bin/pip" install --quiet --upgrade ./cli
 
     # The virtualenv holds a Full Disk Access grant; anything that can write into it
     # can run code under that grant.
@@ -1039,7 +1039,7 @@ cli-uninstall: cli-uninstall-agent
 
 # Install cli development dependencies
 cli-dev-install:
-    uv sync --dev --project cli
+    sfw uv sync --dev --project cli
 
 # Run cli linter
 cli-lint:
