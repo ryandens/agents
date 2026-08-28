@@ -21,6 +21,15 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
 
+      # Install the interpreter before enabling the package proxy. uv fetches Python
+      # runtimes from GitHub releases rather than a supported package registry.
+      - name: Install Python
+        run: uv python install "$(cat backend/.python-version)"
+
+      - uses: socketdev/action@ba6de6cc0565af1f42295590380973573297e31f # v1.3.2
+        with:
+          mode: firewall-free
+
       - name: Install dependencies
         run: just backend-install
 
@@ -40,6 +49,15 @@ jobs:
       # Python version comes from cli/.python-version, which uv reads itself.
       - name: Install uv
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+
+      # As in the backend job, keep uv's GitHub-hosted interpreter download outside
+      # the registry firewall and route the dependency sync itself through sfw.
+      - name: Install Python
+        run: uv python install "$(cat cli/.python-version)"
+
+      - uses: socketdev/action@ba6de6cc0565af1f42295590380973573297e31f # v1.3.2
+        with:
+          mode: firewall-free
 
       - name: Install dependencies
         run: just cli-dev-install
@@ -61,6 +79,12 @@ jobs:
           node-version: 24
           cache: npm
           cache-dependency-path: frontend/package-lock.json
+
+      # Socket Firewall: routes package downloads through a local proxy that
+      # blocks known-malicious packages at install time. No API key needed.
+      - uses: socketdev/action@ba6de6cc0565af1f42295590380973573297e31f # v1.3.2
+        with:
+          mode: firewall-free
 
       - name: Install dependencies
         run: just frontend-install
