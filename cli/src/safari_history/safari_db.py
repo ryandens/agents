@@ -203,10 +203,16 @@ def _snapshot(database: Path) -> Iterator[Path]:
         yield snapshot
 
 
-def read_visits(day: date, database: Path = DEFAULT_DATABASE) -> list[Visit]:
+def read_visits(
+    day: date,
+    database: Path = DEFAULT_DATABASE,
+    *,
+    require_fresh: bool = True,
+) -> list[Visit]:
     """Every visit Safari recorded on `day`, in local time, oldest first."""
     _check_reachable(database)
-    _check_fresh_enough(database, day)
+    if require_fresh:
+        _check_fresh_enough(database, day)
     start, end = day_bounds(day)
 
     with _snapshot(database) as snapshot:

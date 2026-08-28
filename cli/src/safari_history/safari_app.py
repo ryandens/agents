@@ -11,6 +11,8 @@ from safari_history.errors import SafariRefreshFailed
 
 _POLL_SECONDS = 0.25
 _REFRESH_TIMEOUT_SECONDS = 15.0
+_QUIT_TIMEOUT_SECONDS = 5.0
+_SAFARI_EXECUTABLE = Path("/Applications/Safari.app/Contents/MacOS/Safari")
 
 
 def _source_mtime(database: Path) -> float:
@@ -30,25 +32,37 @@ def _is_running() -> bool:
     return result.returncode == 0
 
 
+def _stop_owned_process(process: subprocess.Popen) -> SafariRefreshFailed | None:
+    """Stop only the exact Safari process this exporter started."""
+    if process.poll() is not None:
+        return None
+    process.terminate()
+    try:
+        process.wait(timeout=_QUIT_TIMEOUT_SECONDS)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait()
+    except OSError as exc:
+        return SafariRefreshFailed(
+            f"Safari was opened to refresh history but could not be closed: {exc}"
+        )
+    return None
+
+
 def refresh_history(
     database: Path,
     *,
     timeout: float = _REFRESH_TIMEOUT_SECONDS,
     poll_interval: float = _POLL_SECONDS,
 ) -> bool:
-    """Refresh Safari history if Safari is closed; return whether it was launched.
+    """Refresh Safari history if closed; return whether this call launched it.
 
-    An already-running Safari is left entirely alone. When launched here, it is opened
-    hidden and backgrounded, given time to load or sync history, and quit before the
-    caller snapshots the database. Quitting encourages Safari to checkpoint its WAL.
+    Safari is launched as a directly-owned child process. That PID—not the application
+    name—is terminated afterward, so a Safari the user starts concurrently is never
+    mistaken for the exporter's instance. An already-running Safari is left alone.
     """
-    # The CLI's database reader is intentionally portable so its real packaged command
-    # can be smoke-tested against a synthetic SQLite database in Linux containers.
-    # `open -a` and AppleScript are macOS application APIs; Linux may coincidentally
-    # have /usr/bin/open, but it is a different command and must never be invoked here.
     if sys.platform != "darwin":
         return False
-
     if _is_running():
         return False
 
@@ -58,48 +72,41 @@ def refresh_history(
         raise SafariRefreshFailed(
             f"could not inspect Safari's history database before refreshing: {exc}"
         ) from exc
+
     try:
-        subprocess.run(
-            ["/usr/bin/open", "-gj", "-a", "Safari"],
-            check=True,
+        process = subprocess.Popen(
+            [str(_SAFARI_EXECUTABLE)],
             stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE,
-            text=True,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
         )
-    except (OSError, subprocess.CalledProcessError) as exc:
+    except OSError as exc:
         raise SafariRefreshFailed(
             f"could not open Safari to refresh history: {exc}"
         ) from exc
 
     failure: SafariRefreshFailed | None = None
+    refreshed = False
     try:
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
             if _source_mtime(database) > before:
+                refreshed = True
                 break
             time.sleep(poll_interval)
+        if not refreshed:
+            failure = SafariRefreshFailed(
+                f"Safari's history database did not update within {timeout:g} seconds; "
+                "the export was not advanced"
+            )
     except OSError as exc:
         failure = SafariRefreshFailed(
             f"could not watch Safari's history database while refreshing: {exc}"
         )
     finally:
-        try:
-            subprocess.run(
-                [
-                    "/usr/bin/osascript",
-                    "-e",
-                    'tell application "Safari" to quit',
-                ],
-                check=True,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.PIPE,
-                text=True,
-            )
-        except (OSError, subprocess.CalledProcessError) as exc:
-            if failure is None:
-                failure = SafariRefreshFailed(
-                    f"Safari was opened to refresh history but could not be closed: {exc}"
-                )
+        stop_failure = _stop_owned_process(process)
+        if failure is None:
+            failure = stop_failure
 
     if failure is not None:
         raise failure

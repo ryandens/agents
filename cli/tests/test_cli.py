@@ -371,6 +371,22 @@ def test_status_names_the_interpreter_to_grant(workspace, capsys) -> None:
     assert str(Path(sys.executable).resolve()) in output
 
 
+def test_status_reports_a_stale_but_valid_database_as_readable(
+    workspace, capsys
+) -> None:
+    stale = (
+        datetime.combine(local_today() - timedelta(days=1), time(12))
+        .astimezone()
+        .timestamp()
+    )
+    os.utime(workspace["database"], (stale, stale))
+
+    assert run(workspace, "status") == 0
+    output = capsys.readouterr().out
+    assert "  readable" in output
+    assert "NOT READABLE" not in output
+
+
 def test_status_reports_pending_uploads(workspace, uploads, capsys, caught_up) -> None:
     run(workspace, "export", "--no-upload", upload=False)
     capsys.readouterr()

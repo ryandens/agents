@@ -50,8 +50,10 @@ write-ahead log (the last few minutes of browsing), and makes it impossible for 
 here to modify your real history.
 
 Before exporting pending days, the exporter checks whether Safari is running. If it is
-closed, the exporter opens it hidden and backgrounded, waits briefly for history to load
-or sync, and closes it again. An already-running Safari is never closed by the exporter.
+closed, the exporter starts a directly-owned Safari process, waits for history to load
+or sync, and terminates only that process. An already-running Safari—or one the user
+starts concurrently—is never closed by the exporter. If the database does not update
+before the refresh timeout, the export fails without advancing its high-water mark.
 
 Timestamps come out of SQLite as `CFAbsoluteTime` — seconds since 2001-01-01 UTC — and
 are converted to local time with an explicit UTC offset, so a visit at 23:30 belongs to

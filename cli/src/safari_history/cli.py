@@ -399,7 +399,12 @@ def command_status(args: argparse.Namespace) -> int:
 
     print(f"database:    {args.database}")
     try:
-        safari_db.read_visits(local_today(), database=args.database)
+        # Status is an access/schema probe, not an export. A valid database that Safari
+        # has not synced today is readable but stale; freshness is enforced only when a
+        # day is actually exported.
+        safari_db.read_visits(
+            local_today(), database=args.database, require_fresh=False
+        )
     except SafariHistoryError as exc:
         print(f"  NOT READABLE: {exc.message.splitlines()[0]}")
     else:
