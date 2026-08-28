@@ -15,8 +15,8 @@ import sys
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
-from safari_history import csv_export, safari_db
-from safari_history.errors import ConfigurationError, SafariHistoryError
+from safari_history import csv_export, safari_app, safari_db
+from safari_history.errors import ConfigurationError, DatabaseStale, SafariHistoryError
 from safari_history.state import (
     DEFAULT_STATE_FILE,
     State,
@@ -318,6 +318,15 @@ def command_export(args: argparse.Namespace) -> int:
     if not days and not args.quiet:
         _log("nothing to export — already up to date")
 
+    if days:
+        try:
+            launched = safari_app.refresh_history(args.database)
+        except SafariHistoryError as exc:
+            _log_error(exc.message)
+            return exc.exit_code
+        if launched and not args.quiet:
+            _log("opened Safari in the background to refresh history, then closed it")
+
     exported: list[date] = []
 
     # Oldest first, and the high-water mark only advances across the unbroken run of
@@ -339,7 +348,7 @@ def command_export(args: argparse.Namespace) -> int:
             # A missing database or a revoked grant fails identically for every
             # remaining day; stopping keeps one broken run from writing thirty copies
             # of the same message into the log.
-            if exc.exit_code in (3, 4):
+            if exc.exit_code in (3, 4) or isinstance(exc, DatabaseStale):
                 return exc.exit_code
             continue
 
@@ -390,7 +399,12 @@ def command_status(args: argparse.Namespace) -> int:
 
     print(f"database:    {args.database}")
     try:
-        safari_db.read_visits(local_today(), database=args.database)
+        # Status is an access/schema probe, not an export. A valid database that Safari
+        # has not synced today is readable but stale; freshness is enforced only when a
+        # day is actually exported.
+        safari_db.read_visits(
+            local_today(), database=args.database, require_fresh=False
+        )
     except SafariHistoryError as exc:
         print(f"  NOT READABLE: {exc.message.splitlines()[0]}")
     else:

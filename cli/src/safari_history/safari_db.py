@@ -20,6 +20,7 @@ from pathlib import Path
 
 from safari_history.errors import (
     DatabaseMissing,
+    DatabaseStale,
     DatabaseUnreadable,
     FullDiskAccessRequired,
 )
@@ -95,6 +96,34 @@ def _check_reachable(database: Path) -> None:
         raise FullDiskAccessRequired.for_path(database) from exc
     except OSError as exc:
         raise DatabaseUnreadable.damaged(database, str(exc)) from exc
+
+
+def _check_fresh_enough(database: Path, day: date) -> None:
+    """Refuse to infer an empty day from a database Safari has not refreshed.
+
+    Safari can leave History.db untouched while it is closed, including while history
+    from other devices is waiting to sync. In that state a successful query returning
+    no rows means "not loaded yet", not "no browsing". The WAL counts as an update
+    because Safari normally keeps its newest committed visits there until checkpointing.
+
+    Updating at any point during the requested day is sufficient. Requiring an update
+    after midnight would strand ordinary days where Safari was closed in the evening.
+    """
+    sources = (database, database.with_name(database.name + "-wal"))
+    try:
+        newest = max(path.stat().st_mtime for path in sources if path.exists())
+    except OSError as exc:
+        raise DatabaseUnreadable.damaged(database, str(exc)) from exc
+
+    start, _ = day_bounds(day)
+    start_unix = start + SAFARI_EPOCH_OFFSET
+    if newest < start_unix:
+        last_updated = datetime.fromtimestamp(newest, tz=UTC).astimezone()
+        raise DatabaseStale.for_day(
+            database,
+            day.isoformat(),
+            last_updated.isoformat(timespec="seconds"),
+        )
 
 
 def _backup_into(database: Path, snapshot: Path) -> bool:
@@ -174,9 +203,16 @@ def _snapshot(database: Path) -> Iterator[Path]:
         yield snapshot
 
 
-def read_visits(day: date, database: Path = DEFAULT_DATABASE) -> list[Visit]:
+def read_visits(
+    day: date,
+    database: Path = DEFAULT_DATABASE,
+    *,
+    require_fresh: bool = True,
+) -> list[Visit]:
     """Every visit Safari recorded on `day`, in local time, oldest first."""
     _check_reachable(database)
+    if require_fresh:
+        _check_fresh_enough(database, day)
     start, end = day_bounds(day)
 
     with _snapshot(database) as snapshot:
