@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -41,6 +42,13 @@ def refresh_history(
     hidden and backgrounded, given time to load or sync history, and quit before the
     caller snapshots the database. Quitting encourages Safari to checkpoint its WAL.
     """
+    # The CLI's database reader is intentionally portable so its real packaged command
+    # can be smoke-tested against a synthetic SQLite database in Linux containers.
+    # `open -a` and AppleScript are macOS application APIs; Linux may coincidentally
+    # have /usr/bin/open, but it is a different command and must never be invoked here.
+    if sys.platform != "darwin":
+        return False
+
     if _is_running():
         return False
 

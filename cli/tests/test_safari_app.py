@@ -13,6 +13,24 @@ def completed(returncode: int = 0) -> subprocess.CompletedProcess:
     return subprocess.CompletedProcess([], returncode)
 
 
+@pytest.fixture(autouse=True)
+def macos(monkeypatch) -> None:
+    monkeypatch.setattr(safari_app.sys, "platform", "darwin")
+
+
+def test_non_macos_runs_do_not_try_to_control_an_application(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setattr(safari_app.sys, "platform", "linux")
+    monkeypatch.setattr(
+        safari_app.subprocess,
+        "run",
+        lambda *args, **kwargs: pytest.fail("subprocess should not be called"),
+    )
+
+    assert safari_app.refresh_history(tmp_path / "History.db") is False
+
+
 def test_an_already_running_safari_is_left_alone(tmp_path: Path, monkeypatch) -> None:
     calls: list[list[str]] = []
 
