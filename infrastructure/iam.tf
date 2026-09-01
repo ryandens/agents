@@ -1,13 +1,3 @@
-locals {
-  # ECR login requires this account-wide token action; repository operations are
-  # independently scoped in each role that reuses the statement.
-  ecr_authorization_statement = {
-    Effect   = "Allow"
-    Action   = "ecr:GetAuthorizationToken" # nosemgrep: terraform.lang.security.iam.no-iam-creds-exposure.no-iam-creds-exposure
-    Resource = "*"
-  }
-}
-
 resource "aws_iam_openid_connect_provider" "github" {
   url             = "https://token.actions.githubusercontent.com"
   client_id_list  = ["sts.amazonaws.com"]
@@ -44,7 +34,12 @@ resource "aws_iam_role_policy" "github_actions_ecr_push" {
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
-      local.ecr_authorization_statement,
+      {
+        Effect = "Allow"
+        # Required by ECR login; repository operations remain scoped below.
+        Action   = "ecr:GetAuthorizationToken" # nosemgrep: terraform.lang.security.iam.no-iam-creds-exposure.no-iam-creds-exposure
+        Resource = "*"
+      },
       {
         Effect = "Allow"
         Action = [
@@ -92,7 +87,12 @@ resource "aws_iam_role_policy" "github_actions_ecr_read" {
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
-      local.ecr_authorization_statement,
+      {
+        Effect = "Allow"
+        # Required by ECR login; repository operations remain scoped below.
+        Action   = "ecr:GetAuthorizationToken" # nosemgrep: terraform.lang.security.iam.no-iam-creds-exposure.no-iam-creds-exposure
+        Resource = "*"
+      },
       {
         Effect = "Allow"
         Action = [
