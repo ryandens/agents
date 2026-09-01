@@ -26,6 +26,15 @@
       "depNameTemplate": "DataDog/datadog-static-analyzer",
       "datasourceTemplate": "github-releases",
       "extractVersionTemplate": "^v?(?<version>.+)$"
+    },
+    {
+      "customType": "regex",
+      "description": "Propose OpenGrep scanner releases; its pinned binary digest must be reviewed and updated in the same PR",
+      "managerFilePatterns": ["/^\\.github/workflows/ci\\.ya?ml$/"],
+      "matchStrings": ["OPENGREP_VERSION:\\s*(?<currentValue>\\S+)"],
+      "depNameTemplate": "opengrep/opengrep",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^v?(?<version>.+)$"
     }
   ],
   "packageRules": [

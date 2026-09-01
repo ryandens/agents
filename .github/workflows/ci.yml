@@ -119,7 +119,7 @@ jobs:
   # have. The analyzer binary ships its own rulesets and needs no credentials to scan, so
   # the install logic below is lifted from that action's `Set up environment` and
   # `Install datadog-static-analyzer` steps. Results go to GitHub code scanning instead.
-  static-analysis:
+  datadog:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -205,6 +205,63 @@ jobs:
         with:
           sarif_file: ${{ runner.temp }}/results.sarif
           category: datadog-static-analyzer
+
+  # Full-tree backlog scan only. Once the existing findings have been triaged, this can
+  # run on pull requests with a baseline so new findings become the merge gate.
+  opengrep:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      # Pin both the release and its Linux binary digest. Renovate proposes version
+      # updates, but the digest is intentionally reviewed and changed with each one.
+      - name: Install OpenGrep
+        env:
+          OPENGREP_VERSION: 1.26.0
+          OPENGREP_SHA256: 40c21299eeddabf743b856daa843d24f9d4a027130671cd45b3b21776fd9ab26
+        run: |
+          install_dir="$RUNNER_TEMP/opengrep/bin"
+          mkdir -p "$install_dir"
+          curl -fsSL --retry 5 \
+            "https://github.com/opengrep/opengrep/releases/download/v$OPENGREP_VERSION/opengrep_manylinux_x86" \
+            -o "$install_dir/opengrep"
+          echo "$OPENGREP_SHA256  $install_dir/opengrep" | sha256sum --check --strict
+          chmod +x "$install_dir/opengrep"
+          echo "$install_dir" >> "$GITHUB_PATH"
+
+      # Findings are backlog, not a gate: without --error, findings leave the scan
+      # successful. Configuration, download, and engine errors still fail the job.
+      - name: Scan the full repository
+        id: scan
+        run: |
+          opengrep scan \
+            --config p/default \
+            --json-output="$RUNNER_TEMP/opengrep-results.json" \
+            --sarif-output="$RUNNER_TEMP/opengrep-results.sarif" \
+            .
+
+      - name: Upload reports
+        if: ${{ steps.scan.outcome == 'success' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: opengrep-backlog-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/opengrep-results.json
+            ${{ runner.temp }}/opengrep-results.sarif
+          retention-days: 30
+
+      - name: Publish findings to GitHub code scanning
+        if: ${{ steps.scan.outcome == 'success' }}
+        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
+        with:
+          sarif_file: ${{ runner.temp }}/opengrep-results.sarif
+          category: opengrep-backlog
 
   # Builds the same image the release workflow ships and checks that one container
   # really does serve the frontend at / and the API under /api, backed by a Postgres
