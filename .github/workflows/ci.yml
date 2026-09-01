@@ -234,7 +234,7 @@ jobs:
           chmod +x "$install_dir/opengrep"
           echo "$install_dir" >> "$GITHUB_PATH"
 
-      # Capture `scan`'s status instead of ending the job here: exit 1 means findings and
+      # Capture `ci`'s status instead of ending the job here: exit 1 means findings and
       # is expected during backlog cleanup; other nonzero statuses fail after upload.
       - name: Scan the full repository
         id: scan
@@ -247,7 +247,7 @@ jobs:
           # suppression. GitHub uploads those results as alerts, so remove only entries
           # OpenGrep explicitly marked suppressed before publishing the report. See:
           # https://github.com/opengrep/opengrep/issues/269
-          opengrep scan --error \
+          opengrep ci \
             --config p/default \
             --sarif-output="$raw_sarif_file" || status=$?
           jq '.runs[].results |= map(select(
