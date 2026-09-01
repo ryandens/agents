@@ -102,7 +102,8 @@ def run_migrations_online() -> None:
         ).scalar()
         if not acquired:
             connection.execute(
-                text(f"SET lock_timeout = '{ADVISORY_LOCK_WAIT_SECONDS}s'")
+                text("SELECT set_config('lock_timeout', :timeout, false)"),
+                {"timeout": f"{ADVISORY_LOCK_WAIT_SECONDS}s"},
             )
             acquired = connection.execute(
                 text("SELECT pg_try_advisory_lock(:key)"), {"key": MIGRATION_LOCK_KEY}
@@ -116,8 +117,14 @@ def run_migrations_online() -> None:
 
         try:
             # Set after the lock so waiting for the lock is not itself cut short.
-            connection.execute(text(f"SET lock_timeout = '{LOCK_TIMEOUT}'"))
-            connection.execute(text(f"SET statement_timeout = '{STATEMENT_TIMEOUT}'"))
+            connection.execute(
+                text("SELECT set_config('lock_timeout', :timeout, false)"),
+                {"timeout": LOCK_TIMEOUT},
+            )
+            connection.execute(
+                text("SELECT set_config('statement_timeout', :timeout, false)"),
+                {"timeout": STATEMENT_TIMEOUT},
+            )
 
             # End the transaction the statements above implicitly opened — SQLAlchemy 2.0
             # begins one on the first execute() — so that what Alembic commits per
