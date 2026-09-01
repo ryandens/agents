@@ -212,6 +212,9 @@ jobs:
   # can see those seams on its own.
   docker:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
@@ -239,6 +242,27 @@ jobs:
           tags: agents:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # Scan the image only after it lands on main. SARIF feeds vulnerability findings
+      # to code scanning; deliberately omit Trivy's `format: github` and `github-pat`
+      # inputs, which are the separate path that submits an SBOM to Dependency Graph.
+      - name: Scan image for vulnerabilities
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: agents:ci
+          scanners: vuln
+          format: sarif
+          output: trivy-results.sarif
+          exit-code: '0'
+
+      - name: Upload Trivy results to GitHub code scanning
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
+        with:
+          sarif_file: trivy-results.sarif
+          category: trivy-container
 
       - name: Smoke test
         run: just smoke agents:ci
