@@ -9,10 +9,10 @@
   "customManagers": [
     {
       "customType": "regex",
-      "description": "Update annotated values from the datasource and dependency declared beside them",
+      "description": "Update annotated versions and optional digests from the declared datasource",
       "managerFilePatterns": ["/^\\.github/workflows/.+\\.ya?ml$/"],
       "matchStrings": [
-        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+?)(?: versioning=(?<versioning>\\S+))?\\n\\s+\\w+:\\s+(?<currentValue>\\S+)"
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+?)(?: versioning=(?<versioning>\\S+))?\\n\\s+\\w+:\\s+(?<currentValue>\\S+)(?:\\n\\s+\\w+:\\s+(?<currentDigest>\\S+))?"
       ]
     },
     {
@@ -34,14 +34,6 @@
       "depNameTemplate": "DataDog/datadog-static-analyzer",
       "datasourceTemplate": "github-releases",
       "extractVersionTemplate": "^v?(?<version>.+)$"
-    },
-    {
-      "customType": "regex",
-      "description": "Update explicitly annotated versions and optional digests in GitHub Actions workflows",
-      "managerFilePatterns": ["/^\\.github/workflows/.+\\.ya?ml$/"],
-      "matchStrings": [
-        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)(?: versioning=(?<versioning>\\S+))?\\s+\\w+:\\s*(?<currentValue>\\S+)(?:\\s+\\w+:\\s*(?<currentDigest>\\S+))?"
-      ]
     }
   ],
   "customDatasources": {
@@ -49,7 +41,7 @@
       "defaultRegistryUrlTemplate": "https://api.github.com/repos/opengrep/opengrep/releases?per_page=100",
       "format": "json",
       "transformTemplates": [
-        "{\"releases\": $map($, function($release) { {\"version\": $replace($release.tag_name, /^v/, \"\"), \"releaseTimestamp\": $release.published_at, \"changelogUrl\": $release.html_url, \"digest\": $replace($release.assets[name = \"opengrep_manylinux_x86\"][0].digest, /^sha256:/, \"\")} }), \"sourceUrl\": \"https://github.com/opengrep/opengrep\"}"
+        "{\"releases\": $map($[tag_name and assets[name = \"opengrep_manylinux_x86\"].digest], function($release) { {\"version\": $release.tag_name, \"releaseTimestamp\": $release.published_at, \"changelogUrl\": $release.html_url, \"digest\": $release.assets[name = \"opengrep_manylinux_x86\"][0].digest} }), \"sourceUrl\": \"https://github.com/opengrep/opengrep\"}"
       ]
     }
   },
