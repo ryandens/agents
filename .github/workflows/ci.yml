@@ -222,15 +222,15 @@ jobs:
       - name: Install OpenGrep
         env:
           # renovate: datasource=custom.opengrep-releases depName=opengrep/opengrep
-          OPENGREP_VERSION: 1.26.0
-          OPENGREP_SHA256: 40c21299eeddabf743b856daa843d24f9d4a027130671cd45b3b21776fd9ab26
+          OPENGREP_VERSION: v1.26.0
+          OPENGREP_SHA256: sha256:40c21299eeddabf743b856daa843d24f9d4a027130671cd45b3b21776fd9ab26
         run: |
           install_dir="$RUNNER_TEMP/opengrep/bin"
           mkdir -p "$install_dir"
           curl -fsSL --retry 5 \
-            "https://github.com/opengrep/opengrep/releases/download/v$OPENGREP_VERSION/opengrep_manylinux_x86" \
+            "https://github.com/opengrep/opengrep/releases/download/$OPENGREP_VERSION/opengrep_manylinux_x86" \
             -o "$install_dir/opengrep"
-          echo "$OPENGREP_SHA256  $install_dir/opengrep" | sha256sum --check --strict
+          echo "${OPENGREP_SHA256#sha256:}  $install_dir/opengrep" | sha256sum --check --strict
           chmod +x "$install_dir/opengrep"
           echo "$install_dir" >> "$GITHUB_PATH"
 
