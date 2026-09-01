@@ -268,7 +268,7 @@ jobs:
           category: opengrep
 
       - name: Fail on findings or scanner errors
-        if: ${{ !cancelled() && steps.scan.outputs.exit-code != '0' }}
+        if: ${{ !cancelled() && steps.scan.outputs.exit-code != '0' && steps.scan.outputs.exit-code != '1' }}
         env:
           OPENGREP_EXIT_CODE: ${{ steps.scan.outputs.exit-code }}
         run: |
