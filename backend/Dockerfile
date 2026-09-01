@@ -8,16 +8,21 @@ FROM --platform=$BUILDPLATFORM node:24.20.0-slim@sha256:ba849c60be29959425b8734d
 
 WORKDIR /src
 
-COPY frontend/package.json frontend/package-lock.json ./
+ENV PNPM_HOME="/pnpm" \
+    PATH="/pnpm:$PATH"
 
-RUN --mount=type=cache,target=/root/.npm \
-    npm ci
+RUN corepack enable
+
+COPY frontend/package.json frontend/pnpm-lock.yaml frontend/pnpm-workspace.yaml ./
+
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
+    pnpm install --frozen-lockfile
 
 COPY frontend/ /src
 
 # No build args: sign-in is driven entirely by the backend's /api/auth endpoints, so the
 # export carries no client ID and is identical for every environment.
-RUN npm run build
+RUN pnpm run build
 
 
 FROM ghcr.io/astral-sh/uv:python3.14-bookworm-slim@sha256:7cf77f594be8042dab6daa9fe326f90962252268b4f120a7f5dccce4d947e6c1 AS builder
