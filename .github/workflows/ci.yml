@@ -84,11 +84,12 @@ jobs:
         with:
           mode: firewall-free
 
-      - name: Enable pnpm
-        run: |
-          corepack enable pnpm
-          package_manager="$(node -p "require('./frontend/package.json').packageManager")"
-          corepack install --global "$package_manager"
+      - name: Setup pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+        with:
+          package_json_file: frontend/package.json
+          cache: true
+          cache_dependency_path: frontend/pnpm-lock.yaml
 
       - name: Install dependencies
         run: just frontend-install
