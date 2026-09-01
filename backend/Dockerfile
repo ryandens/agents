@@ -56,5 +56,7 @@ ENV PATH="/app/.venv/bin:$PATH"
 
 EXPOSE 8080
 
+USER nonroot
+
 ENTRYPOINT ["/app/.venv/bin/uvicorn"]
 CMD ["main:app", "--host", "0.0.0.0", "--port", "8080"]
