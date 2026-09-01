@@ -2,4 +2,5 @@ allowBuilds:
   unrs-resolver: true
 # Eight hours is the deliberate project quarantine window; the default day is too slow
 # for this app's dependency update cadence.
-minimumReleaseAge: 480 # nosemgrep: package_managers.pnpm.pnpm-missing-minimum-release-age.pnpm-minimum-release-age
+# nosemgrep: package_managers.pnpm.pnpm-missing-minimum-release-age.pnpm-minimum-release-age
+minimumReleaseAge: 480
