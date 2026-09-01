@@ -9,6 +9,17 @@
   "customManagers": [
     {
       "customType": "regex",
+      "description": "Keep actionlint's version and its pinned download-script commit in lockstep with upstream GitHub release tags",
+      "managerFilePatterns": ["/^\\.github/workflows/.+\\.ya?ml$/"],
+      "matchStrings": [
+        "ACTIONLINT_VERSION:\\s*(?<currentValue>\\S+)[\\s\\S]*?raw\\.githubusercontent\\.com/rhysd/actionlint/(?<currentDigest>[0-9a-f]{40})/"
+      ],
+      "depNameTemplate": "rhysd/actionlint",
+      "datasourceTemplate": "github-tags",
+      "extractVersionTemplate": "^v?(?<version>.+)$"
+    },
+    {
+      "customType": "regex",
       "description": "Keep the pinned datadog-static-analyzer release in the CI workflow in lockstep with upstream GitHub release tags",
       "managerFilePatterns": ["/^\\.github/workflows/.+\\.ya?ml$/"],
       "matchStrings": ["DDSA_VERSION:\\s*(?<currentValue>\\S+)"],

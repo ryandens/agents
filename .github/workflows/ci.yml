@@ -92,6 +92,27 @@ jobs:
       - name: Check
         run: just frontend-check
 
+  # Lints the GitHub Actions workflow files themselves.
+  # https://github.com/rhysd/actionlint/blob/main/docs/usage.md#use-actionlint-on-github-actions
+  actionlint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      # The actionlint version and the download script's pinned commit are kept
+      # in lockstep with upstream GitHub release tags by Renovate. The commit
+      # below is the v1.7.12 tag; see the customManager in renovate.json.
+      - name: Download actionlint
+        id: get_actionlint
+        env:
+          ACTIONLINT_VERSION: 1.7.12
+        run: bash <(curl https://raw.githubusercontent.com/rhysd/actionlint/914e7df21a07ef503a81201c76d2b11c789d3fca/scripts/download-actionlint.bash) "$ACTIONLINT_VERSION"
+        shell: bash
+
+      - name: Check workflow files
+        run: ${{ steps.get_actionlint.outputs.executable }} -color
+        shell: bash
+
   # Datadog's static analyzer, run straight from its release archive rather than through
   # DataDog/datadog-static-analyzer-github-action. The action also installs datadog-ci and
   # uploads results, which needs DD_API_KEY/DD_APP_KEY org credentials this repo does not
