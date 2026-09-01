@@ -34,6 +34,14 @@
       "depNameTemplate": "DataDog/datadog-static-analyzer",
       "datasourceTemplate": "github-releases",
       "extractVersionTemplate": "^v?(?<version>.+)$"
+    },
+    {
+      "customType": "regex",
+      "description": "Update explicitly annotated versions in GitHub Actions workflows; binary checksums remain a required manual review",
+      "managerFilePatterns": ["/^\\.github/workflows/.+\\.ya?ml$/"],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)(?: versioning=(?<versioning>\\S+))?\\s+\\w+:\\s*(?<currentValue>\\S+)"
+      ]
     }
   ],
   "packageRules": [

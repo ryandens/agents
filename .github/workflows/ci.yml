@@ -119,7 +119,7 @@ jobs:
   # have. The analyzer binary ships its own rulesets and needs no credentials to scan, so
   # the install logic below is lifted from that action's `Set up environment` and
   # `Install datadog-static-analyzer` steps. Results go to GitHub code scanning instead.
-  static-analysis:
+  datadog:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -205,6 +205,60 @@ jobs:
         with:
           sarif_file: ${{ runner.temp }}/results.sarif
           category: datadog-static-analyzer
+
+  # Full-tree backlog scan only. Once the existing findings have been triaged, this can
+  # run on pull requests with a baseline so new findings become the merge gate.
+  opengrep:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Install OpenGrep
+        env:
+          # renovate: datasource=github-releases depName=opengrep/opengrep
+          OPENGREP_VERSION: 1.26.0
+          OPENGREP_SHA256: 40c21299eeddabf743b856daa843d24f9d4a027130671cd45b3b21776fd9ab26
+        run: |
+          install_dir="$RUNNER_TEMP/opengrep/bin"
+          mkdir -p "$install_dir"
+          curl -fsSL --retry 5 \
+            "https://github.com/opengrep/opengrep/releases/download/v$OPENGREP_VERSION/opengrep_manylinux_x86" \
+            -o "$install_dir/opengrep"
+          echo "$OPENGREP_SHA256  $install_dir/opengrep" | sha256sum --check --strict
+          chmod +x "$install_dir/opengrep"
+          echo "$install_dir" >> "$GITHUB_PATH"
+
+      # Capture `ci`'s status instead of ending the job here: exit 1 means findings and
+      # is expected during backlog cleanup; other nonzero statuses fail after upload.
+      - name: Scan the full repository
+        id: scan
+        run: |
+          status=0
+          opengrep ci \
+            --config p/default \
+            --sarif-output="$RUNNER_TEMP/opengrep-results.sarif" || status=$?
+          echo "exit-code=$status" >> "$GITHUB_OUTPUT"
+
+      - name: Publish findings to GitHub code scanning
+        if: ${{ !cancelled() }}
+        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
+        with:
+          sarif_file: ${{ runner.temp }}/opengrep-results.sarif
+          category: opengrep-backlog
+
+      - name: Fail on scanner errors
+        if: ${{ !cancelled() && steps.scan.outputs.exit-code != '0' && steps.scan.outputs.exit-code != '1' }}
+        env:
+          OPENGREP_EXIT_CODE: ${{ steps.scan.outputs.exit-code }}
+        run: |
+          echo "OpenGrep failed with exit code $OPENGREP_EXIT_CODE" >&2
+          exit "$OPENGREP_EXIT_CODE"
 
   # Builds the same image the release workflow ships and checks that one container
   # really does serve the frontend at / and the API under /api, backed by a Postgres
