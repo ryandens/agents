@@ -60,12 +60,14 @@
     {
       "description": "Hold eslint at 9. The plugins eslint-config-next bundles (eslint-plugin-react, -jsx-a11y, -import) all cap their peer eslint at ^9, so eslint 10 installs only because npm downgrades the nested peer conflict to a warning. Drop this rule once those plugins declare eslint 10 support.",
       "matchPackageNames": ["eslint"],
-      "allowedVersions": "<10"
+      "allowedVersions": "<10",
+      "minimumReleaseAge": "7 days"
     },
     {
       "description": "Keep the AI SDK React bindings and core package on compatible releases.",
       "matchPackageNames": ["@ai-sdk/react", "ai"],
-      "groupName": "AI SDK"
+      "groupName": "AI SDK",
+      "minimumReleaseAge": "7 days"
     }
   ]
 }
