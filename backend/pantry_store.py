@@ -2,7 +2,7 @@ from datetime import UTC, date, datetime
 from enum import Enum
 from uuid import UUID
 
-from psycopg import sql
+from psycopg import Connection, Cursor, sql
 from psycopg_pool import ConnectionPool
 
 from pantry import PantryItem, PantryItemCreate, PantryItemUpdate, StorageLocation
@@ -47,6 +47,16 @@ def _param(value: FieldValue) -> QueryParam:
     return value.value if isinstance(value, Enum) else value
 
 
+def _execute_composed(
+    conn: Connection, query: sql.Composable, params: tuple[QueryParam, ...]
+) -> Cursor:
+    """Execute a Psycopg-composed query with values kept as bound parameters."""
+    # This SQLAlchemy rule does not recognize Psycopg's safe Composable query type.
+    return conn.execute(
+        query, params
+    )  # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
+
+
 class PantryStore:
     def __init__(self, pool: ConnectionPool) -> None:
         self._pool = pool
@@ -60,10 +70,7 @@ class PantryStore:
         query = sql.SQL("{q} {order}").format(q=query, order=_ORDER_BY)
 
         with self._pool.connection() as conn:
-            # Psycopg Composable identifiers plus separately bound values, not raw SQL.
-            rows = conn.execute(
-                query, params
-            ).fetchall()  # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
+            rows = _execute_composed(conn, query, params).fetchall()
         return [PantryItem.model_validate(row) for row in rows]
 
     def get_item(self, item_id: UUID) -> PantryItem | None:
@@ -71,10 +78,7 @@ class PantryStore:
             cols=_COLUMN_LIST
         )
         with self._pool.connection() as conn:
-            # Psycopg Composable identifiers plus a separately bound value, not raw SQL.
-            row = conn.execute(
-                query, (item_id,)
-            ).fetchone()  # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
+            row = _execute_composed(conn, query, (item_id,)).fetchone()
         return PantryItem.model_validate(row) if row else None
 
     def create_item(self, data: PantryItemCreate) -> PantryItem:
@@ -87,10 +91,7 @@ class PantryStore:
             placeholders=sql.SQL(", ").join(sql.Placeholder() * len(_COLUMNS)),
         )
         with self._pool.connection() as conn:
-            # Psycopg Composable identifiers/placeholders; values stay separately bound.
-            row = conn.execute(
-                query, values
-            ).fetchone()  # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
+            row = _execute_composed(conn, query, values).fetchone()
         return PantryItem.model_validate(row)
 
     def update_item(self, item_id: UUID, data: PantryItemUpdate) -> PantryItem | None:
@@ -122,10 +123,7 @@ class PantryStore:
         values = tuple(_param(value) for value in patch.values()) + (item_id,)
 
         with self._pool.connection() as conn:
-            # Psycopg Composable identifiers/placeholders; values stay separately bound.
-            row = conn.execute(
-                query, values
-            ).fetchone()  # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
+            row = _execute_composed(conn, query, values).fetchone()
         return PantryItem.model_validate(row) if row else None
 
     def delete_item(self, item_id: UUID) -> bool:
