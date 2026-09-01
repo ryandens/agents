@@ -144,7 +144,8 @@ resource "aws_iam_role_policy" "ec2_rds_connect" {
     Version = "2012-10-17"
     Statement = [{
       Effect = "Allow"
-      Action = "rds-db:connect"
+      # Required for IAM database auth; access is limited to the two users below.
+      Action = "rds-db:connect" # nosemgrep: terraform.lang.security.iam.no-iam-resource-exposure.no-iam-resource-exposure
       # Two roles, listed explicitly rather than wildcarded: the app's, which has DML
       # only, and the migrator's, which owns the schema. The instance can mint a token
       # for each because it runs both the app and the migrate step — what the split buys
