@@ -17,7 +17,7 @@ An AI-powered meal planning and kitchen management app. Chat with the agent to p
 | Database | PostgreSQL 17 — Aurora Serverless v2 in production, a container locally |
 | Database auth | RDS IAM tokens in production (no stored password); password locally |
 | Migrations | Alembic, hand-written SQL, applied as a separate deploy step |
-| Package managers | `uv` (backend, cli), `npm` (frontend) |
+| Package managers | `uv` (backend, cli), `pnpm` (frontend) |
 | Task runner | `just` |
 
 ## Prerequisites

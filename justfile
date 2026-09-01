@@ -880,23 +880,23 @@ backend-check: backend-lint backend-fmt backend-test
 
 # Install frontend dependencies
 frontend-install:
-    sfw npm install --prefix frontend
+    sfw pnpm --dir frontend install --frozen-lockfile
 
 # Start frontend dev server on :3000, proxying /api to the backend on :8000
 frontend-dev:
-    npm run dev --prefix frontend
+    pnpm --dir frontend run dev
 
 # Run frontend linter
 frontend-lint:
-    npm run lint --prefix frontend
+    pnpm --dir frontend run lint
 
 # Build frontend (type check + compile)
 frontend-build:
-    npm run build --prefix frontend
+    pnpm --dir frontend run build
 
 # Run frontend tests
 frontend-test:
-    npm run test --prefix frontend
+    pnpm --dir frontend run test
 
 # Run all frontend checks
 frontend-check: frontend-lint frontend-build frontend-test
