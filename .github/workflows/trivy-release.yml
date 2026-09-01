@@ -1,0 +1,70 @@
+name: Daily release vulnerability scan
+
+on:
+  schedule:
+    - cron: '23 8 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+  security-events: write
+
+jobs:
+  trivy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve latest release image
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          release_tag="$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name)"
+          release_sha="$(gh api "repos/$GITHUB_REPOSITORY/commits/$release_tag" --jq .sha)"
+          image="${{ vars.ECR_REGISTRY }}/${{ vars.ECR_REPOSITORY }}:$release_tag"
+          {
+            echo "image=$image"
+            echo "ref=refs/tags/$release_tag"
+            echo "sha=$release_sha"
+          } >> "$GITHUB_OUTPUT"
+          echo "Scanning $image from $release_tag ($release_sha)"
+
+      # Keep the uploader's repository context aligned with the release rather than
+      # the default-branch commit that happened to start this scheduled workflow.
+      - name: Checkout release commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ steps.release.outputs.sha }}
+          persist-credentials: false
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # v6
+        with:
+          role-to-assume: ${{ secrets.AWS_ECR_READ_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2
+
+      - name: Pull latest release image
+        run: docker pull "${{ steps.release.outputs.image }}"
+
+      # SARIF publishes vulnerabilities to code scanning. Omitting `format: github`
+      # and `github-pat` ensures Trivy does not submit an SBOM to Dependency Graph.
+      - name: Scan release image for vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: ${{ steps.release.outputs.image }}
+          scanners: vuln
+          format: sarif
+          output: trivy-results.sarif
+          exit-code: '0'
+
+      - name: Upload Trivy results to GitHub code scanning
+        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
+        with:
+          sarif_file: trivy-results.sarif
+          category: trivy-release
+          ref: ${{ steps.release.outputs.ref }}
+          sha: ${{ steps.release.outputs.sha }}
