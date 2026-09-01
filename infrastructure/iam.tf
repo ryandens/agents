@@ -35,8 +35,9 @@ resource "aws_iam_role_policy" "github_actions_ecr_push" {
     Version = "2012-10-17"
     Statement = [
       {
-        Effect   = "Allow"
-        Action   = "ecr:GetAuthorizationToken"
+        Effect = "Allow"
+        # Required by ECR login; repository operations remain scoped below.
+        Action   = "ecr:GetAuthorizationToken" # nosemgrep: terraform.lang.security.iam.no-iam-creds-exposure.no-iam-creds-exposure
         Resource = "*"
       },
       {
@@ -87,8 +88,9 @@ resource "aws_iam_role_policy" "github_actions_ecr_read" {
     Version = "2012-10-17"
     Statement = [
       {
-        Effect   = "Allow"
-        Action   = "ecr:GetAuthorizationToken"
+        Effect = "Allow"
+        # Required by ECR login; repository operations remain scoped below.
+        Action   = "ecr:GetAuthorizationToken" # nosemgrep: terraform.lang.security.iam.no-iam-creds-exposure.no-iam-creds-exposure
         Resource = "*"
       },
       {
