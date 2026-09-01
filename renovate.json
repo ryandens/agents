@@ -9,6 +9,14 @@
   "customManagers": [
     {
       "customType": "regex",
+      "description": "Update annotated values from the datasource and dependency declared beside them",
+      "managerFilePatterns": ["/^\\.github/workflows/.+\\.ya?ml$/"],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+?)(?: versioning=(?<versioning>\\S+))?\\n\\s+\\w+:\\s+(?<currentValue>\\S+)"
+      ]
+    },
+    {
+      "customType": "regex",
       "description": "Keep actionlint's version and its pinned download-script commit in lockstep with upstream GitHub release tags",
       "managerFilePatterns": ["/^\\.github/workflows/.+\\.ya?ml$/"],
       "matchStrings": [
