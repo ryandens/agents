@@ -240,9 +240,19 @@ jobs:
         id: scan
         run: |
           status=0
+          raw_sarif_file="$RUNNER_TEMP/opengrep-results.raw.sarif"
+          sarif_file="$RUNNER_TEMP/opengrep-results.sarif"
+
+          # OpenGrep retains ignored findings in SARIF and marks them with an inSource
+          # suppression. GitHub uploads those results as alerts, so remove only entries
+          # OpenGrep explicitly marked suppressed before publishing the report. See:
+          # https://github.com/opengrep/opengrep/issues/269
           opengrep ci \
             --config p/default \
-            --sarif-output="$RUNNER_TEMP/opengrep-results.sarif" || status=$?
+            --sarif-output="$raw_sarif_file" || status=$?
+          jq '.runs[].results |= map(select(
+            ((.suppressions // []) | length) == 0
+          ))' "$raw_sarif_file" > "$sarif_file"
           echo "exit-code=$status" >> "$GITHUB_OUTPUT"
 
       - name: Publish findings to GitHub code scanning

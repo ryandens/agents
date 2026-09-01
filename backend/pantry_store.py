@@ -61,9 +61,8 @@ class PantryStore:
 
         with self._pool.connection() as conn:
             # Psycopg Composable identifiers plus separately bound values, not raw SQL.
-            rows = conn.execute(
-                query, params
-            ).fetchall()  # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
+            # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
+            rows = conn.execute(query, params).fetchall()
         return [PantryItem.model_validate(row) for row in rows]
 
     def get_item(self, item_id: UUID) -> PantryItem | None:
@@ -72,9 +71,8 @@ class PantryStore:
         )
         with self._pool.connection() as conn:
             # Psycopg Composable identifiers plus a separately bound value, not raw SQL.
-            row = conn.execute(
-                query, (item_id,)
-            ).fetchone()  # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
+            # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
+            row = conn.execute(query, (item_id,)).fetchone()
         return PantryItem.model_validate(row) if row else None
 
     def create_item(self, data: PantryItemCreate) -> PantryItem:
@@ -88,9 +86,8 @@ class PantryStore:
         )
         with self._pool.connection() as conn:
             # Psycopg Composable identifiers/placeholders; values stay separately bound.
-            row = conn.execute(
-                query, values
-            ).fetchone()  # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
+            # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
+            row = conn.execute(query, values).fetchone()
         return PantryItem.model_validate(row)
 
     def update_item(self, item_id: UUID, data: PantryItemUpdate) -> PantryItem | None:
@@ -123,9 +120,8 @@ class PantryStore:
 
         with self._pool.connection() as conn:
             # Psycopg Composable identifiers/placeholders; values stay separately bound.
-            row = conn.execute(
-                query, values
-            ).fetchone()  # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
+            # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
+            row = conn.execute(query, values).fetchone()
         return PantryItem.model_validate(row) if row else None
 
     def delete_item(self, item_id: UUID) -> bool:
