@@ -219,10 +219,9 @@ jobs:
         with:
           persist-credentials: false
 
-      # Pin both the release and its Linux binary digest. Renovate proposes version
-      # updates, but the digest is intentionally reviewed and changed with each one.
       - name: Install OpenGrep
         env:
+          # renovate: datasource=github-releases depName=opengrep/opengrep
           OPENGREP_VERSION: 1.26.0
           OPENGREP_SHA256: 40c21299eeddabf743b856daa843d24f9d4a027130671cd45b3b21776fd9ab26
         run: |
@@ -235,33 +234,31 @@ jobs:
           chmod +x "$install_dir/opengrep"
           echo "$install_dir" >> "$GITHUB_PATH"
 
-      # Findings are backlog, not a gate: without --error, findings leave the scan
-      # successful. Configuration, download, and engine errors still fail the job.
+      # Capture `ci`'s status instead of ending the job here: exit 1 means findings and
+      # is expected during backlog cleanup; other nonzero statuses fail after upload.
       - name: Scan the full repository
         id: scan
         run: |
-          opengrep scan \
+          status=0
+          opengrep ci \
             --config p/default \
-            --json-output="$RUNNER_TEMP/opengrep-results.json" \
-            --sarif-output="$RUNNER_TEMP/opengrep-results.sarif" \
-            .
-
-      - name: Upload reports
-        if: ${{ steps.scan.outcome == 'success' }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: opengrep-backlog-${{ github.sha }}
-          path: |
-            ${{ runner.temp }}/opengrep-results.json
-            ${{ runner.temp }}/opengrep-results.sarif
-          retention-days: 30
+            --sarif-output="$RUNNER_TEMP/opengrep-results.sarif" || status=$?
+          echo "exit-code=$status" >> "$GITHUB_OUTPUT"
 
       - name: Publish findings to GitHub code scanning
-        if: ${{ steps.scan.outcome == 'success' }}
+        if: ${{ !cancelled() }}
         uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
         with:
           sarif_file: ${{ runner.temp }}/opengrep-results.sarif
           category: opengrep-backlog
+
+      - name: Fail on scanner errors
+        if: ${{ !cancelled() && steps.scan.outputs.exit-code != '0' && steps.scan.outputs.exit-code != '1' }}
+        env:
+          OPENGREP_EXIT_CODE: ${{ steps.scan.outputs.exit-code }}
+        run: |
+          echo "OpenGrep failed with exit code $OPENGREP_EXIT_CODE" >&2
+          exit "$OPENGREP_EXIT_CODE"
 
   # Builds the same image the release workflow ships and checks that one container
   # really does serve the frontend at / and the API under /api, backed by a Postgres
