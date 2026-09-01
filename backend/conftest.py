@@ -110,9 +110,12 @@ def unmigrated_database(database_url: str) -> Iterator[str]:
     name = "unmigrated_probe"
     database = sql.Identifier(name)
     with psycopg.connect(database_url, autocommit=True) as conn:
+        # Psycopg Identifier quotes the fixed database name; this is not SQLAlchemy.
+        # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
         conn.execute(
             sql.SQL("DROP DATABASE IF EXISTS {} WITH (FORCE)").format(database)
         )
+        # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
         conn.execute(sql.SQL("CREATE DATABASE {}").format(database))
 
     # Swap only the path, so the result is still a URL. A libpq keyword string
@@ -122,6 +125,8 @@ def unmigrated_database(database_url: str) -> Iterator[str]:
     yield urlunparse(parts._replace(path=f"/{name}"))
 
     with psycopg.connect(database_url, autocommit=True) as conn:
+        # Psycopg Identifier quotes the fixed database name; this is not SQLAlchemy.
+        # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
         conn.execute(
             sql.SQL("DROP DATABASE IF EXISTS {} WITH (FORCE)").format(database)
         )

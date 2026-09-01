@@ -57,11 +57,15 @@
       "matchDepNames": ["python"],
       "enabled": false
     },
+    // This compatibility cap is reviewed by CI; immediate compatible releases are allowed.
+    // nosemgrep: package_managers.renovate.renovate-missing-minimum-release-age.renovate-missing-minimum-release-age
     {
       "description": "Hold eslint at 9. The plugins eslint-config-next bundles (eslint-plugin-react, -jsx-a11y, -import) all cap their peer eslint at ^9, so eslint 10 installs only because npm downgrades the nested peer conflict to a warning. Drop this rule once those plugins declare eslint 10 support.",
       "matchPackageNames": ["eslint"],
       "allowedVersions": "<10"
     },
+    // Coupled AI SDK updates are reviewed and tested together without an age delay.
+    // nosemgrep: package_managers.renovate.renovate-missing-minimum-release-age.renovate-missing-minimum-release-age
     {
       "description": "Keep the AI SDK React bindings and core package on compatible releases.",
       "matchPackageNames": ["@ai-sdk/react", "ai"],
