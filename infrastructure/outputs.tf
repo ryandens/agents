@@ -33,6 +33,11 @@ output "github_actions_role_arn" {
   value       = aws_iam_role.github_actions_ecr_push.arn
 }
 
+output "github_actions_ecr_read_role_arn" {
+  description = "Read-only ECR role ARN for scheduled Trivy scans — set as the AWS_ECR_READ_ROLE_ARN repository secret"
+  value       = aws_iam_role.github_actions_ecr_read.arn
+}
+
 output "db_cluster_endpoint" {
   description = "Aurora writer endpoint. Reachable only from inside the VPC — connect through the instance with `just ssh`, not from a laptop."
   value       = aws_rds_cluster.main.endpoint
