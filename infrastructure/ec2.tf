@@ -187,12 +187,13 @@ resource "aws_iam_instance_profile" "ec2" {
 }
 
 resource "aws_instance" "app" {
-  ami                         = data.aws_ami.al2023_arm64.id
-  instance_type               = var.ec2_instance_type
-  subnet_id                   = aws_subnet.public[0].id
-  iam_instance_profile        = aws_iam_instance_profile.ec2.name
-  vpc_security_group_ids      = [aws_security_group.ec2.id]
-  associate_public_ip_address = true # outbound only, for Tailscale/SSM/ECR; no inbound TCP is open
+  ami                    = data.aws_ami.al2023_arm64.id
+  instance_type          = var.ec2_instance_type
+  subnet_id              = aws_subnet.public[0].id
+  iam_instance_profile   = aws_iam_instance_profile.ec2.name
+  vpc_security_group_ids = [aws_security_group.ec2.id]
+  # Supplies outbound Tailscale/SSM/ECR access; security groups allow no public ingress.
+  associate_public_ip_address = true # nosemgrep: terraform.aws.security.aws-ec2-has-public-ip.aws-ec2-has-public-ip
 
   user_data_replace_on_change = true
 
