@@ -105,11 +105,15 @@ def unmigrated_database(database_url: str) -> Iterator[str]:
     table itself?" — only a database nothing has migrated can.
     """
     import psycopg
+    from psycopg import sql
 
     name = "unmigrated_probe"
+    database = sql.Identifier(name)
     with psycopg.connect(database_url, autocommit=True) as conn:
-        conn.execute(f"DROP DATABASE IF EXISTS {name} WITH (FORCE)")
-        conn.execute(f"CREATE DATABASE {name}")
+        conn.execute(
+            sql.SQL("DROP DATABASE IF EXISTS {} WITH (FORCE)").format(database)
+        )
+        conn.execute(sql.SQL("CREATE DATABASE {}").format(database))
 
     # Swap only the path, so the result is still a URL. A libpq keyword string
     # ("host=… dbname=…") would work for psycopg but not for SQLAlchemy, which Alembic
@@ -118,4 +122,6 @@ def unmigrated_database(database_url: str) -> Iterator[str]:
     yield urlunparse(parts._replace(path=f"/{name}"))
 
     with psycopg.connect(database_url, autocommit=True) as conn:
-        conn.execute(f"DROP DATABASE IF EXISTS {name} WITH (FORCE)")
+        conn.execute(
+            sql.SQL("DROP DATABASE IF EXISTS {} WITH (FORCE)").format(database)
+        )
