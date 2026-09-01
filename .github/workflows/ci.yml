@@ -206,10 +206,10 @@ jobs:
           sarif_file: ${{ runner.temp }}/results.sarif
           category: datadog-static-analyzer
 
-  # Full-tree backlog scan only. Once the existing findings have been triaged, this can
-  # run on pull requests with a baseline so new findings become the merge gate.
+  # Full scans protect main; `opengrep ci` automatically uses GitHub's pull-request
+  # context for diff-aware PR scans. With no backlog, every finding is a regression and
+  # blocks CI after its SARIF report is uploaded.
   opengrep:
-    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -234,9 +234,9 @@ jobs:
           chmod +x "$install_dir/opengrep"
           echo "$install_dir" >> "$GITHUB_PATH"
 
-      # Capture `ci`'s status instead of ending the job here: exit 1 means findings and
-      # is expected during backlog cleanup; other nonzero statuses fail after upload.
-      - name: Scan the full repository
+      # Capture `ci`'s status instead of ending the job here so findings are uploaded
+      # before either a policy violation or a scanner error fails the job.
+      - name: Scan repository
         id: scan
         run: |
           status=0
@@ -260,10 +260,10 @@ jobs:
         uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
         with:
           sarif_file: ${{ runner.temp }}/opengrep-results.sarif
-          category: opengrep-backlog
+          category: opengrep
 
-      - name: Fail on scanner errors
-        if: ${{ !cancelled() && steps.scan.outputs.exit-code != '0' && steps.scan.outputs.exit-code != '1' }}
+      - name: Fail on findings or scanner errors
+        if: ${{ !cancelled() && steps.scan.outputs.exit-code != '0' }}
         env:
           OPENGREP_EXIT_CODE: ${{ steps.scan.outputs.exit-code }}
         run: |
