@@ -29,13 +29,22 @@
     },
     {
       "customType": "regex",
-      "description": "Update explicitly annotated versions in GitHub Actions workflows; binary checksums remain a required manual review",
+      "description": "Update explicitly annotated versions and optional digests in GitHub Actions workflows",
       "managerFilePatterns": ["/^\\.github/workflows/.+\\.ya?ml$/"],
       "matchStrings": [
-        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)(?: versioning=(?<versioning>\\S+))?\\s+\\w+:\\s*(?<currentValue>\\S+)"
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)(?: versioning=(?<versioning>\\S+))?\\s+\\w+:\\s*(?<currentValue>\\S+)(?:\\s+\\w+:\\s*(?<currentDigest>\\S+))?"
       ]
     }
   ],
+  "customDatasources": {
+    "opengrep-releases": {
+      "defaultRegistryUrlTemplate": "https://api.github.com/repos/opengrep/opengrep/releases?per_page=100",
+      "format": "json",
+      "transformTemplates": [
+        "{\"releases\": $map($, function($release) { {\"version\": $replace($release.tag_name, /^v/, \"\"), \"releaseTimestamp\": $release.published_at, \"changelogUrl\": $release.html_url, \"digest\": $replace($release.assets[name = \"opengrep_manylinux_x86\"][0].digest, /^sha256:/, \"\")} }), \"sourceUrl\": \"https://github.com/opengrep/opengrep\"}"
+      ]
+    }
+  },
   "packageRules": [
     {
       "description": "Bump the >= floors in backend/pyproject.toml, which also regenerates uv.lock. The default rangeStrategy only edits a manifest when the new version escapes the declared range, and an open-ended '>=x' is satisfied by every release — so without this the backend gets no update PRs at all.",
