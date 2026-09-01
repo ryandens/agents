@@ -43,12 +43,7 @@ resource "aws_iam_role_policy" "ec2_agents" {
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
-      {
-        Effect = "Allow"
-        # Required by ECR login; repository operations remain scoped below.
-        Action   = "ecr:GetAuthorizationToken" # nosemgrep: terraform.lang.security.iam.no-iam-creds-exposure.no-iam-creds-exposure
-        Resource = "*"
-      },
+      local.ecr_authorization_statement,
       {
         Effect = "Allow"
         Action = [
