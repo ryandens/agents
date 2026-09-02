@@ -6,6 +6,11 @@ from dagger import check, dag, function, object_type
 class Ci:
     source: dagger.Directory
 
+    def __init__(self, *, source: dagger.Directory) -> None:
+        # Explicitly mirrors the initializer @object_type would generate. Keeping it
+        # visible also lets static analyzers understand how the required field is set.
+        self.source = source
+
     @classmethod
     def create(cls, ws: dagger.Workspace) -> "Ci":
         return cls(
