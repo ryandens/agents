@@ -528,7 +528,7 @@ start-session`, e.g. `just ssh --profile prod`.
 just dev            # start both servers with hot-reload
 just serve          # build the frontend and serve everything from :8000, like production
 just docker-run     # build and run the production image on :8080
-just docker-check   # build the production image and smoke-test it directly
+just docker-check   # Dagger production-image build and smoke test
 just check          # run all checks (mirrors CI)
 
 just backend-test   # pytest (starts a throwaway Postgres container)
@@ -560,8 +560,11 @@ the root `.venv`, Python pin, and `uv.lock`. Target one member from anywhere wit
 `dagger.toml` follows Dagger's workspace model and pins modules in `dagger.lock`.
 The custom `ci` module runs the backend and CLI lint/test suites, frontend lint/build/test
 suite, and production-image smoke test in containers with ephemeral PostgreSQL. Run
-the same pipeline locally with `dagger check` (or `just check`); GitHub Actions invokes
-it directly and sends traces to Dagger Cloud when `DAGGER_CLOUD_TOKEN` is configured.
+the same pipeline locally with `dagger check` (or `just check`); the aggregate
+`just *-check` recipes are aliases for the corresponding Dagger functions. GitHub
+Actions invokes Dagger directly and sends traces to Dagger Cloud when
+`DAGGER_CLOUD_TOKEN` is configured. Just remains the host-oriented task runner for
+local servers, macOS integration, Docker daemon commands, and AWS operations.
 
 ### How the tests use Postgres
 

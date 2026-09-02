@@ -746,8 +746,9 @@ smoke image="agents:local" port="8080":
         {{ image }} >/dev/null
     python3 scripts/smoke_test.py "http://127.0.0.1:{{ port }}"
 
-# Build the production image and smoke-test it
-docker-check: docker-build smoke
+# Build and smoke-test the production image portably with Dagger
+docker-check:
+    dagger call ci image
 
 # Run the production image at http://localhost:8080, against the local Postgres
 docker-run: docker-build db-up db-migrate
@@ -873,8 +874,9 @@ backend-fmt:
 backend-test:
     uv run --package agents pytest backend
 
-# Run all backend checks
-backend-check: backend-lint backend-fmt backend-test
+# Run all backend checks portably with Dagger
+backend-check:
+    dagger call ci backend
 
 # ── Frontend ───────────────────────────────────────────────────────────────────
 
@@ -898,8 +900,9 @@ frontend-build:
 frontend-test:
     pnpm --dir frontend run test
 
-# Run all frontend checks
-frontend-check: frontend-lint frontend-build frontend-test
+# Run all frontend checks portably with Dagger
+frontend-check:
+    dagger call ci frontend
 
 # ── CLI (Safari history export) ────────────────────────────────────────────────
 
@@ -1053,8 +1056,9 @@ cli-fmt:
 cli-test:
     uv run --package safari-history-export pytest cli
 
-# Run all cli checks
-cli-check: cli-lint cli-fmt cli-test
+# Run all CLI checks portably with Dagger
+cli-check:
+    dagger call ci cli
 
 # ── CI ─────────────────────────────────────────────────────────────────────────
 
