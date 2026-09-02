@@ -1,0 +1,2 @@
+# Generated and checked for drift by `dagger check`; scan the module source instead.
+.dagger/modules/ci/sdk/
