@@ -199,26 +199,16 @@ jobs:
           echo "OpenGrep failed with exit code $OPENGREP_EXIT_CODE" >&2
           exit "$OPENGREP_EXIT_CODE"
 
-  # Builds the same image the release workflow ships and checks that one container
-  # really does serve the frontend at / and the API under /api, backed by a Postgres
-  # container `just smoke` starts alongside it. Neither the backend nor the frontend job
-  # can see those seams on its own.
-  docker:
+  # Dagger covers image build and smoke behavior on every run. Keep the vulnerability
+  # scan on main, where its SARIF results represent code that was actually merged.
+  container-scan:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: read
       security-events: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-
-      - name: Setup Just
-        uses: taiki-e/install-action@0f95278332fa2814a643979bc2996a77bbb057d5 # just
-
-      # The smoke test runs the Safari exporter against the container to check that what
-      # the CLI posts is what the API accepts. Without uv those checks skip rather than
-      # fail, which would quietly leave that seam untested here.
-      - name: Install uv
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4
@@ -240,7 +230,6 @@ jobs:
       # to code scanning; deliberately omit Trivy's `format: github` and `github-pat`
       # inputs, which are the separate path that submits an SBOM to Dependency Graph.
       - name: Scan image for vulnerabilities
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           # renovate: datasource=github-releases depName=aquasecurity/trivy
@@ -253,11 +242,7 @@ jobs:
           exit-code: '0'
 
       - name: Upload Trivy results to GitHub code scanning
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
         with:
           sarif_file: trivy-results.sarif
           category: trivy-container
-
-      - name: Smoke test
-        run: just smoke agents:ci
