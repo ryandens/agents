@@ -528,7 +528,7 @@ start-session`, e.g. `just ssh --profile prod`.
 just dev            # start both servers with hot-reload
 just serve          # build the frontend and serve everything from :8000, like production
 just docker-run     # build and run the production image on :8080
-just docker-check   # build the production image and smoke-test it (mirrors the CI docker job)
+just docker-check   # build the production image and smoke-test it directly
 just check          # run all checks (mirrors CI)
 
 just backend-test   # pytest (starts a throwaway Postgres container)
@@ -549,7 +549,7 @@ just frontend-build # next build (type-check + compile)
 just cli-test       # pytest
 just cli-lint       # ruff check
 just cli-fmt        # ruff format --check
-just dagger-check   # portable Dagger checks (currently Vitest)
+just dagger-check   # portable backend, CLI, frontend, and image checks
 ```
 
 The backend and Safari exporter are members of one root [uv workspace](https://docs.astral.sh/uv/concepts/projects/workspaces/).
@@ -558,10 +558,10 @@ the root `.venv`, Python pin, and `uv.lock`. Target one member from anywhere wit
 `uv run --package agents ...` or `uv run --package safari-history-export ...`.
 
 `dagger.toml` follows Dagger's workspace model and pins modules in `dagger.lock`.
-The official Vitest check runs in a container through `just dagger-check`. ESLint and
-pytest stay in the existing jobs for now: their current Dagger modules assume a root
-JavaScript package and a Docker-free Python suite, while this monorepo keeps the
-frontend below the root and its backend tests use testcontainers.
+The custom `ci` module runs the backend and CLI lint/test suites, frontend lint/build/test
+suite, and production-image smoke test in containers with ephemeral PostgreSQL. Run
+the same pipeline locally with `dagger check` (or `just check`); GitHub Actions invokes
+it directly and sends traces to Dagger Cloud when `DAGGER_CLOUD_TOKEN` is configured.
 
 ### How the tests use Postgres
 

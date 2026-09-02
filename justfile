@@ -1058,9 +1058,9 @@ cli-check: cli-lint cli-fmt cli-test
 
 # ── CI ─────────────────────────────────────────────────────────────────────────
 
-# Run the portable Dagger checks from the frontend's monorepo cone.
+# Run the same portable application checks as CI.
 dagger-check:
-    cd frontend && dagger -W .. check
+    dagger check
 
 # Run all checks (mirrors CI)
-check: backend-check frontend-check cli-check
+check: dagger-check
