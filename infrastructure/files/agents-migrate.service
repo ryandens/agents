@@ -47,7 +47,7 @@ ExecStart=/bin/bash -c 'exec /usr/bin/docker run \
     --env-file /run/agents-migrate.env \
     --entrypoint /app/.venv/bin/alembic \
     "$(cat /run/agents-migrate.image)" \
-    -c /app/alembic.ini upgrade head'
+    -c /app/backend/alembic.ini upgrade head'
 
 [Install]
 WantedBy=multi-user.target

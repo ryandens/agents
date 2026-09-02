@@ -499,24 +499,24 @@ db-psql *args:
 
 # Apply pending migrations to the local database
 db-migrate: db-up
-    uv run --project backend alembic -c backend/alembic.ini upgrade head
+    uv run --package agents alembic -c backend/alembic.ini upgrade head
 
 # Show the SQL a migration would run, without touching the database
 db-migrate-sql:
-    uv run --project backend alembic -c backend/alembic.ini upgrade head --sql
+    uv run --package agents alembic -c backend/alembic.ini upgrade head --sql
 
 # Roll the local database back one revision
 db-rollback: db-up
-    uv run --project backend alembic -c backend/alembic.ini downgrade -1
+    uv run --package agents alembic -c backend/alembic.ini downgrade -1
 
 # What the local database is at, and what exists
 db-migration-status: db-up
-    uv run --project backend alembic -c backend/alembic.ini current
-    uv run --project backend alembic -c backend/alembic.ini history
+    uv run --package agents alembic -c backend/alembic.ini current
+    uv run --package agents alembic -c backend/alembic.ini history
 
 # Create an empty revision to fill in by hand (there is no autogenerate — see migrations/README)
 db-revision message: db-up
-    uv run --project backend alembic -c backend/alembic.ini revision -m "{{ message }}"
+    uv run --package agents alembic -c backend/alembic.ini revision -m "{{ message }}"
 
 # Forward a local port to Aurora through the instance over SSM (Ctrl-C to close)
 db-tunnel local_port="15432":
@@ -671,7 +671,7 @@ build: frontend-build
 
 # Serve the built frontend and API from one origin at http://localhost:8000, as production does
 serve: build db-up db-migrate
-    uv run --project backend uvicorn main:app --app-dir backend --port 8000
+    uv run --package agents uvicorn main:app --app-dir backend --port 8000
 
 # Build the production image (frontend export + API in one container)
 docker-build:
@@ -736,7 +736,7 @@ smoke image="agents:local" port="8080":
     docker run --rm --network "$network" \
         -e DATABASE_URL="postgresql://agents:agents@$db:5432/agents" \
         --entrypoint /app/.venv/bin/alembic \
-        {{ image }} -c /app/alembic.ini upgrade head
+        {{ image }} -c /app/backend/alembic.ini upgrade head
 
     docker run -d --name "$name" --network "$network" -p {{ port }}:8080 \
         -e GOOGLE_CLIENT_ID=smoke-test \
@@ -851,7 +851,7 @@ deploy *args:
 
 # Install backend dependencies
 backend-install:
-    sfw uv sync --dev --project backend
+    sfw uv sync --package agents
 
 # Start backend dev server on :8000 (also serves backend/static if `just build` ran)
 #
@@ -859,19 +859,19 @@ backend-install:
 # Alembic now, so a backend started against an unmigrated database comes up healthy and
 # then 500s on the first pantry query.
 backend-dev: db-up db-migrate
-    uv run --project backend uvicorn main:app --app-dir backend --reload --port 8000
+    uv run --package agents uvicorn main:app --app-dir backend --reload --port 8000
 
 # Run backend linter (scripts/ holds the smoke test, held to the same standard)
 backend-lint:
-    uv run --project backend ruff check backend scripts
+    uv run --package agents ruff check backend scripts
 
 # Run backend format check
 backend-fmt:
-    uv run --project backend ruff format --check backend scripts
+    uv run --package agents ruff format --check backend scripts
 
 # Run backend tests
 backend-test:
-    uv run --project backend pytest backend
+    uv run --package agents pytest backend
 
 # Run all backend checks
 backend-check: backend-lint backend-fmt backend-test
@@ -918,11 +918,11 @@ cli-install:
     #!/usr/bin/env bash
     set -euo pipefail
 
-    # Built by an interpreter matching cli/.python-version rather than by whatever
+    # Built by an interpreter matching the workspace .python-version rather than by whatever
     # `python3` happens to be on PATH. Without this the venv silently takes the system
     # version, and the install fails several steps later on requires-python with a
     # message that never mentions the pin.
-    version="$(cat cli/.python-version)"
+    version="$(cat .python-version)"
     if ! interpreter="$(uv python find "$version" 2>/dev/null)"; then
         echo "error: no Python $version found — install one with 'uv python install $version'" >&2
         exit 1
@@ -1039,24 +1039,28 @@ cli-uninstall: cli-uninstall-agent
 
 # Install cli development dependencies
 cli-dev-install:
-    sfw uv sync --dev --project cli
+    sfw uv sync --package safari-history-export
 
 # Run cli linter
 cli-lint:
-    uv run --project cli ruff check cli
+    uv run --package safari-history-export ruff check cli
 
 # Run cli format check
 cli-fmt:
-    uv run --project cli ruff format --check cli
+    uv run --package safari-history-export ruff format --check cli
 
 # Run cli tests
 cli-test:
-    uv run --project cli pytest cli
+    uv run --package safari-history-export pytest cli
 
 # Run all cli checks
 cli-check: cli-lint cli-fmt cli-test
 
 # ── CI ─────────────────────────────────────────────────────────────────────────
+
+# Run the portable Dagger checks from the frontend's monorepo cone.
+dagger-check:
+    cd frontend && dagger -W .. check
 
 # Run all checks (mirrors CI)
 check: backend-check frontend-check cli-check

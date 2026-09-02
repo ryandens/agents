@@ -18,12 +18,14 @@ An AI-powered meal planning and kitchen management app. Chat with the agent to p
 | Database auth | RDS IAM tokens in production (no stored password); password locally |
 | Migrations | Alembic, hand-written SQL, applied as a separate deploy step |
 | Package managers | `uv` (backend, cli), `pnpm` (frontend) |
+| Portable checks | Dagger |
 | Task runner | `just` |
 
 ## Prerequisites
 
 - [just](https://github.com/casey/just)
 - [uv](https://docs.astral.sh/uv/)
+- [Dagger](https://docs.dagger.io/getting-started/introduction/) and a container runtime
 - Node.js 24 (use `nvm` — `.nvmrc` is included)
 - Docker — runs the local Postgres, and the one the tests start
 - An Anthropic API key
@@ -381,7 +383,7 @@ gh release create 0.2.0 --title "0.2.0" --notes "..."
 
 This pushes the `0.2.0` tag, triggering the GitHub Actions release workflow. The image is
 built from the repository root (`-f backend/Dockerfile .`) so a Node stage can run
-`next build` and copy `frontend/out` into the image at `/app/static`. The frontend and the
+`next build` and copy `frontend/out` into the image at `/app/backend/static`. The frontend and the
 API therefore ship as one versioned artifact and cannot drift apart.
 
 Wait for the workflow to go green before deploying.
@@ -547,7 +549,19 @@ just frontend-build # next build (type-check + compile)
 just cli-test       # pytest
 just cli-lint       # ruff check
 just cli-fmt        # ruff format --check
+just dagger-check   # portable Dagger checks (currently Vitest)
 ```
+
+The backend and Safari exporter are members of one root [uv workspace](https://docs.astral.sh/uv/concepts/projects/workspaces/).
+They keep their own dependencies in package-level `pyproject.toml` files while sharing
+the root `.venv`, Python pin, and `uv.lock`. Target one member from anywhere with
+`uv run --package agents ...` or `uv run --package safari-history-export ...`.
+
+`dagger.toml` follows Dagger's workspace model and pins modules in `dagger.lock`.
+The official Vitest check runs in a container through `just dagger-check`. ESLint and
+pytest stay in the existing jobs for now: their current Dagger modules assume a root
+JavaScript package and a Docker-free Python suite, while this monorepo keeps the
+frontend below the root and its backend tests use testcontainers.
 
 ### How the tests use Postgres
 
