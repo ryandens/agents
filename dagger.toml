@@ -1,0 +1,42 @@
+# Dagger workspace configuration
+# Install modules with: dagger install <module>
+# Example:
+#   dagger install github.com/dagger/dagger/modules/wolfi
+
+ignore = [
+  ".git/",
+  ".claude/",
+  ".claude/**",
+  ".venv/",
+  "**/node_modules/",
+  "backend/static/",
+]
+
+[modules.eslint]
+source = "github.com/dagger/eslint"
+
+[modules.eslint.check]
+# The module assumes package.json is at the workspace root; this monorepo keeps the
+# frontend in frontend/. The existing frontend-check recipe remains authoritative.
+skip = ["lint"]
+
+[modules.pytest]
+source = "github.com/dagger/pytest"
+
+[modules.pytest.check]
+# Backend tests use testcontainers and need a Docker daemon. Keep them in the existing
+# backend-check workflow until the pytest module supports Dagger services directly.
+skip = ["cwd-scope-check", "discovery-check", "test-all"]
+
+[modules.vitest]
+source = "github.com/dagger/vitest"
+
+[modules.pytest.settings]
+pythonVersion = 3.14
+
+[modules.eslint.settings]
+packageManager = "pnpm"
+
+[modules.vitest.settings]
+packageManager = "pnpm"
+baseImageAddress = "node:24.20.0-slim"

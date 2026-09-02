@@ -97,6 +97,20 @@ jobs:
       - name: Check
         run: just frontend-check
 
+  # Runs the same portable check locally and in CI. Start in frontend/ so Dagger's
+  # monorepo discovery stays in that project while loading dagger.toml from the root.
+  dagger:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Check with Dagger
+        uses: dagger/dagger-for-github@f599d88d336fdf06f01f9bd24b6339954f7ba3e2 # v6
+        with:
+          version: v1.0.0-beta.11
+          verb: check
+          workdir: frontend
+
   # Lints the GitHub Actions workflow files themselves.
   # https://github.com/rhysd/actionlint/blob/main/docs/usage.md#use-actionlint-on-github-actions
   actionlint:
