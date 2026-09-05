@@ -1,0 +1,15 @@
+[project]
+name = "agents-workspace"
+version = "0.0.0"
+requires-python = ">=3.14"
+dependencies = []
+
+[tool.uv]
+exclude-newer = "7 days"
+# Direct requirements already reviewed and locked before the cooldown policy was
+# introduced. The fixed cutoff admits those versions without allowing newer uploads.
+exclude-newer-package = { alembic = "2026-09-02T00:00:00Z", anthropic = "2026-09-02T00:00:00Z", boto3 = "2026-09-02T00:00:00Z", botocore = "2026-09-02T00:00:00Z", fastapi = "2026-09-02T00:00:00Z", google-auth = "2026-09-02T00:00:00Z", httpx = "2026-09-02T00:00:00Z", psycopg = "2026-09-02T00:00:00Z", psycopg-binary = "2026-09-02T00:00:00Z", psycopg-pool = "2026-09-02T00:00:00Z", pytest = "2026-09-02T00:00:00Z", pytest-asyncio = "2026-09-02T00:00:00Z", python-dotenv = "2026-09-02T00:00:00Z", requests = "2026-09-02T00:00:00Z", ruff = "2026-09-02T00:00:00Z", s3transfer = "2026-09-02T00:00:00Z", testcontainers = "2026-09-02T00:00:00Z", tzdata = "2026-09-02T00:00:00Z", uvicorn = "2026-09-02T00:00:00Z" }
+package = false
+
+[tool.uv.workspace]
+members = ["backend", "cli"]

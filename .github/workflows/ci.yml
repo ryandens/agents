@@ -6,96 +6,20 @@ on:
   pull_request:
 
 jobs:
-  # Needs a Docker daemon, which ubuntu-latest provides: the store tests run against a
-  # real Postgres that backend/conftest.py starts with testcontainers. A runner without
-  # Docker would fail collection rather than skip those tests.
-  backend:
+  # The custom Dagger module is the single application CI entry point. It runs the
+  # backend and CLI checks, frontend checks, and production-image smoke test in
+  # portable containers backed by ephemeral services.
+  dagger:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - name: Setup Just
-        uses: taiki-e/install-action@1938d65511705cfc38a640c66eddcce76384d60e # just
-
-      # Python version comes from backend/.python-version, which uv reads itself.
-      - name: Install uv
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
-
-      # Install the interpreter before enabling the package proxy. uv fetches Python
-      # runtimes from GitHub releases rather than a supported package registry.
-      - name: Install Python
-        run: uv python install "$(cat backend/.python-version)"
-
-      - uses: socketdev/action@ba6de6cc0565af1f42295590380973573297e31f # v1.3.2
+      - name: Check with Dagger
+        uses: dagger/dagger-for-github@f599d88d336fdf06f01f9bd24b6339954f7ba3e2 # v6
         with:
-          mode: firewall-free
-
-      - name: Install dependencies
-        run: just backend-install
-
-      - name: Check
-        run: just backend-check
-
-  # The Safari exporter. Its tests build a synthetic history database rather than
-  # reading a real one, so they need neither macOS nor Full Disk Access and run here.
-  cli:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-
-      - name: Setup Just
-        uses: taiki-e/install-action@1938d65511705cfc38a640c66eddcce76384d60e # just
-
-      # Python version comes from cli/.python-version, which uv reads itself.
-      - name: Install uv
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
-
-      # As in the backend job, keep uv's GitHub-hosted interpreter download outside
-      # the registry firewall and route the dependency sync itself through sfw.
-      - name: Install Python
-        run: uv python install "$(cat cli/.python-version)"
-
-      - uses: socketdev/action@ba6de6cc0565af1f42295590380973573297e31f # v1.3.2
-        with:
-          mode: firewall-free
-
-      - name: Install dependencies
-        run: just cli-dev-install
-
-      - name: Check
-        run: just cli-check
-
-  frontend:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-
-      - name: Setup Just
-        uses: taiki-e/install-action@1938d65511705cfc38a640c66eddcce76384d60e # just
-
-      - name: Setup Node
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
-        with:
-          node-version: 24
-
-      # Socket Firewall: routes package downloads through a local proxy that
-      # blocks known-malicious packages at install time. No API key needed.
-      - uses: socketdev/action@ba6de6cc0565af1f42295590380973573297e31f # v1.3.2
-        with:
-          mode: firewall-free
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
-        with:
-          package_json_file: frontend/package.json
-          cache: true
-          cache_dependency_path: frontend/pnpm-lock.yaml
-
-      - name: Install dependencies
-        run: just frontend-install
-
-      - name: Check
-        run: just frontend-check
+          version: v1.0.0-beta.11
+          verb: check
+          cloud-token: ${{ secrets.DAGGER_CLOUD_TOKEN }}
 
   # Lints the GitHub Actions workflow files themselves.
   # https://github.com/rhysd/actionlint/blob/main/docs/usage.md#use-actionlint-on-github-actions
@@ -275,26 +199,16 @@ jobs:
           echo "OpenGrep failed with exit code $OPENGREP_EXIT_CODE" >&2
           exit "$OPENGREP_EXIT_CODE"
 
-  # Builds the same image the release workflow ships and checks that one container
-  # really does serve the frontend at / and the API under /api, backed by a Postgres
-  # container `just smoke` starts alongside it. Neither the backend nor the frontend job
-  # can see those seams on its own.
-  docker:
+  # Dagger covers image build and smoke behavior on every run. Keep the vulnerability
+  # scan on main, where its SARIF results represent code that was actually merged.
+  container-scan:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: read
       security-events: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-
-      - name: Setup Just
-        uses: taiki-e/install-action@1938d65511705cfc38a640c66eddcce76384d60e # just
-
-      # The smoke test runs the Safari exporter against the container to check that what
-      # the CLI posts is what the API accepts. Without uv those checks skip rather than
-      # fail, which would quietly leave that seam untested here.
-      - name: Install uv
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4
@@ -316,7 +230,6 @@ jobs:
       # to code scanning; deliberately omit Trivy's `format: github` and `github-pat`
       # inputs, which are the separate path that submits an SBOM to Dependency Graph.
       - name: Scan image for vulnerabilities
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           # renovate: datasource=github-releases depName=aquasecurity/trivy
@@ -329,11 +242,7 @@ jobs:
           exit-code: '0'
 
       - name: Upload Trivy results to GitHub code scanning
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
         with:
           sarif_file: trivy-results.sarif
           category: trivy-container
-
-      - name: Smoke test
-        run: just smoke agents:ci

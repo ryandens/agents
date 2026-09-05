@@ -32,15 +32,17 @@ WORKDIR /app
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy
 
-RUN --mount=type=cache,target=/root/.cache/uv \
-    --mount=type=bind,source=backend/pyproject.toml,target=pyproject.toml \
-    --mount=type=bind,source=backend/uv.lock,target=uv.lock \
-    uv sync --frozen --no-dev --no-install-project
-
-COPY backend/ /app
+COPY pyproject.toml uv.lock /app/
+COPY backend/pyproject.toml /app/backend/
+COPY cli/pyproject.toml /app/cli/
 
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev
+    uv sync --frozen --no-dev --no-install-workspace --package agents
+
+COPY backend/ /app/backend
+
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev --package agents
 
 # Repoint venv Python symlinks to /usr/bin/python, where Chainguard places it
 RUN ln -sfn /usr/bin/python /app/.venv/bin/python && \
@@ -50,12 +52,12 @@ RUN ln -sfn /usr/bin/python /app/.venv/bin/python && \
 
 FROM cgr.dev/chainguard/python:latest@sha256:eca30c0ac647bf28beaec7442388609d14fd100984fa63397e6015eaffe22aa1
 
-WORKDIR /app
+WORKDIR /app/backend
 
 COPY --from=builder --chown=nonroot:nonroot /app /app
 
 # Where main.py's STATIC_DIR looks by default
-COPY --from=frontend --chown=nonroot:nonroot /src/out /app/static
+COPY --from=frontend --chown=nonroot:nonroot /src/out /app/backend/static
 
 ENV PATH="/app/.venv/bin:$PATH"
 
