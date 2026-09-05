@@ -48,7 +48,7 @@ RUN ln -sfn /usr/bin/python /app/.venv/bin/python && \
     ln -sfn /usr/bin/python /app/.venv/bin/python3.14
 
 
-FROM cgr.dev/chainguard/python:latest@sha256:eca30c0ac647bf28beaec7442388609d14fd100984fa63397e6015eaffe22aa1
+FROM cgr.dev/chainguard/python:latest@sha256:115532a106aff6e820cd637809edd0c9239f2269d46fb9937cac703cc4d101e5
 
 WORKDIR /app
 
