@@ -7,7 +7,7 @@ readme = "README.md"
 # patch-level floor breaks Dependabot's uv updater. See renovate.json.
 requires-python = ">=3.14"
 dependencies = [
-    "google-auth[requests]>=2.57.0",
+    "google-auth[requests]>=2.57.1",
     "requests>=2.34.2",
 ]
 
