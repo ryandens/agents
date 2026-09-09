@@ -227,8 +227,8 @@ jobs:
       - name: Install OpenGrep
         env:
           # renovate: datasource=custom.opengrep-releases depName=opengrep/opengrep
-          OPENGREP_VERSION: v1.29.0
-          OPENGREP_SHA256: sha256:3365ef49d04893e01338d85d9bbd49b2bd5261ad4c9c0df0a6a0f8d44232ae13
+          OPENGREP_VERSION: v1.30.0
+          OPENGREP_SHA256: sha256:35779bdd72e92129c8df2a77f0c55e8c08356801ea92591ef32108d6b28d564c
         run: |
           install_dir="$RUNNER_TEMP/opengrep/bin"
           mkdir -p "$install_dir"
