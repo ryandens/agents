@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from safari_history.errors import ConfigurationError, UploadFailed
+from safari_history.errors import ConfigurationError, UploadDeferred, UploadFailed
 from safari_history.uploader import default_audience, upload_visits
 
 API_URL = "https://agents.example.com/api/browser-history"
@@ -109,11 +109,25 @@ def test_batches_respect_the_size_limit() -> None:
     assert [len(request["json"]) for request in session.requests] == [500, 500, 1]
 
 
-def test_an_empty_day_still_posts_once() -> None:
-    """Otherwise a quiet day is never acknowledged and is retried every night."""
-    session = FakeSession([FakeResponse(201, {"received": 0, "stored": 0})])
-    upload_visits([], api_url=API_URL, token="tok", session=session)
-    assert session.requests[0]["json"] == []
+def test_an_empty_day_never_posts() -> None:
+    session = FakeSession([])
+    with pytest.raises(UploadDeferred):
+        upload_visits([], api_url=API_URL, token="tok", session=session)
+    assert session.requests == []
+
+
+def test_unreachable_tailnet_is_deferred_without_retry() -> None:
+    import requests
+
+    session = FakeSession([requests.ConnectionError("no route to host")])
+    with pytest.raises(UploadDeferred, match="Tailscale"):
+        upload_visits(
+            visits(1),
+            api_url="https://agents.example.ts.net/api/browser-history",
+            token="tok",
+            session=session,
+        )
+    assert len(session.requests) == 1
 
 
 # --- Failure handling ---

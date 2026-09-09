@@ -127,13 +127,15 @@ class DatabaseStale(DatabaseUnreadable):
         )
 
 
-class SafariRefreshFailed(DatabaseUnreadable):
-    """Safari could not be run long enough to refresh its history database."""
-
-
 class ExportFailed(SafariHistoryError):
     exit_code = 1
 
 
 class UploadFailed(SafariHistoryError):
     exit_code = 6
+
+
+class UploadDeferred(SafariHistoryError):
+    """No upload attempted or acknowledged; retry on a later run."""
+
+    exit_code = 0

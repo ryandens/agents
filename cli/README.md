@@ -38,12 +38,11 @@ Days before the start date are still reachable by naming them: `export-safari-hi
 ```
 launchd (00:15 daily)
   └── ~/Library/Application Support/safari-history-export/venv/bin/export-safari-history
-        ├── 1. briefly open Safari in the background if it is not already running
-        ├── 2. copy  ~/Library/Safari/History.db (+ -wal, -shm) to a temp dir   ← needs FDA
-        ├── 3. query history_visits ⋈ history_items for one local day
-        ├── 4. write ~/Safari-History-Exports/Safari History - YYYY-MM-DD.csv   (atomic)
-        ├── 5. mint a Google ID token from the service account key
-        └── 6. POST the visits to /api/browser-history
+        ├── 1. copy  ~/Library/Safari/History.db (+ -wal, -shm) to a temp dir   ← needs FDA
+        ├── 2. query history_visits ⋈ history_items for one local day
+        ├── 3. write ~/Safari-History-Exports/Safari History - YYYY-MM-DD.csv   (atomic)
+        ├── 4. mint a Google ID token from the service account key
+        └── 5. POST the visits to /api/browser-history
 ```
 
 Safari holds `History.db` open in WAL mode all day, so the exporter never reads it in
@@ -52,11 +51,15 @@ the copy. That avoids fighting Safari's locks, picks up visits still sitting in 
 write-ahead log (the last few minutes of browsing), and makes it impossible for a bug
 here to modify your real history.
 
-Before exporting pending days, the exporter checks whether Safari is running. If it is
-closed, the exporter starts a directly-owned Safari process, waits for history to load
-or sync, and terminates only that process. An already-running Safari—or one the user
-starts concurrently—is never closed by the exporter. If the database does not update
-before the refresh timeout, the export fails without advancing its high-water mark.
+The exporter reads available history without opening Safari or attempting a sync.
+Empty or stale days are deferred without writing a CSV or advancing the catch-up mark
+past the gap. Later runs retry them. Existing CSVs are preserved if a re-export finds
+no visits, and even legacy header-only CSVs are never posted or acknowledged.
+
+Every export run also retries pending uploads, including when there are no new days.
+If a Tailscale host cannot be reached, the upload sweep stops and leaves the CSVs
+pending for another day. These deferrals exit successfully; configuration, credential,
+and API errors still report failures.
 
 Timestamps come out of SQLite as `CFAbsoluteTime` — seconds since 2001-01-01 UTC — and
 are converted to local time with an explicit UTC offset, so a visit at 23:30 belongs to
@@ -325,10 +328,13 @@ be damaged.
 Safari's schema changed — normally a macOS upgrade that renamed something in
 `history_visits` or `history_items`. The query lives in `src/safari_history/safari_db.py`.
 
-**`history database ... was last updated ... before YYYY-MM-DD` (exit 5)**
-Safari has not loaded or synced history for the day being exported. The exporter does
-not turn that stale view into an empty CSV or advance its high-water mark. Open Safari,
-then run the exporter again; the same day will be retried.
+**History export deferred**
+Safari has not synced the requested day, or the query returned no visits. A later run
+will retry; the exporter never records an empty day on the server.
+
+**Tailscale host is not reachable**
+Uploads remain pending until a later run with VPN connectivity. No destination fallback
+is used.
 
 **`the API rejected this service account` (401/403, exit 6)**
 Either the account's email is missing from the backend's `ALLOWED_SERVICE_ACCOUNTS`, or
@@ -340,9 +346,8 @@ audience being used; it must be the scheme and host only, with no trailing path.
 deduplicates on (timestamp, url), so re-uploading a day is safe and stores nothing twice.
 
 **Yesterday's CSV is missing entirely**
-A day with no browsing still produces a header-only CSV — that is the difference between
-"exported and empty" and "never exported". If the file is absent, the run did not happen:
-check `launchctl print` and the error log.
+An empty or stale day is deferred without creating a CSV. Check the log for a deferral
+message; if there is no run logged, check `launchctl print` and the error log.
 
 ## Development
 

@@ -15,8 +15,13 @@ import sys
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
-from safari_history import csv_export, safari_app, safari_db
-from safari_history.errors import ConfigurationError, DatabaseStale, SafariHistoryError
+from safari_history import csv_export, safari_db
+from safari_history.errors import (
+    ConfigurationError,
+    DatabaseStale,
+    SafariHistoryError,
+    UploadDeferred,
+)
 from safari_history.state import (
     DEFAULT_STATE_FILE,
     State,
@@ -255,6 +260,9 @@ def _upload_days(
             _log_error(f"{day}: no CSV in {args.export_dir} — export it first")
             failures += 1
             continue
+        if not csv_export.read_csv(path):
+            _log(f"{day}: no visits available; upload deferred until history syncs")
+            continue
         current = csv_export.digest(path)
         if force or state.needs_upload(day, current):
             pending.append((day, path, current))
@@ -280,6 +288,9 @@ def _upload_days(
         visits = csv_export.read_csv(path)
         try:
             result = upload_visits(visits, api_url=api_url, token=token)
+        except UploadDeferred as exc:
+            _log(f"{day}: {exc.message}; uploads remain pending for a later run")
+            break
         except SafariHistoryError as exc:
             _log_error(f"{day}: {exc.message}")
             failures += 1
@@ -318,17 +329,6 @@ def command_export(args: argparse.Namespace) -> int:
     if not days and not args.quiet:
         _log("nothing to export — already up to date")
 
-    if days:
-        try:
-            launched = safari_app.refresh_history(args.database)
-        except SafariHistoryError as exc:
-            _log_error(exc.message)
-            return exc.exit_code
-        if launched and not args.quiet:
-            _log("opened Safari in the background to refresh history, then closed it")
-
-    exported: list[date] = []
-
     # Oldest first, and the high-water mark only advances across the unbroken run of
     # successes at the front: a day that fails blocks the mark rather than being skipped
     # past, so tomorrow's run retries it, while the days after it still get exported now.
@@ -339,22 +339,29 @@ def command_export(args: argparse.Namespace) -> int:
     for day in days:
         try:
             visits = safari_db.read_visits(day, database=args.database)
+            if not visits:
+                _log(f"{day}: no visits available; export deferred until history syncs")
+                contiguous = False
+                continue
             destination = args.export_dir / csv_export.file_name(day)
             csv_export.write_csv(visits, destination)
         except SafariHistoryError as exc:
+            if isinstance(exc, DatabaseStale):
+                _log(f"{day}: history has not synced; export deferred to a later run")
+                contiguous = False
+                continue
             _log_error(exc.message)
             failures += 1
             contiguous = False
             # A missing database or a revoked grant fails identically for every
             # remaining day; stopping keeps one broken run from writing thirty copies
             # of the same message into the log.
-            if exc.exit_code in (3, 4) or isinstance(exc, DatabaseStale):
+            if exc.exit_code in (3, 4):
                 return exc.exit_code
             continue
 
         if not args.quiet:
             _log(f"exported {day}: {len(visits)} visits -> {destination}")
-        exported.append(day)
         if contiguous:
             last_good = day
 
@@ -365,8 +372,9 @@ def command_export(args: argparse.Namespace) -> int:
         state.last_exported_date = last_good
         state.save()
 
-    if not args.no_upload and exported:
-        failures += _upload_days(exported, args, state, force=True)
+    if not args.no_upload:
+        pending_days = sorted(csv_export.exported_days(args.export_dir))
+        failures += _upload_days(pending_days, args, state, force=False)
 
     return 1 if failures else 0
 
