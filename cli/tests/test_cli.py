@@ -6,6 +6,7 @@ Uploads are intercepted at `upload_visits`, so nothing here reaches Google or th
 from __future__ import annotations
 
 import os
+import sqlite3
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
 
@@ -44,12 +45,12 @@ def caught_up(workspace) -> date:
     state = State.load(workspace["state_file"])
     state.last_exported_date = yesterday - timedelta(days=1)
     state.save()
+    workspace["safari"].add_visit(yesterday, time(8), "https://seed.example/")
     return yesterday
 
 
 @pytest.fixture
 def workspace(tmp_path: Path, safari: FakeSafari, monkeypatch) -> dict:
-    monkeypatch.setattr(cli.safari_app, "refresh_history", lambda database: False)
     key = tmp_path / "service-account.json"
     key.write_text("{}")
     return {
@@ -158,13 +159,20 @@ def test_a_second_run_does_nothing(workspace, uploads, caught_up) -> None:
     assert len(uploads) == before
 
 
-def test_a_day_with_no_browsing_still_exports(workspace, uploads, caught_up) -> None:
-    """Otherwise a quiet day blocks the high-water mark forever."""
-    yesterday = caught_up
+def test_an_empty_day_is_deferred(workspace, uploads) -> None:
+    yesterday = local_today() - timedelta(days=1)
+    state = State.load(workspace["state_file"])
+    state.last_exported_date = yesterday - timedelta(days=1)
+    state.save()
     assert run(workspace) == 0
-
-    written = workspace["export_dir"] / csv_export.file_name(yesterday)
-    assert written.read_text() == "visited_at,title,url\n"
+    assert not (workspace["export_dir"] / csv_export.file_name(yesterday)).exists()
+    assert State.load(
+        workspace["state_file"]
+    ).last_exported_date == yesterday - timedelta(days=1)
+    assert uploads == []
+    workspace["safari"].add_visit(yesterday, time(9), "https://synced.example/")
+    assert run(workspace) == 0
+    assert len(uploads) == 1
     assert State.load(workspace["state_file"]).last_exported_date == yesterday
 
 
@@ -178,14 +186,14 @@ def test_a_stale_database_does_not_write_or_advance_the_export_mark(
     )
     os.utime(workspace["database"], (stale, stale))
 
-    assert run(workspace) == 5
+    assert run(workspace) == 0
 
     assert not (workspace["export_dir"] / csv_export.file_name(caught_up)).exists()
     assert State.load(
         workspace["state_file"]
     ).last_exported_date == caught_up - timedelta(days=1)
     assert uploads == []
-    assert "Open Safari" in capsys.readouterr().err
+    assert "deferred" in capsys.readouterr().out
 
 
 # --- Uploading ---
@@ -193,6 +201,8 @@ def test_a_stale_database_does_not_write_or_advance_the_export_mark(
 
 def test_an_export_uploads_what_it_wrote(workspace, uploads, caught_up) -> None:
     yesterday = caught_up
+    with sqlite3.connect(workspace["database"]) as connection:
+        connection.execute("DELETE FROM history_visits")
     workspace["safari"].add_visit(
         yesterday, time(9, 0), "https://example.com/", "Example"
     )
@@ -292,7 +302,10 @@ def test_a_re_exported_day_is_uploaded_again(workspace, uploads, caught_up) -> N
 
 
 def test_dry_run_sends_nothing(workspace, uploads) -> None:
-    run(workspace, "export", "--no-upload", upload=False)
+    workspace["safari"].add_visit(
+        local_today() - timedelta(days=1), time(9), "https://example.com/"
+    )
+    run(workspace, "export", "--no-upload", "--max-catchup-days", "1000", upload=False)
     assert run(workspace, "upload", "--dry-run") == 0
     assert uploads == []
 
@@ -303,7 +316,10 @@ def test_upload_without_an_api_url_explains_itself(
     # `just` loads the repository's .env before running pytest. This test is about the
     # missing-configuration path, so make that precondition explicit and deterministic.
     monkeypatch.delenv("SAFARI_HISTORY_API_URL", raising=False)
-    run(workspace, "export", "--no-upload", upload=False)
+    workspace["safari"].add_visit(
+        local_today() - timedelta(days=1), time(9), "https://example.com/"
+    )
+    run(workspace, "export", "--no-upload", "--max-catchup-days", "1000", upload=False)
     assert (
         cli.main(
             [
@@ -327,7 +343,10 @@ def test_uploading_a_day_with_no_csv_is_an_error(workspace, uploads, capsys) -> 
 def test_one_missing_day_does_not_abandon_the_others(workspace, uploads) -> None:
     """Naming four days to repair, one of them a typo, must still repair the rest."""
     yesterday = local_today() - timedelta(days=1)
-    run(workspace, "export", "--no-upload", upload=False)
+    workspace["safari"].add_visit(
+        local_today() - timedelta(days=1), time(9), "https://example.com/"
+    )
+    run(workspace, "export", "--no-upload", "--max-catchup-days", "1000", upload=False)
     before = len(uploads)
 
     assert run(workspace, "upload", "2026-07-29", yesterday.isoformat()) == 1
@@ -388,7 +407,10 @@ def test_status_reports_a_stale_but_valid_database_as_readable(
 
 
 def test_status_reports_pending_uploads(workspace, uploads, capsys, caught_up) -> None:
-    run(workspace, "export", "--no-upload", upload=False)
+    workspace["safari"].add_visit(
+        local_today() - timedelta(days=1), time(9), "https://example.com/"
+    )
+    run(workspace, "export", "--no-upload", "--max-catchup-days", "1000", upload=False)
     capsys.readouterr()
     run(workspace, "status")
     assert "pending upload: 1" in capsys.readouterr().out
@@ -418,3 +440,49 @@ def test_a_positive_catchup_cap_is_accepted(workspace, uploads) -> None:
         )
         == 0
     )
+
+
+@pytest.mark.parametrize("explicit", [False, True])
+def test_legacy_empty_csv_is_never_uploaded(workspace, uploads, explicit):
+    day = local_today() - timedelta(days=1)
+    csv_export.write_csv([], workspace["export_dir"] / csv_export.file_name(day))
+    assert run(workspace, "upload", *([day.isoformat()] if explicit else [])) == 0
+    assert uploads == []
+    assert State.load(workspace["state_file"]).uploads == {}
+
+
+def test_empty_reexport_preserves_existing_csv(workspace, uploads, caught_up):
+    assert run(workspace) == 0
+    path = workspace["export_dir"] / csv_export.file_name(caught_up)
+    original = path.read_bytes()
+    with sqlite3.connect(workspace["database"]) as connection:
+        connection.execute("DELETE FROM history_visits")
+    assert run(workspace, caught_up.isoformat()) == 0
+    assert path.read_bytes() == original
+    assert len(uploads) == 1
+
+
+def test_unreachable_host_defers_sweep_and_next_export_retries(
+    workspace, uploads, monkeypatch, caught_up
+):
+    from safari_history.errors import UploadDeferred
+
+    assert run(workspace, "export", "--no-upload") == 0
+    calls = []
+
+    def offline(visits, **kwargs):
+        calls.append(visits)
+        raise UploadDeferred("Tailscale host is not reachable")
+
+    monkeypatch.setattr(cli, "upload_visits", offline)
+    # No new export days: the normal command must still retry pending CSVs.
+    assert run(workspace) == 0
+    assert len(calls) == 1
+    assert State.load(workspace["state_file"]).uploads == {}
+    monkeypatch.setattr(
+        cli,
+        "upload_visits",
+        lambda visits, **kwargs: {"received": len(visits), "stored": len(visits)},
+    )
+    assert run(workspace) == 0
+    assert State.load(workspace["state_file"]).uploads[caught_up].visits == 1

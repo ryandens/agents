@@ -27,7 +27,7 @@ from google.auth.exceptions import GoogleAuthError
 from google.auth.transport.requests import Request as GoogleRequest
 from google.oauth2 import service_account
 
-from safari_history.errors import ConfigurationError, UploadFailed
+from safari_history.errors import ConfigurationError, UploadDeferred, UploadFailed
 
 # Small enough that a day of heavy browsing is a handful of requests, and comfortably
 # under the API's own per-request cap.
@@ -100,6 +100,14 @@ def _post_batch(
                 headers={"Authorization": f"Bearer {token}"},
                 timeout=REQUEST_TIMEOUT_SECONDS,
             )
+        except (requests.ConnectionError, requests.Timeout) as exc:
+            if (urlparse(api_url).hostname or "").endswith(
+                ".ts.net"
+            ) and not isinstance(exc, requests.exceptions.SSLError):
+                raise UploadDeferred(
+                    f"Tailscale host is not reachable at {api_url}"
+                ) from exc
+            last_error = f"{type(exc).__name__}: {exc}"
         except requests.RequestException as exc:
             last_error = f"{type(exc).__name__}: {exc}"
         else:
@@ -146,15 +154,15 @@ def upload_visits(
     session: requests.Session | None = None,
 ) -> dict:
     """Post visits in batches. Returns totals reported by the API."""
+    if not visits:
+        raise UploadDeferred("no visits available; refusing to post an empty day")
     owned_session = session is None
     session = session or requests.Session()
 
     received = 0
     stored = 0
     try:
-        # An empty day still posts once, so a quiet day is recorded as uploaded rather
-        # than retried every night forever.
-        for batch in _batches(visits, batch_size) if visits else [[]]:
+        for batch in _batches(visits, batch_size):
             result = _post_batch(session, api_url, token, batch)
             received += int(result.get("received", len(batch)))
             stored += int(result.get("stored", 0))

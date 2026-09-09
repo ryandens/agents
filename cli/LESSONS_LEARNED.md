@@ -57,7 +57,7 @@ Safari history. Zero rows were not evidence of zero activity.
 
 Recovery:
 
-1. Open Safari and allow history to load or sync, or let the exporter perform its
+1. Allow history to sync naturally before retrying. The exporter no longer performs its
    managed refresh.
 2. Confirm the database or WAL timestamp advanced.
 3. Rewind the high-water mark only to the day before the first bad export, preserving
@@ -122,7 +122,7 @@ Typical signals:
 - A retry reports newly stored rows.
 
 Recovery: use the dedicated upload command, then verify `pending upload: 0`. An export
-run with no new source days may correctly do nothing and therefore may not retry an old
+run now retries pending uploads even without new source days. Older versions did not retry an old
 pending upload.
 
 ### Recognize a display or aggregation problem
@@ -159,26 +159,14 @@ successfully return zero rows even though browsing occurred.
   in the WAL before checkpointing.
 - If both files predate the requested day, fail closed. Do not write an empty CSV or
   advance the export high-water mark.
-- A refresh timeout is a failure, not success. Otherwise a database touched earlier in
-  the day can still be mistaken for a complete view.
+- A recent modification time does not prove completeness: empty queries must also be deferred.
 - Keep status diagnostics distinct: readability checks should validate access and
   schema without reporting a readable-but-stale database as corrupt or inaccessible.
 
-## Refresh Safari without taking ownership of the user's session
+## Leave Safari lifecycle to the user
 
-Opening Safari before export is a practical way to load and sync history, but application
-lifecycle management has user-visible consequences.
-
-- If Safari is already running, leave it entirely alone.
-- Launch a directly owned process and retain its exact PID. Do not later quit by
-  application name; a user can open Safari between the initial process check and launch.
-- Terminate only the process created by the exporter, including on timeout and error
-  paths.
-- Do not claim the launch is hidden unless the implementation can guarantee that without
-  requiring additional Automation or Accessibility permissions.
-- Guard lifecycle control with a macOS platform check. The database reader remains
-  portable for Linux tests and packaged smoke checks, where `/usr/bin/open` may exist but
-  has unrelated semantics.
+The exporter no longer opens Safari or attempts to force history synchronization.
+Empty and stale days are deferred, and empty payloads are never sent to the server.
 
 ## Full Disk Access belongs to an exact executable
 
@@ -221,7 +209,7 @@ This separation enables safe recovery:
   permissions.
 - Respect the per-run catch-up cap and monitor each run before starting the next.
 - Re-exported visits are safe when the API deduplicates on its stable visit key.
-- A normal export run with no new days does not necessarily retry a previously failed
+- A normal export run now retries a previously failed
   upload; use the dedicated upload command and verify `pending upload: 0`.
 
 ## Diagnose the pipeline one layer at a time
