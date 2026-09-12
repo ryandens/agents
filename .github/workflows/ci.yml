@@ -19,7 +19,7 @@ jobs:
 
       # Python version comes from backend/.python-version, which uv reads itself.
       - name: Install uv
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
 
       # Install the interpreter before enabling the package proxy. uv fetches Python
       # runtimes from GitHub releases rather than a supported package registry.
@@ -48,7 +48,7 @@ jobs:
 
       # Python version comes from cli/.python-version, which uv reads itself.
       - name: Install uv
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
 
       # As in the backend job, keep uv's GitHub-hosted interpreter download outside
       # the registry firewall and route the dependency sync itself through sfw.
@@ -294,7 +294,7 @@ jobs:
       # the CLI posts is what the API accepts. Without uv those checks skip rather than
       # fail, which would quietly leave that seam untested here.
       - name: Install uv
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4
