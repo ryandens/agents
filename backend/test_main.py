@@ -33,6 +33,27 @@ def client():
     app.dependency_overrides.clear()
 
 
+def test_version_requires_authentication():
+    response = TestClient(app).get("/api/version")
+    assert response.status_code == 401
+    assert "version" not in response.json()
+
+
+@pytest.mark.parametrize("release", ["0.7.0-rc.1", "0.7.0"])
+def test_version_reports_runtime_release(client, monkeypatch, release):
+    # Promotion changes the runtime label while keeping the exact same image digest.
+    monkeypatch.setenv("APP_VERSION", f"{release}@sha256:{'a' * 64}")
+    response = client.get("/api/version")
+    assert response.status_code == 200
+    assert response.json() == {"version": release}
+    assert response.headers["cache-control"] == "no-store"
+
+
+def test_version_defaults_to_dev(client, monkeypatch):
+    monkeypatch.delenv("APP_VERSION", raising=False)
+    assert client.get("/api/version").json() == {"version": "dev"}
+
+
 def test_chat_streams_sse(client):
     import json
 

@@ -69,6 +69,7 @@ ExecStartPre=/bin/bash -c 'set -e; set -o pipefail; \
         printf "SESSION_SECRET=%%s\n" "$session_secret"; \
         printf "GOOGLE_CLIENT_ID=%%s\n" "$google_client_id"; \
         printf "APP_BASE_URL=%%s\n" "$app_base_url"; \
+        printf "APP_VERSION=%%s\n" "$app_version"; \
         printf "ALLOWED_EMAILS=%%s\n" "$allowed_emails"; \
         printf "ALLOWED_SERVICE_ACCOUNTS=%%s\n" "$allowed_service_accounts"; \
         printf "DATABASE_URL=%%s\n" "$database_url"; \
