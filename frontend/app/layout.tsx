@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
 import { AuthProvider } from "./components/AuthProvider";
 import UserMenu from "./components/UserMenu";
+import AppVersion from "./components/AppVersion";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -57,6 +58,7 @@ export default function RootLayout({
             <UserMenu />
           </nav>
           <div className="flex-1 flex flex-col min-h-0">{children}</div>
+          <AppVersion />
         </AuthProvider>
       </body>
     </html>

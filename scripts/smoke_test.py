@@ -166,6 +166,7 @@ def api_is_not_shadowed_by_static_files(base_url):
     """/api routes still reach FastAPI and enforce auth, despite the mount at /"""
     for method, path, body in (
         ("GET", "/api/pantry", None),
+        ("GET", "/api/version", None),
         ("POST", "/api/chat", b'{"messages":[]}'),
         ("PATCH", "/api/pantry/8d1c1b1e-0000-4000-8000-000000000000", b"{}"),
         # The exporter's endpoint. Worth a check of its own: it is the one route

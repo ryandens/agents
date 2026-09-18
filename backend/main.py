@@ -257,6 +257,15 @@ async def ui_message_stream(messages: list[MessageParam]) -> AsyncGenerator[str]
     yield sse({"type": "finish"})
 
 
+@app.get("/api/version")
+def version(_: AuthenticatedUser):
+    """The runtime deployment label, independent of the image's identity."""
+    return JSONResponse(
+        content={"version": os.environ.get("APP_VERSION", "dev").split("@", 1)[0]},
+        headers={"Cache-Control": "no-store"},
+    )
+
+
 @app.get("/health")
 def health():
     """Readiness, including the database.

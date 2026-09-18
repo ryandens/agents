@@ -386,6 +386,12 @@ API therefore ship as one versioned artifact and cannot drift apart.
 
 Wait for the workflow to go green before deploying.
 
+At startup, the service passes the deployed `app_version` parameter into the container
+as `APP_VERSION`. Authenticated `GET /api/version` returns its tag portion (for example,
+`{"version":"0.7.0"}`), displayed in the app footer after sign-in. The label is runtime
+configuration, so a release candidate and final release can share the same image digest.
+Local runs default to `dev`; set the `APP_VERSION` environment variable to override it.
+
 ### Deploying a new version
 
 Deploying does **not** replace the EC2 instance. The image tag and every config value live
