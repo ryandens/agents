@@ -4,3 +4,6 @@ allowBuilds:
 # for this app's dependency update cadence.
 # nosemgrep: package_managers.pnpm.pnpm-missing-minimum-release-age.pnpm-minimum-release-age
 minimumReleaseAge: 480
+minimumReleaseAgeExclude:
+  # Renovate security update: next@16.3.6
+  - next@16.3.6
