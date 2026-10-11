@@ -12,7 +12,7 @@ An AI-powered meal planning and kitchen management app. Chat with the agent to p
 
 | Layer | Tech |
 |---|---|
-| Backend | Python 3.14, FastAPI, Anthropic SDK (`claude-opus-4-7`) |
+| Backend | Python 3.15, FastAPI, Anthropic SDK (`claude-opus-4-7`) |
 | Frontend | Next.js 16 (App Router), React 19, Tailwind CSS v4, Vercel AI SDK v6 |
 | Database | PostgreSQL 17 — Aurora Serverless v2 in production, a container locally |
 | Database auth | RDS IAM tokens in production (no stored password); password locally |

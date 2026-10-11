@@ -79,7 +79,7 @@ pipeline behind the network.
 
 ## Install
 
-Requires macOS and Python 3.14+, matching the backend. From the repo root:
+Requires macOS and Python 3.14+. From the repo root:
 
 ```sh
 just cli-install
