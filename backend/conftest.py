@@ -82,7 +82,9 @@ def pool(migrated_database: str) -> Iterator[ConnectionPool]:
 def clean_database(pool: ConnectionPool) -> ConnectionPool:
     """Empty every table before each test, so tests do not see each other's rows."""
     with pool.connection() as conn:
-        conn.execute("TRUNCATE pantry_items, browser_visits")
+        conn.execute(
+            "TRUNCATE pantry_items, browser_visits, fitness_sets, fitness_entries, fitness_workouts, fitness_exercises, fitness_imports, fitness_mutations"
+        )
     return pool
 
 
