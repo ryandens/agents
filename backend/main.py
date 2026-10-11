@@ -28,6 +28,7 @@ import db
 from auth import authenticated
 from browser_history import SiteVisit
 from browser_history_store import BrowserHistoryStore
+from fitness_api import router as fitness_router
 from pantry import PantryItem, PantryItemCreate, PantryItemUpdate, StorageLocation
 from pantry_store import PantryStore
 from youtube_shorts import DEFAULT_DAYS, MAX_DAYS, ShortsDay, fill_gaps, window
@@ -197,6 +198,7 @@ app.add_middleware(
 app.add_middleware(LimitRequestBody, max_bytes=MAX_REQUEST_BYTES)
 
 app.include_router(auth.router)
+app.include_router(fitness_router)
 
 # Depends() called in an argument default trips B008, so carry it in the type.
 AuthenticatedUser = Annotated[dict, Depends(authenticated)]
