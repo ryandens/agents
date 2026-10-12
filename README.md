@@ -28,6 +28,30 @@ An AI-powered meal planning and kitchen management app. Chat with the agent to p
 - Docker — runs the local Postgres, and the one the tests start
 - An Anthropic API key
 
+## Python workspace
+
+The backend (`agents`) and CLI (`safari-history-export`) are uv workspace members.
+They share the root `uv.lock`, `.python-version`, and development `.venv`; each
+member declares its own dependencies in its `pyproject.toml`.
+
+```sh
+uv sync --locked --all-packages  # Install both members and their dev dependencies
+uv run --locked --package agents pytest backend
+uv run --locked --package safari-history-export pytest cli
+uv add --package agents <dependency>
+uv add --package safari-history-export <dependency>
+uv lock                        # Refresh the shared lock after manifest edits
+```
+
+The existing `just` recipes select the appropriate member. Member-specific syncs
+can remove packages used only by the other member; use `--all-packages` when working
+on both together. Commit the root lockfile with dependency changes. Old
+`backend/.venv` and `cli/.venv` directories can be removed after migrating.
+
+The Docker image installs only backend runtime dependencies. `just cli-install`
+still creates a dedicated environment with a copied interpreter for macOS Full
+Disk Access; do not grant that permission to the shared development environment.
+
 ## Setup
 
 ```sh
