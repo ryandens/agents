@@ -314,7 +314,15 @@ def cli_workspace():
 def run_cli(*args, expect_success=True):
     """Run the packaged CLI from cli/, returning its completed process."""
     result = subprocess.run(
-        ["uv", "run", "--project", "cli", "export-safari-history", *args],
+        [
+            "uv",
+            "run",
+            "--locked",
+            "--package",
+            "safari-history-export",
+            "export-safari-history",
+            *args,
+        ],
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
@@ -397,8 +405,9 @@ def cli_payload():
         [
             "uv",
             "run",
-            "--project",
-            "cli",
+            "--locked",
+            "--package",
+            "safari-history-export",
             "python",
             "-c",
             _PAYLOAD_PROGRAM,

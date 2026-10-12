@@ -37,21 +37,20 @@ ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
     UV_PYTHON_DOWNLOADS=never
 
-RUN --mount=type=cache,target=/root/.cache/uv \
-    --mount=type=bind,source=backend/pyproject.toml,target=pyproject.toml \
-    --mount=type=bind,source=backend/uv.lock,target=uv.lock \
-    uv sync --frozen --no-dev --no-install-project
-
-COPY backend/ /app
+# Keep the workspace layout while resolving, but install only backend dependencies.
+COPY pyproject.toml uv.lock ./
+COPY backend/pyproject.toml backend/pyproject.toml
+COPY cli/pyproject.toml cli/pyproject.toml
 
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev
+    uv sync --locked --package agents --no-dev --no-install-workspace
 
 FROM cgr.dev/chainguard/python:latest@sha256:bb704045027d02553057fd5e2e4c2061e34780d267a3297380deee5c24901ae8
 
 WORKDIR /app
 
-COPY --from=builder --chown=nonroot:nonroot /app /app
+COPY --from=builder --chown=nonroot:nonroot /app/.venv /app/.venv
+COPY --chown=nonroot:nonroot backend/ /app
 
 # Where main.py's STATIC_DIR looks by default
 COPY --from=frontend --chown=nonroot:nonroot /src/out /app/static

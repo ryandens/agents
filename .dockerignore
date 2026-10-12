@@ -16,7 +16,7 @@ README.md
 **/__pycache__/
 **/*.py[co]
 **/.pytest_cache/
-backend/.python-version
+.python-version
 backend/data/
 backend/test_*.py
 backend/conftest.py
