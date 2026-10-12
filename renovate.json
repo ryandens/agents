@@ -47,6 +47,13 @@
   },
   "packageRules": [
     {
+      "description": "Update the Chainguard Python builder and runtime images together.",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["cgr.dev/chainguard/python"],
+      "matchCurrentValue": "/^latest(-dev)?$/",
+      "groupName": "Chainguard Python"
+    },
+    {
       "description": "Bump the >= floors in the workspace member pyproject.toml files, which also regenerates the root uv.lock. The default rangeStrategy only edits a manifest when the new version escapes the declared range, and an open-ended '>=x' is satisfied by every release — so without this the backend gets no update PRs at all.",
       "matchManagers": ["pep621"],
       "rangeStrategy": "bump"
