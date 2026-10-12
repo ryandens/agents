@@ -32,7 +32,12 @@ class Ci:
     def python(self) -> dagger.Container:
         return (
             dag.container()
-            .from_("ghcr.io/astral-sh/uv:python3.14-bookworm-slim")
+            .from_("cgr.dev/chainguard/python:latest-dev@sha256:e8e6a6f7677673d91c9b28fa2ec6ad62cd5ed532179846d2c14e75c93a12c3fc")
+            .with_user("root")
+            .with_file(
+                "/usr/local/bin/uv",
+                dag.container().from_("ghcr.io/astral-sh/uv:0.13.0@sha256:cdc6093146eb3ff6a40107b38f008b789e050e77ad87865e381d9917da55a168").file("/uv"),
+            )
             .with_directory("/src", self.source)
             .with_workdir("/src")
             .with_mounted_cache("/root/.cache/uv", dag.cache_volume("uv"))
@@ -60,10 +65,10 @@ class Ci:
                 "TEST_DATABASE_URL",
                 "postgresql://agents:agents@database:5432/agents",
             )
-            .with_exec(["uv", "sync", "--frozen", "--package", "agents"])
-            .with_exec(["uv", "run", "--package", "agents", "ruff", "check", "backend", "scripts"])
-            .with_exec(["uv", "run", "--package", "agents", "ruff", "format", "--check", "backend", "scripts"])
-            .with_exec(["uv", "run", "--package", "agents", "pytest", "backend"])
+            .with_exec(["uv", "sync", "--locked", "--package", "agents"])
+            .with_exec(["uv", "run", "--locked", "--package", "agents", "ruff", "check", "backend", "scripts"])
+            .with_exec(["uv", "run", "--locked", "--package", "agents", "ruff", "format", "--check", "backend", "scripts"])
+            .with_exec(["uv", "run", "--locked", "--package", "agents", "pytest", "backend"])
             .sync()
         )
 
@@ -73,10 +78,10 @@ class Ci:
         """Lint, format-check, and test the Safari history exporter."""
         await (
             self.python()
-            .with_exec(["uv", "sync", "--frozen", "--package", "safari-history-export"])
-            .with_exec(["uv", "run", "--package", "safari-history-export", "ruff", "check", "cli"])
-            .with_exec(["uv", "run", "--package", "safari-history-export", "ruff", "format", "--check", "cli"])
-            .with_exec(["uv", "run", "--package", "safari-history-export", "pytest", "cli"])
+            .with_exec(["uv", "sync", "--locked", "--package", "safari-history-export"])
+            .with_exec(["uv", "run", "--locked", "--package", "safari-history-export", "ruff", "check", "cli"])
+            .with_exec(["uv", "run", "--locked", "--package", "safari-history-export", "ruff", "format", "--check", "cli"])
+            .with_exec(["uv", "run", "--locked", "--package", "safari-history-export", "pytest", "cli"])
             .sync()
         )
 
@@ -86,7 +91,7 @@ class Ci:
         """Install, lint, build, and test the frontend."""
         await (
             dag.container()
-            .from_("node:24.20.0-slim")
+            .from_("node:24.21.0-slim")
             .with_directory("/src", self.source)
             .with_workdir("/src/frontend")
             .with_mounted_cache("/pnpm/store", dag.cache_volume("pnpm"))
@@ -115,7 +120,7 @@ class Ci:
                 [
                     "/app/.venv/bin/alembic",
                     "-c",
-                    "/app/backend/alembic.ini",
+                    "/app/alembic.ini",
                     "upgrade",
                     "head",
                 ]

@@ -582,11 +582,6 @@ just cli-fmt        # ruff format --check
 just dagger-check   # portable backend, CLI, frontend, and image checks
 ```
 
-The backend and Safari exporter are members of one root [uv workspace](https://docs.astral.sh/uv/concepts/projects/workspaces/).
-They keep their own dependencies in package-level `pyproject.toml` files while sharing
-the root `.venv`, Python pin, and `uv.lock`. Target one member from anywhere with
-`uv run --package agents ...` or `uv run --package safari-history-export ...`.
-
 `dagger.toml` follows Dagger's workspace model and pins modules in `dagger.lock`.
 The custom `ci` module runs the backend and CLI lint/test suites, frontend lint/build/test
 suite, and production-image smoke test in containers with ephemeral PostgreSQL. Run
