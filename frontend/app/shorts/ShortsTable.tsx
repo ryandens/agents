@@ -48,10 +48,14 @@ export default function ShortsTable({ days }: { days: ShortsDay[] }) {
               {/* tabular-nums here and not on the stat tiles: these are columns of
                   numbers that have to line up under each other. */}
               <td className="py-1.5 pr-4 text-right tabular-nums text-stone-900 dark:text-stone-100">
-                {day.visits}
+                {!day.history_uploaded ? (
+                  <span className="text-stone-500">Not uploaded</span>
+                ) : day.visits === 0 ? (
+                  <span className="font-medium text-emerald-700 dark:text-emerald-400">✓ 0 · Shorts-free</span>
+                ) : day.visits}
               </td>
               <td className="py-1.5 text-right tabular-nums text-stone-500 dark:text-stone-400">
-                {day.unique_shorts}
+                {day.history_uploaded ? day.unique_shorts : "—"}
               </td>
             </tr>
           ))}

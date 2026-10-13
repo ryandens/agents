@@ -15,7 +15,10 @@ from youtube_shorts import ShortsDay, fill_gaps, window
 
 def day(iso: str, visits: int = 1, unique_shorts: int = 1) -> ShortsDay:
     return ShortsDay(
-        day=date.fromisoformat(iso), visits=visits, unique_shorts=unique_shorts
+        day=date.fromisoformat(iso),
+        visits=visits,
+        unique_shorts=unique_shorts,
+        history_uploaded=True,
     )
 
 
@@ -113,3 +116,8 @@ def test_a_zone_resolves_without_a_system_timezone_database() -> None:
         pytest.fail("tzdata is not installed; the deployed image has no other copy")
     finally:
         reset_tzpath()
+
+
+def test_missing_history_is_not_a_shorts_free_day():
+    filled = fill_gaps([day("2026-08-01", 0, 0)], date(2026, 7, 31), date(2026, 8, 2))
+    assert [row.history_uploaded for row in filled] == [False, True, False]

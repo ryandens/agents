@@ -47,6 +47,9 @@ class ShortsDay(BaseModel):
     model_config = {"extra": "forbid"}
 
     day: date
+    # Presence of any browser history in the requested time zone. An absent day is
+    # unknown, even though its numeric counts remain zero for API compatibility.
+    history_uploaded: bool = False
     # Page loads of a Shorts URL. Named for what it is rather than "views": a visit is
     # Safari having recorded a navigation, which is the closest thing the history
     # database has to "watched one" and is not the same claim.
@@ -65,12 +68,10 @@ def window(days: int, today: date) -> tuple[date, date]:
 
 
 def fill_gaps(counted: list[ShortsDay], start: date, end: date) -> list[ShortsDay]:
-    """Every day from start to end, with the days nothing happened reported as zero.
+    """Every calendar day, marking gaps as history not uploaded.
 
-    A time axis has to be a calendar rather than a list of the days something happened.
-    Handing the chart only the non-empty days would draw a week off as a single wide
-    step between the days either side of it — which reads as "it stayed about the
-    same", the opposite of what it means.
+    A time axis has to be a calendar rather than a list of days with data. The
+    history_uploaded flag keeps absent data distinct from an observed zero.
 
     Days the database returned are trusted as-is; this only adds what is missing.
     """

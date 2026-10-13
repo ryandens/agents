@@ -91,7 +91,7 @@ def test_a_non_shorts_url_is_not_counted(
     history_store: BrowserHistoryStore, url: str
 ) -> None:
     history_store.record_visits([visit(utc(12), url)])
-    assert counted(history_store) == {}
+    assert counted(history_store) == {DAY.isoformat(): (0, 0)}
 
 
 def test_ordinary_browsing_alongside_shorts_is_ignored(
@@ -246,3 +246,14 @@ def test_the_spring_forward_day_is_still_one_day(
 
 def test_an_empty_history_reports_nothing(history_store: BrowserHistoryStore) -> None:
     assert history_store.daily_shorts(DAY, DAY, "UTC") == []
+
+
+def test_non_shorts_history_proves_a_zero_in_the_requested_zone(history_store):
+    history_store.record_visits(
+        [visit(utc(3, 30, date(2026, 7, 27)), "https://example.com")]
+    )
+    rows = history_store.daily_shorts(DAY, date(2026, 7, 27), EASTERN)
+    assert len(rows) == 1
+    assert rows[0].day == DAY
+    assert rows[0].history_uploaded is True
+    assert rows[0].visits == rows[0].unique_shorts == 0

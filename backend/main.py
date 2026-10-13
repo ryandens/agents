@@ -376,9 +376,9 @@ def daily_youtube_shorts(
 ) -> list[ShortsDay]:
     """Shorts watched per day for the last `days` days, oldest first.
 
-    Always exactly `days` entries, including the ones that are zero: the caller is
-    drawing a time axis, and a gap it has to reconstruct itself is a gap it can get
-    wrong.
+    Always exactly `days` entries. `history_uploaded` distinguishes days with any
+    stored Safari history from gaps. Zero Shorts only counts as an achievement on
+    days with history; it does not prove that all devices have finished syncing.
 
     `tz` names the zone the days are cut in — the browser's own, so "today" on the
     graph is the day the person reading it is having. It has to be a zone name both

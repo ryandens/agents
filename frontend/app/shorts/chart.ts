@@ -68,8 +68,9 @@ export interface Summary {
   /** The day the graph ends on — the one the reader is currently having. */
   today: ShortsDay | null;
   total: number;
-  /** Mean over every day in the range, including the zeroes. One decimal place. */
-  average: number;
+  /** Mean over uploaded days, including the zeroes. One decimal place. */
+  average: number | null;
+  uploadedDays: number;
   /** The tallest column, or null if nothing was watched at all. Ties go to the earliest. */
   busiest: ShortsDay | null;
   /** Days in the range with none at all — the number worth trying to grow. */
@@ -77,20 +78,22 @@ export interface Summary {
 }
 
 export function summarise(days: ShortsDay[]): Summary {
-  const total = days.reduce((sum, day) => sum + day.visits, 0);
+  const uploaded = days.filter((day) => day.history_uploaded);
+  const total = uploaded.reduce((sum, day) => sum + day.visits, 0);
   // Deliberately no range-wide "unique Shorts" figure. The daily counts cannot be
   // added up — a video watched on Monday and again on Friday is one video and would
   // be counted twice — and answering it properly needs a question the API does not
   // ask. A number that is quietly wrong is worse than a number that is absent.
-  const busiest = days.reduce<ShortsDay | null>(
+  const busiest = uploaded.reduce<ShortsDay | null>(
     (best, day) => (day.visits > 0 && (!best || day.visits > best.visits) ? day : best),
     null
   );
   return {
     today: days.length > 0 ? days[days.length - 1] : null,
     total,
-    average: days.length > 0 ? Math.round((total / days.length) * 10) / 10 : 0,
+    average: uploaded.length > 0 ? Math.round((total / uploaded.length) * 10) / 10 : null,
+    uploadedDays: uploaded.length,
     busiest,
-    cleanDays: days.filter((day) => day.visits === 0).length,
+    cleanDays: uploaded.filter((day) => day.visits === 0).length,
   };
 }

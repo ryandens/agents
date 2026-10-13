@@ -4,6 +4,8 @@ export interface ShortsDay {
   day: string;
   /** Page loads of a Shorts URL that day. */
   visits: number;
+  /** Any Safari history is stored for this local day (not a sync-completion guarantee). */
+  history_uploaded: boolean;
   /** Distinct videos among them. Watching one Short four times is 4 and 1. */
   unique_shorts: number;
 }
