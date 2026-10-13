@@ -53,7 +53,7 @@ _INSERT = """
 # few rows the date predicate then drops; one that is too narrow silently loses a day.
 _DAILY_SHORTS = """
     SELECT (visited_at AT TIME ZONE %(tz)s)::date AS day,
-           true AS history_uploaded,
+           true AS has_history,
            count(*) FILTER (WHERE url ~ %(pattern)s) AS visits,
            count(DISTINCT substring(url from %(pattern)s)) AS unique_shorts
     FROM browser_visits

@@ -10,7 +10,7 @@ import {
 import type { ShortsDay } from "../types";
 
 function day(iso: string, visits: number, unique = visits): ShortsDay {
-  return { day: iso, visits, unique_shorts: unique, history_uploaded: true };
+  return { day: iso, visits, unique_shorts: unique, has_history: true };
 }
 
 describe("parseDay", () => {
@@ -138,7 +138,7 @@ it("excludes unuploaded days from averages and accomplishments", () => {
   const result = summarise([
     day("2026-07-27", 8),
     day("2026-07-28", 0),
-    { ...day("2026-07-29", 0), history_uploaded: false },
+    { ...day("2026-07-29", 0), has_history: false },
   ]);
   expect(result.average).toBe(4);
   expect(result.cleanDays).toBe(1);

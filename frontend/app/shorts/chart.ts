@@ -78,7 +78,7 @@ export interface Summary {
 }
 
 export function summarise(days: ShortsDay[]): Summary {
-  const uploaded = days.filter((day) => day.history_uploaded);
+  const uploaded = days.filter((day) => day.has_history);
   const total = uploaded.reduce((sum, day) => sum + day.visits, 0);
   // Deliberately no range-wide "unique Shorts" figure. The daily counts cannot be
   // added up — a video watched on Monday and again on Friday is one video and would

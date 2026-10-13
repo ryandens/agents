@@ -74,11 +74,11 @@ export default function ShortsChart({ days }: { days: ShortsDay[] }) {
                 onMouseLeave={() => setActive((current) => (current === index ? null : current))}
                 onFocus={() => setActive(index)}
                 onBlur={() => setActive((current) => (current === index ? null : current))}
-                aria-label={!day.history_uploaded ? `${formatDayLong(day.day)}: Not uploaded` : day.visits === 0 ? `${formatDayLong(day.day)}: 0 Shorts — Shorts-free. Nice work!` : `${formatDayLong(day.day)}: ${day.visits} ${
+                aria-label={!day.has_history ? `${formatDayLong(day.day)}: Not uploaded` : day.visits === 0 ? `${formatDayLong(day.day)}: 0 Shorts — Shorts-free. Nice work!` : `${formatDayLong(day.day)}: ${day.visits} ${
                   day.visits === 1 ? "Short" : "Shorts"
                 }, ${day.unique_shorts} unique`}
               >
-                {!day.history_uploaded ? (
+                {!day.has_history ? (
                   <span aria-hidden="true" className="mb-0.5 w-full max-w-6 border-b-2 border-dashed border-stone-400" />
                 ) : day.visits === 0 ? (
                   <span aria-hidden="true" className="text-sm font-bold text-emerald-700 dark:text-emerald-400">✓</span>
@@ -149,13 +149,13 @@ function Tooltip({
       {/* The value leads and the label follows: the reader already knows which day
           they are pointing at — they came for the number. */}
       <div className="text-sm font-semibold whitespace-nowrap text-white">
-        {day.history_uploaded ? `${day.visits} ${day.visits === 1 ? "Short" : "Shorts"}` : "Not uploaded"}
+        {day.has_history ? `${day.visits} ${day.visits === 1 ? "Short" : "Shorts"}` : "Not uploaded"}
       </div>
-      {day.history_uploaded && day.visits === 0 && (
+      {day.has_history && day.visits === 0 && (
         <div className="text-xs whitespace-nowrap text-emerald-300">Shorts-free. Nice work!</div>
       )}
       <div className="text-[11px] whitespace-nowrap text-stone-300">
-        {day.history_uploaded ? `${day.unique_shorts} unique · ` : "Awaiting Safari history · "}{formatDayLong(day.day)}
+        {day.has_history ? `${day.unique_shorts} unique · ` : "Awaiting Safari history · "}{formatDayLong(day.day)}
       </div>
     </div>
   );

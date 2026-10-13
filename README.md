@@ -266,7 +266,7 @@ is running. `GET /api/youtube-shorts/daily?days=30&tz=America/New_York` is the e
 and it always answers with exactly `days` entries, zeroes included, so the caller is
 never reconstructing a gap.
 
-Each entry also includes `history_uploaded`: true when any Safari visits are stored
+Each entry also includes `has_history`: true when any Safari visits are stored
 for that day in the requested time zone. Uploaded days with zero Shorts get a green
 checkmark and count toward **Shorts-free days**. Days without history say **Not
 uploaded**, use a dashed chart marker, and contribute neither to the daily average

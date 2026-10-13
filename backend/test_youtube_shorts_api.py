@@ -109,7 +109,7 @@ def test_the_window_ends_on_todays_date_in_the_callers_zone(
 def test_every_day_is_present_even_with_no_history(client: TestClient) -> None:
     days = get(client, days=4)
     assert [row["visits"] for row in days] == [0, 0, 0, 0]
-    assert all(row["history_uploaded"] is False for row in days)
+    assert all(row["has_history"] is False for row in days)
     assert [row["unique_shorts"] for row in days] == [0, 0, 0, 0]
 
 
@@ -236,5 +236,5 @@ def test_uploaded_zero_is_distinct_from_a_missing_day(client, history_store):
     watched(history_store, today, "abc")
     rows = get(client, days=3)
     assert [
-        (row["history_uploaded"], row["visits"], row["unique_shorts"]) for row in rows
+        (row["has_history"], row["visits"], row["unique_shorts"]) for row in rows
     ] == [(False, 0, 0), (True, 0, 0), (True, 1, 1)]

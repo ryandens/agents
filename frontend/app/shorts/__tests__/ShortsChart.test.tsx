@@ -5,7 +5,7 @@ import ShortsChart from "../ShortsChart";
 import type { ShortsDay } from "../types";
 
 function day(iso: string, visits: number, unique = visits): ShortsDay {
-  return { day: iso, visits, unique_shorts: unique, history_uploaded: true };
+  return { day: iso, visits, unique_shorts: unique, has_history: true };
 }
 
 const WEEK = [
@@ -147,7 +147,7 @@ describe("ShortsChart", () => {
 
 it("distinguishes missing data from an accessible Shorts-free achievement", async () => {
   const user = userEvent.setup();
-  render(<ShortsChart days={[{...day("2026-07-27", 0), history_uploaded: false}, day("2026-07-28", 0)]} />);
+  render(<ShortsChart days={[{...day("2026-07-27", 0), has_history: false}, day("2026-07-28", 0)]} />);
   expect(columns()[0]).toHaveAccessibleName(/Not uploaded/);
   expect(columns()[1]).toHaveAccessibleName(/Shorts-free. Nice work!/);
   await user.tab();

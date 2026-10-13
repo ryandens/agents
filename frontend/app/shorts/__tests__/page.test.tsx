@@ -20,7 +20,7 @@ vi.mock("../ShortsTable", () => ({
 const { default: ShortsPage } = await import("../page");
 
 function day(iso: string, visits: number, unique = visits): ShortsDay {
-  return { day: iso, visits, unique_shorts: unique, history_uploaded: true };
+  return { day: iso, visits, unique_shorts: unique, has_history: true };
 }
 
 const WEEK = [
@@ -218,7 +218,7 @@ describe("ShortsPage", () => {
 });
 
 it("shows missing data without celebrating it as zero", async () => {
-  mockFetch([{...day("2026-07-31", 0), history_uploaded: false}]);
+  mockFetch([{...day("2026-07-31", 0), has_history: false}]);
   render(<ShortsPage />);
   expect(await screen.findByText("No history uploaded for this range yet.")).toBeInTheDocument();
   expect(screen.getByText("Not uploaded")).toBeInTheDocument();

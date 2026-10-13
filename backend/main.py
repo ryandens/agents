@@ -376,7 +376,7 @@ def daily_youtube_shorts(
 ) -> list[ShortsDay]:
     """Shorts watched per day for the last `days` days, oldest first.
 
-    Always exactly `days` entries. `history_uploaded` distinguishes days with any
+    Always exactly `days` entries. `has_history` distinguishes days with any
     stored Safari history from gaps. Zero Shorts only counts as an achievement on
     days with history; it does not prove that all devices have finished syncing.
 

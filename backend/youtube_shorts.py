@@ -49,7 +49,7 @@ class ShortsDay(BaseModel):
     day: date
     # Presence of any browser history in the requested time zone. An absent day is
     # unknown, even though its numeric counts remain zero for API compatibility.
-    history_uploaded: bool = False
+    has_history: bool = False
     # Page loads of a Shorts URL. Named for what it is rather than "views": a visit is
     # Safari having recorded a navigation, which is the closest thing the history
     # database has to "watched one" and is not the same claim.
@@ -71,7 +71,7 @@ def fill_gaps(counted: list[ShortsDay], start: date, end: date) -> list[ShortsDa
     """Every calendar day, marking gaps as history not uploaded.
 
     A time axis has to be a calendar rather than a list of days with data. The
-    history_uploaded flag keeps absent data distinct from an observed zero.
+    has_history flag keeps absent data distinct from an observed zero.
 
     Days the database returned are trusted as-is; this only adds what is missing.
     """

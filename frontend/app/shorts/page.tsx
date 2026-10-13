@@ -142,9 +142,9 @@ export default function ShortsPage() {
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <HeroTile
                 label="Today"
-                value={summary.today?.history_uploaded ? summary.today.visits : "—"}
+                value={summary.today?.has_history ? summary.today.visits : "—"}
                 detail={
-                  summary.today?.history_uploaded ? `${summary.today.unique_shorts} unique so far` : "Not uploaded"
+                  summary.today?.has_history ? `${summary.today.unique_shorts} unique so far` : "Not uploaded"
                 }
               />
               {/* Only days with uploaded history contribute to the average. */}
@@ -162,7 +162,7 @@ export default function ShortsPage() {
                 label="Shorts-free days"
                 value={summary.cleanDays}
                 detail={summary.cleanDays ? "Nice work — keep it going!" : "Every Shorts-free day is a win"}
-                celebrate
+                isCelebrating
               />
             </div>
 
@@ -235,15 +235,15 @@ function StatTile({
   label,
   value,
   detail,
-  celebrate = false,
+  isCelebrating = false,
 }: {
   label: string;
   value: number | string;
   detail: string;
-  celebrate?: boolean;
+  isCelebrating?: boolean;
 }) {
   return (
-    <div className={celebrate ? "rounded-xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-800 dark:bg-emerald-950" : "rounded-xl border border-stone-200 bg-white p-4 dark:border-stone-800 dark:bg-stone-900"}>
+    <div className={isCelebrating ? "rounded-xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-800 dark:bg-emerald-950" : "rounded-xl border border-stone-200 bg-white p-4 dark:border-stone-800 dark:bg-stone-900"}>
       <div className="text-xs font-medium text-stone-500 dark:text-stone-400">
         {label}
       </div>

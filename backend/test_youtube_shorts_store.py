@@ -255,5 +255,5 @@ def test_non_shorts_history_proves_a_zero_in_the_requested_zone(history_store):
     rows = history_store.daily_shorts(DAY, date(2026, 7, 27), EASTERN)
     assert len(rows) == 1
     assert rows[0].day == DAY
-    assert rows[0].history_uploaded is True
+    assert rows[0].has_history is True
     assert rows[0].visits == rows[0].unique_shorts == 0
