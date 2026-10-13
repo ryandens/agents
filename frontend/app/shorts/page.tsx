@@ -142,30 +142,27 @@ export default function ShortsPage() {
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <HeroTile
                 label="Today"
-                value={summary.today?.visits ?? 0}
+                value={summary.today?.has_history ? summary.today.visits : "—"}
                 detail={
-                  summary.today ? `${summary.today.unique_shorts} unique` : "no data"
+                  summary.today?.has_history ? `${summary.today.unique_shorts} unique so far` : "Not uploaded"
                 }
               />
-              {/* Described by what came back, not by what was asked for. The two are
-                  the same number every time the API behaves, and when they are not,
-                  the average is over the days it was actually computed from — a tile
-                  reading "21.5 over 30 days" for ninety days of data is a lie the
-                  reader has no way to catch. */}
+              {/* Only days with uploaded history contribute to the average. */}
               <StatTile
                 label="Daily average"
-                value={summary.average}
-                detail={`over ${days.length} days`}
+                value={summary.average ?? "—"}
+                detail={`over ${summary.uploadedDays} uploaded days`}
               />
               <StatTile
                 label="Busiest day"
-                value={summary.busiest?.visits ?? 0}
+                value={summary.busiest?.visits ?? (summary.uploadedDays ? 0 : "—")}
                 detail={summary.busiest ? formatDayLong(summary.busiest.day) : "none yet"}
               />
               <StatTile
-                label="Days with none"
+                label="Shorts-free days"
                 value={summary.cleanDays}
-                detail={`of ${days.length}`}
+                detail={summary.cleanDays ? "Nice work — keep it going!" : "Every Shorts-free day is a win"}
+                isCelebrating
               />
             </div>
 
@@ -173,12 +170,17 @@ export default function ShortsPage() {
               <h2 className="text-sm font-medium text-stone-700 dark:text-stone-300">
                 Shorts per day
               </h2>
-              {summary.total === 0 && !loading ? (
-                <p className="py-12 text-center text-sm text-stone-400">
-                  No Shorts in the last {days.length} days. Either a good week, or the
-                  exporter has not run yet — <code>just cli-status</code> says which.
-                </p>
-              ) : showTable ? (
+              <p className="mt-1 text-xs text-stone-500 dark:text-stone-400">
+                {summary.uploadedDays} of {days.length} days uploaded · Missing days are excluded from averages and achievements.
+              </p>
+              {summary.uploadedDays === 0 && !loading && (
+                <p className="mt-4 text-sm text-stone-500">No history uploaded for this range yet.</p>
+              )}
+              <div className="mt-3 flex flex-wrap gap-4 text-xs">
+                <span className="font-medium text-emerald-700 dark:text-emerald-400">✓ Shorts-free — a day worth celebrating</span>
+                <span className="text-stone-500 dark:text-stone-400">╌ Not uploaded</span>
+              </div>
+              {showTable ? (
                 <div className="mt-3">
                   <ShortsTable days={days} />
                 </div>
@@ -191,6 +193,8 @@ export default function ShortsPage() {
               One count per Shorts page Safari recorded, so swiping through the feed
               without the address bar changing is not counted separately. Private
               browsing is never recorded at all.
+              {" "}Upload status means some Safari history is available for that day;
+              counts can change as more history syncs.
             </p>
           </div>
         )}
@@ -211,7 +215,7 @@ function HeroTile({
   detail,
 }: {
   label: string;
-  value: number;
+  value: number | string;
   detail: string;
 }) {
   return (
@@ -231,13 +235,15 @@ function StatTile({
   label,
   value,
   detail,
+  isCelebrating = false,
 }: {
   label: string;
-  value: number;
+  value: number | string;
   detail: string;
+  isCelebrating?: boolean;
 }) {
   return (
-    <div className="rounded-xl border border-stone-200 bg-white p-4 dark:border-stone-800 dark:bg-stone-900">
+    <div className={isCelebrating ? "rounded-xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-800 dark:bg-emerald-950" : "rounded-xl border border-stone-200 bg-white p-4 dark:border-stone-800 dark:bg-stone-900"}>
       <div className="text-xs font-medium text-stone-500 dark:text-stone-400">
         {label}
       </div>

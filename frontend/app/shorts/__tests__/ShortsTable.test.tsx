@@ -4,9 +4,9 @@ import ShortsTable from "../ShortsTable";
 import type { ShortsDay } from "../types";
 
 const WEEK: ShortsDay[] = [
-  { day: "2026-07-29", visits: 12, unique_shorts: 9 },
-  { day: "2026-07-30", visits: 0, unique_shorts: 0 },
-  { day: "2026-07-31", visits: 2, unique_shorts: 2 },
+  { day: "2026-07-29", visits: 12, unique_shorts: 9, has_history: true },
+  { day: "2026-07-30", visits: 0, unique_shorts: 0, has_history: true },
+  { day: "2026-07-31", visits: 2, unique_shorts: 2, has_history: true },
 ];
 
 function rows() {
@@ -50,4 +50,11 @@ describe("ShortsTable", () => {
     render(<ShortsTable days={days} />);
     expect(days.map((d) => d.day)).toEqual(WEEK.map((d) => d.day));
   });
+});
+
+it("labels missing data and celebrates uploaded zeroes", () => {
+  render(<ShortsTable days={[{...WEEK[0], visits: 0, unique_shorts: 0, has_history: false}, WEEK[1]]} />);
+  expect(rows()[0]).toHaveTextContent("✓ 0 · Shorts-free");
+  expect(rows()[1]).toHaveTextContent("Not uploaded");
+  expect(rows()[1]).toHaveTextContent("—");
 });

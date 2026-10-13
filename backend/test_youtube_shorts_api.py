@@ -109,6 +109,7 @@ def test_the_window_ends_on_todays_date_in_the_callers_zone(
 def test_every_day_is_present_even_with_no_history(client: TestClient) -> None:
     days = get(client, days=4)
     assert [row["visits"] for row in days] == [0, 0, 0, 0]
+    assert all(row["has_history"] is False for row in days)
     assert [row["unique_shorts"] for row in days] == [0, 0, 0, 0]
 
 
@@ -220,3 +221,20 @@ def test_a_bad_request_without_credentials_is_still_only_a_401(
     finally:
         main.app.dependency_overrides.clear()
     assert response.status_code == 401, response.text
+
+
+def test_uploaded_zero_is_distinct_from_a_missing_day(client, history_store):
+    today = today_in("UTC")
+    history_store.record_visits(
+        [
+            SiteVisit(
+                timestamp=datetime.combine(today - timedelta(days=1), time(12), UTC),
+                url="https://example.com/",
+            )
+        ]
+    )
+    watched(history_store, today, "abc")
+    rows = get(client, days=3)
+    assert [
+        (row["has_history"], row["visits"], row["unique_shorts"]) for row in rows
+    ] == [(False, 0, 0), (True, 0, 0), (True, 1, 1)]

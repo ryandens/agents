@@ -53,12 +53,12 @@ _INSERT = """
 # few rows the date predicate then drops; one that is too narrow silently loses a day.
 _DAILY_SHORTS = """
     SELECT (visited_at AT TIME ZONE %(tz)s)::date AS day,
-           count(*) AS visits,
+           true AS has_history,
+           count(*) FILTER (WHERE url ~ %(pattern)s) AS visits,
            count(DISTINCT substring(url from %(pattern)s)) AS unique_shorts
     FROM browser_visits
     WHERE visited_at >= %(after)s
       AND visited_at < %(before)s
-      AND url ~ %(pattern)s
       AND (visited_at AT TIME ZONE %(tz)s)::date BETWEEN %(start)s AND %(end)s
     GROUP BY day
     ORDER BY day
@@ -121,8 +121,9 @@ class BrowserHistoryStore:
     def daily_shorts(self, start: date, end: date, tz: str) -> list[ShortsDay]:
         """How many Shorts were watched on each local day in [start, end].
 
-        Only the days that had any — filling in the empty ones is youtube_shorts.
-        fill_gaps, because a day with nothing in it is not a fact the database holds.
+        Include every day with uploaded browser history, even if none of its URLs
+        are Shorts. fill_gaps marks days without any history as not uploaded.
+        This indicates data presence, not proof that a full day has synced.
 
         The bucketing runs in Postgres rather than over rows fetched into Python. The
         window is bounded but the visits in it are not: a query that grouped in the

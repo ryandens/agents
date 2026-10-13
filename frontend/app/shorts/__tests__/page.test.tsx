@@ -20,7 +20,7 @@ vi.mock("../ShortsTable", () => ({
 const { default: ShortsPage } = await import("../page");
 
 function day(iso: string, visits: number, unique = visits): ShortsDay {
-  return { day: iso, visits, unique_shorts: unique };
+  return { day: iso, visits, unique_shorts: unique, has_history: true };
 }
 
 const WEEK = [
@@ -121,7 +121,7 @@ describe("ShortsPage", () => {
     expect(screen.getByText("3.6")).toBeInTheDocument();
     expect(screen.getByText("Busiest day")).toBeInTheDocument();
     expect(screen.getByText("12")).toBeInTheDocument();
-    expect(screen.getByText("Days with none")).toBeInTheDocument();
+    expect(screen.getByText("Shorts-free days")).toBeInTheDocument();
   });
 
   it("describes the days it got back, not the range it asked for", async () => {
@@ -132,8 +132,8 @@ describe("ShortsPage", () => {
     render(<ShortsPage />);
 
     await screen.findByTestId("chart");
-    expect(screen.getByText("over 5 days")).toBeInTheDocument();
-    expect(screen.getByText("of 5")).toBeInTheDocument();
+    expect(screen.getByText("over 5 uploaded days")).toBeInTheDocument();
+    expect(screen.getByText(/5 of 5 days uploaded/)).toBeInTheDocument();
   });
 
   it("hands the chart every day it was given", async () => {
@@ -161,10 +161,9 @@ describe("ShortsPage", () => {
     mockFetch([day("2026-07-30", 0), day("2026-07-31", 0)]);
     render(<ShortsPage />);
 
-    // "the last 2 days", from the two days that came back — the same rule the tiles
-    // follow, so the empty state cannot claim a range it was not given.
-    expect(await screen.findByText(/No Shorts in the last 2 days/)).toBeInTheDocument();
-    expect(screen.queryByTestId("chart")).not.toBeInTheDocument();
+    expect(await screen.findByTestId("chart")).toBeInTheDocument();
+    expect(screen.getByText("Nice work — keep it going!")).toBeInTheDocument();
+
   });
 
   it("reports a failure and offers to try again", async () => {
@@ -216,4 +215,14 @@ describe("ShortsPage", () => {
       expect(chart.parentElement?.parentElement).toHaveClass("opacity-100")
     );
   });
+});
+
+it("shows missing data without celebrating it as zero", async () => {
+  mockFetch([{...day("2026-07-31", 0), has_history: false}]);
+  render(<ShortsPage />);
+  expect(await screen.findByText("No history uploaded for this range yet.")).toBeInTheDocument();
+  expect(screen.getByText("Not uploaded")).toBeInTheDocument();
+  expect(screen.queryByText("Nice work — keep it going!")).not.toBeInTheDocument();
+  const average = screen.getByText("Daily average").parentElement as HTMLElement;
+  expect(within(average).getByText("—")).toBeInTheDocument();
 });

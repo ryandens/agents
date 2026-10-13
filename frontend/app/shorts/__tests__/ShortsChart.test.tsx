@@ -5,7 +5,7 @@ import ShortsChart from "../ShortsChart";
 import type { ShortsDay } from "../types";
 
 function day(iso: string, visits: number, unique = visits): ShortsDay {
-  return { day: iso, visits, unique_shorts: unique };
+  return { day: iso, visits, unique_shorts: unique, has_history: true };
 }
 
 const WEEK = [
@@ -143,4 +143,16 @@ describe("ShortsChart", () => {
     await user.hover(columns()[1]);
     expect(screen.getByText("0 Shorts")).toBeInTheDocument();
   });
+});
+
+it("distinguishes missing data from an accessible Shorts-free achievement", async () => {
+  const user = userEvent.setup();
+  render(<ShortsChart days={[{...day("2026-07-27", 0), has_history: false}, day("2026-07-28", 0)]} />);
+  expect(columns()[0]).toHaveAccessibleName(/Not uploaded/);
+  expect(columns()[1]).toHaveAccessibleName(/Shorts-free. Nice work!/);
+  await user.tab();
+  expect(screen.getByText("Not uploaded")).toBeInTheDocument();
+  expect(screen.queryByText("0 Shorts")).not.toBeInTheDocument();
+  await user.tab();
+  expect(screen.getByText("Shorts-free. Nice work!")).toBeInTheDocument();
 });
