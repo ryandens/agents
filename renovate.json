@@ -1,6 +1,7 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": ["config:recommended", "helpers:pinGitHubActionDigests"],
+  "minimumReleaseAge": "4 hours",
   "lockFileMaintenance": {
     "description": "Re-resolve the lockfiles weekly so transitive deps stay current. The pep621 rule below only bumps packages declared in the workspace member pyproject.toml files; lock-only deps pulled in through extras (requests via google-auth[requests], certifi, charset-normalizer) are invisible to that manager and otherwise sit at whatever version was resolved the last time something forced a full resolve.",
     "enabled": true,
@@ -46,6 +47,8 @@
     }
   },
   "packageRules": [
+    // Inherits the global 4-hour minimum; this scanner rule requires per-rule ages of at least 7 days.
+    // nosemgrep: package_managers.renovate.renovate-missing-minimum-release-age.renovate-missing-minimum-release-age
     {
       "description": "Update the Chainguard Python builder and runtime images together.",
       "matchDatasources": ["docker"],
@@ -63,14 +66,14 @@
       "matchDepNames": ["python"],
       "enabled": false
     },
-    // This compatibility cap is reviewed by CI; immediate compatible releases are allowed.
+    // Inherits the global 4-hour minimum; this scanner rule requires per-rule ages of at least 7 days.
     // nosemgrep: package_managers.renovate.renovate-missing-minimum-release-age.renovate-missing-minimum-release-age
     {
       "description": "Hold eslint at 9. The plugins eslint-config-next bundles (eslint-plugin-react, -jsx-a11y, -import) all cap their peer eslint at ^9, so eslint 10 installs only because npm downgrades the nested peer conflict to a warning. Drop this rule once those plugins declare eslint 10 support.",
       "matchPackageNames": ["eslint"],
       "allowedVersions": "<10"
     },
-    // Coupled AI SDK updates are reviewed and tested together without an age delay.
+    // Inherits the global 4-hour minimum; this scanner rule requires per-rule ages of at least 7 days.
     // nosemgrep: package_managers.renovate.renovate-missing-minimum-release-age.renovate-missing-minimum-release-age
     {
       "description": "Keep the AI SDK React bindings and core package on compatible releases.",
