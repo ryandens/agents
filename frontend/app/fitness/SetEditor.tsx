@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import TouchValue from "./TouchValue";
+import { useConfirmation } from "./useConfirmation";
 import type { SetRecord } from "./types";
 
 export function describeSet(set: SetRecord) {
@@ -20,6 +21,7 @@ export default function SetEditor({ set, exercise, number, onChange, onRemove, d
   set: SetRecord; exercise: string; number: number; defaultMode?: "reps" | "time";
   onChange: (patch: Partial<SetRecord>) => void; onRemove: () => void;
 }) {
+  const { requestConfirmation, confirmationDialog } = useConfirmation();
   const [mode, setMode] = useState<"reps" | "time">(set.seconds !== null && set.reps === null ? "time" : defaultMode);
   function numberInput(field: "reps" | "weight" | "seconds" | "target_reps", label: string) {
     return <label>{label}
@@ -33,6 +35,7 @@ export default function SetEditor({ set, exercise, number, onChange, onRemove, d
     </label>;
   }
   return <div className="set-editor" role="group" aria-label={`${exercise} set ${number}`}>
+    {confirmationDialog}
     <div className="set-entry-row">
       <span className="set-index" aria-label={`Set ${number}`}>{number}</span>
       <TouchValue label={mode === "reps" ? "Reps" : "Seconds"} name={`${exercise} set ${number} ${mode === "reps" ? "reps" : "seconds"}`} kind={mode === "reps" ? "reps" : "seconds"} value={mode === "reps" ? set.reps : set.seconds} onChange={value => onChange({[mode === "reps" ? "reps" : "seconds"]:value})}/>
@@ -56,9 +59,10 @@ export default function SetEditor({ set, exercise, number, onChange, onRemove, d
       <summary>Set options & notes{set.notes || set.phase !== "work" || set.load_basis !== "unspecified" || set.target_reps !== null ? " · recorded" : ""}</summary>
       <div className="set-options-grid">
         <label>Weight unit<select value={set.unit} onChange={e => onChange({unit:e.target.value as SetRecord["unit"]})}><option value="lbs">Pounds (lbs)</option><option value="kg">Kilograms (kg)</option></select></label>
-        <label>Weight represents<select value={set.load_basis} onChange={e => {
-          if (e.target.value === "bodyweight" && set.weight !== null && !window.confirm("Remove the recorded weight and mark this as bodyweight?")) return;
-          onChange({load_basis:e.target.value as SetRecord["load_basis"], ...(e.target.value === "bodyweight" ? {weight:null} : {})});
+        <label>Weight represents<select value={set.load_basis} onChange={async e => {
+          const basis = e.target.value as SetRecord["load_basis"];
+          if (basis === "bodyweight" && set.weight !== null && !(await requestConfirmation("Remove the recorded weight and mark this as bodyweight?"))) return;
+          onChange({load_basis:basis, ...(basis === "bodyweight" ? {weight:null} : {})});
         }}>
           <option value="unspecified">Not specified</option><option value="total">Total weight</option>
           <option value="per_hand">Weight per hand</option><option value="machine">Machine setting</option><option value="bodyweight">Bodyweight</option>

@@ -144,3 +144,6 @@
 /* Read-only tap targets should not show nonfunctional native number spinners. */
 .touch-value input { appearance: textfield; -moz-appearance: textfield; }
 .touch-value input::-webkit-inner-spin-button, .touch-value input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+
+.fitness-confirmation { margin: auto; width: min(90vw, 28rem); padding: 24px; border: 1px solid #78716c; border-radius: 16px; background: white; color: #1c1917; }
+.fitness-confirmation::backdrop { background: rgb(0 0 0 / 50%); }

@@ -7,6 +7,7 @@ import { useAuth } from "../components/AuthProvider";
 import { changeLog, emptyLog } from "./database";
 import { deleteWorkout, downloadBackup, localSummary, request, resolveConflict, SyncError, syncLog } from "./offline";
 import "./fitness.css";
+import { useConfirmation } from "./useConfirmation";
 
 export default function FitnessPage() {
   const { user } = useAuth();
@@ -14,6 +15,7 @@ export default function FitnessPage() {
 }
 
 function FitnessLog({owner}: {owner:string}) {
+  const { requestConfirmation, confirmationDialog } = useConfirmation();
   const [log, setLog] = useState(emptyLog);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -76,6 +78,7 @@ function FitnessLog({owner}: {owner:string}) {
     } catch(e) {setError((e as Error).message);} finally {setBusy(false);}
   }
   return <main className="fitness mx-auto w-full max-w-5xl px-4 sm:px-8 py-8 space-y-6">
+    {confirmationDialog}
     <header hidden={!!editing} className={editing ? "hidden" : "flex flex-wrap justify-between gap-4 items-start"}>
       <div><p className="text-xs uppercase tracking-widest text-emerald-700 dark:text-emerald-400 font-semibold">Your training log</p><h1 className="text-3xl font-semibold mt-2">Fitness</h1><p className="text-stone-500 mt-2">One workout. One exercise. One set at a time.</p></div>
       {!editing && <button className="fitness-primary" disabled={loading} onClick={() => setEditing(log.draft ?? "new")}>{log.draft ? "Resume draft" : "+ Log workout"}</button>}
@@ -95,7 +98,7 @@ function FitnessLog({owner}: {owner:string}) {
       {syncError?.status === 409 && syncError.mutation && syncError.mutation.kind !== "exercise" && <div className="space-y-2">
         <p>Another device changed this workout. You can use the server version, or keep a separate copy if your local workout still exists.</p>
         <div className="flex flex-wrap gap-2">{(log.workouts.some(w => w.id === (syncError.mutation?.kind !== "exercise" ? syncError.mutation?.workout.id : undefined)) ? [true,false] : [false]).map(copy => <button key={String(copy)} onClick={async () => {
-          if (!copy && !window.confirm("Discard the queued local changes for this workout and use the server version?")) return;
+          if (!copy && !(await requestConfirmation("Discard the queued local changes for this workout and use the server version?"))) return;
           try {await resolveConflict(owner,syncError.mutation!,copy); setSyncError(null); reload();}
           catch(e) {setError((e as Error).message);}
         }}>{copy ? "Keep local as a new workout" : "Use server version"}</button>)}</div>
@@ -105,7 +108,7 @@ function FitnessLog({owner}: {owner:string}) {
     {notice && <p role="status">{notice}</p>}
     {loading ? <p role="status">Loading workouts…</p> : editing ? <WorkoutForm owner={owner} initial={editing === "new" ? undefined : editing} exercises={exercises} workouts={log.workouts} onCancel={() => setEditing(null)} onSaved={() => {setEditing(null); setNotice("Workout saved on this device."); reload();}} /> : <>
       {log.draft && <div className="fitness-card flex flex-wrap gap-3 items-center"><p>You have an unfinished workout saved on this device.</p><button onClick={() => setEditing(log.draft)}>Resume draft</button><button onClick={async () => {
-        if (window.confirm("Discard the unfinished draft?")) {
+        if (await requestConfirmation("Discard the unfinished draft?")) {
           try {await changeLog(owner,data => {data.draft=null;});} catch(e) {setError((e as Error).message);}
         }
       }}>Discard draft</button></div>}
@@ -120,8 +123,8 @@ function FitnessLog({owner}: {owner:string}) {
       </section>}
       <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-xl font-semibold">Workout history</h2><label>Filter by exercise<select value={filter} onChange={e => setFilter(e.target.value)}><option value="">All exercises</option>{exercises.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}</select></label></div>
       {workouts.filter(w => !filter || w.exercises.some(e => e.exercise_id === filter)).map(w => <article className="fitness-card space-y-4" key={w.id}>
-        <div className="flex justify-between items-center"><h3 className="text-lg font-semibold">{new Date(w.performed_on + "T12:00:00").toLocaleDateString(undefined,{weekday:"short",month:"long",day:"numeric",year:"numeric"})}</h3><div className="flex gap-2"><button onClick={() => {if (!log.draft || window.confirm("Replace the unfinished draft with this workout?")) setEditing(w);}}>Edit</button><button disabled={busy} onClick={async () => {
-          if (!window.confirm("Delete this workout and its sets?")) return;
+        <div className="flex justify-between items-center"><h3 className="text-lg font-semibold">{new Date(w.performed_on + "T12:00:00").toLocaleDateString(undefined,{weekday:"short",month:"long",day:"numeric",year:"numeric"})}</h3><div className="flex gap-2"><button onClick={async () => {if (!log.draft || await requestConfirmation("Replace the unfinished draft with this workout?")) setEditing(w);}}>Edit</button><button disabled={busy} onClick={async () => {
+          if (!(await requestConfirmation("Delete this workout and its sets?"))) return;
           setBusy(true);
           try {await deleteWorkout(owner,w); reload();} catch(e) {setError((e as Error).message);} finally {setBusy(false);}
         }}>Delete</button></div></div>
