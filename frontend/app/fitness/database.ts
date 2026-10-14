@@ -37,6 +37,8 @@ export async function changeLog(owner: string, update?: (log: LocalLog) => void)
       }
     };
     tx.oncomplete = () => { resolve(log); if (update) window.dispatchEvent(new Event("fitness-local-change")); };
-    tx.onerror = tx.onabort = () => reject(tx.error ?? new Error("Could not save on this device. Keep this page open and export your draft."));
+    const rejectTransaction = () => reject(tx.error ?? new Error("Could not save on this device. Keep this page open and export your draft."));
+    tx.onerror = rejectTransaction;
+    tx.onabort = rejectTransaction;
   });
 }

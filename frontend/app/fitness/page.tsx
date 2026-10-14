@@ -127,9 +127,10 @@ function FitnessLog({owner}: {owner:string}) {
         }}>Delete</button></div></div>
         {log.queue.some(m => m.kind !== "exercise" && m.workout.id === w.id) && <p className="text-sm text-amber-700 dark:text-amber-400">Saved on this device · pending sync</p>}
         {w.notes && <p className="text-sm text-stone-500">{w.notes}</p>}
-        {w.exercises.map((e,i) => <div key={i} className="border-t border-stone-200 dark:border-stone-700 pt-3">
+        {/* Persisted entry/set positions identify rows within a workout revision. */}
+        {w.exercises.map((e,i) => <div key={`${w.id}:${w.revision}:entry:${i}`} className="border-t border-stone-200 dark:border-stone-700 pt-3">
           <h4 className="font-medium">{exercises.find(x => x.id === e.exercise_id)?.name ?? e.exercise_id}</h4>
-          <ol className="flex flex-wrap gap-2 mt-2">{e.sets.map((s,j) => <li key={j} className="rounded-lg bg-stone-100 dark:bg-stone-800 px-3 py-2 text-sm">
+          <ol className="flex flex-wrap gap-2 mt-2">{e.sets.map((s,j) => <li key={`${w.id}:${w.revision}:entry:${i}:set:${j}`} className="rounded-lg bg-stone-100 dark:bg-stone-800 px-3 py-2 text-sm">
             <span className="text-stone-500 mr-2">{j+1}.</span>{s.reps !== null ? `${s.reps} reps` : s.seconds === null ? "Reps unknown" : ""}
             {s.weight !== null ? ` @ ${s.weight} ${s.unit}` : s.seconds === null && s.load_basis !== "bodyweight" ? " · load unknown" : ""}
             {s.load_basis !== "unspecified" && ` · ${s.load_basis.replace("_"," ")}`}

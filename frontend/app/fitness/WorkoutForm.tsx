@@ -153,9 +153,9 @@ export default function WorkoutForm({ owner, initial, exercises, workouts = [], 
       {review ? <section className="workout-review" aria-label="Workout review">
         <div className="workout-totals"><strong>{draft.exercises.length} exercises</strong><strong>{count} sets</strong></div>
         {incomplete > 0 && <p className="workout-missing">{incomplete} {incomplete === 1 ? "set has" : "sets have"} missing reps, time, or weight. Blanks will stay unknown; they won’t become zero.</p>}
-        {draft.exercises.map((entry,i) => <section key={i} className="workout-review-exercise">
+        {draft.exercises.map((entry,i) => <section key={rowKeys[i].id} className="workout-review-exercise">
           <h3>{exerciseName(entry.exercise_id)}</h3>
-          {entry.sets.length ? <ol>{entry.sets.map((s,j) => <li key={j}><span>Set {j+1}</span><div>{describeSet(s)}{s.target_reps !== null && <small>Target: {s.target_reps} reps</small>}{s.load_basis !== "unspecified" && <small>Load: {s.load_basis.replace("_"," ")}</small>}{s.notes && <small>{s.notes}</small>}</div></li>)}</ol> : <p>No sets recorded</p>}
+          {entry.sets.length ? <ol>{entry.sets.map((s,j) => <li key={rowKeys[i].sets[j]}><span>Set {j+1}</span><div>{describeSet(s)}{s.target_reps !== null && <small>Target: {s.target_reps} reps</small>}{s.load_basis !== "unspecified" && <small>Load: {s.load_basis.replace("_"," ")}</small>}{s.notes && <small>{s.notes}</small>}</div></li>)}</ol> : <p>No sets recorded</p>}
           {entry.notes && <p>{entry.notes}</p>}
           <button type="button" onClick={() => {setReview(false);}}>Edit {exerciseName(entry.exercise_id)}</button>
         </section>)}

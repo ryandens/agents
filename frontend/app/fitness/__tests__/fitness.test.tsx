@@ -26,7 +26,7 @@ it("saves locally when completely offline and does not wait for an API", async (
   const fetch = vi.fn().mockRejectedValue(new TypeError("offline"));
   vi.stubGlobal("fetch", fetch);
   const saved = vi.fn();
-  render(<WorkoutForm owner="test-user" exercises={[{id:"press", name:"Press"}]} onSaved={saved} onCancel={() => {}} />);
+  render(<WorkoutForm owner="test-user" exercises={[{id:"press", name:"Press"}]} onSaved={saved} onCancel={vi.fn()} />);
   fireEvent.click(screen.getByRole("button", {name:"Press"}));
   fireEvent.change(screen.getByLabelText("Press set 1 reps"), {target:{value:"7"}});
   fireEvent.click(screen.getByRole("button",{name:"+ Reached failure"}));
@@ -41,7 +41,7 @@ it("saves locally when completely offline and does not wait for an API", async (
 
 it("retains the draft and shows local storage failure", async () => {
   vi.mocked(changeLog).mockRejectedValue(new Error("Storage unavailable"));
-  render(<WorkoutForm owner="test-user" exercises={[{id:"press",name:"Press"}]} onSaved={() => {}} onCancel={() => {}} />);
+  render(<WorkoutForm owner="test-user" exercises={[{id:"press",name:"Press"}]} onSaved={vi.fn()} onCancel={vi.fn()} />);
   fireEvent.click(screen.getByRole("button", {name:"Press"}));
   fireEvent.change(screen.getByLabelText("Press set 1 reps"), {target:{value:"5"}});
   fireEvent.click(screen.getByText("Preview summary"));
@@ -71,7 +71,7 @@ it("opens local history while the API is unreachable", async () => {
 });
 
 it("repeats recorded values explicitly but does not copy failure or set notes", async () => {
-  render(<WorkoutForm owner="test-user" exercises={[{id:"press",name:"Press"}]} onSaved={() => {}} onCancel={() => {}}/>);
+  render(<WorkoutForm owner="test-user" exercises={[{id:"press",name:"Press"}]} onSaved={vi.fn()} onCancel={vi.fn()}/>);
   fireEvent.click(screen.getByRole("button",{name:"Press"}));
   fireEvent.change(screen.getByLabelText("Press set 1 reps"),{target:{value:"6"}});
   fireEvent.change(screen.getByLabelText("Press set 1 weight"),{target:{value:"35"}});
@@ -88,7 +88,7 @@ it("repeats recorded values explicitly but does not copy failure or set notes", 
 
 it("reviews timed sets and lets you return to editing without submitting", async () => {
   const saved = vi.fn();
-  render(<WorkoutForm owner="test-user" exercises={[{id:"plank",name:"Plank"}]} onSaved={saved} onCancel={() => {}}/>);
+  render(<WorkoutForm owner="test-user" exercises={[{id:"plank",name:"Plank"}]} onSaved={saved} onCancel={vi.fn()}/>);
   fireEvent.click(screen.getByRole("button",{name:"Plank"}));
   fireEvent.click(screen.getByRole("button",{name:"Time"}));
   fireEvent.change(screen.getByLabelText("Plank set 1 seconds"),{target:{value:"40"}});
@@ -103,7 +103,7 @@ it("reviews timed sets and lets you return to editing without submitting", async
 it("creates and adds a searched exercise offline", async () => {
   const fetch = vi.fn().mockRejectedValue(new Error("Offline"));
   vi.stubGlobal("fetch",fetch);
-  render(<WorkoutForm owner="test-user" exercises={[]} onSaved={() => {}} onCancel={() => {}}/>);
+  render(<WorkoutForm owner="test-user" exercises={[]} onSaved={vi.fn()} onCancel={vi.fn()}/>);
   fireEvent.change(screen.getByLabelText("Search exercises"),{target:{value:"Cable row"}});
   fireEvent.click(screen.getByRole("button",{name:"Create & add “Cable row”"}));
   expect(await screen.findByLabelText("Cable row set 1 reps")).toBeInTheDocument();
@@ -112,7 +112,7 @@ it("creates and adds a searched exercise offline", async () => {
 });
 
 it("keeps every exercise directly editable without switching panels",async () => {
-  render(<WorkoutForm owner="test-user" exercises={[{id:"press",name:"Press"},{id:"row",name:"Row"}]} onSaved={() => {}} onCancel={() => {}}/>);
+  render(<WorkoutForm owner="test-user" exercises={[{id:"press",name:"Press"},{id:"row",name:"Row"}]} onSaved={vi.fn()} onCancel={vi.fn()}/>);
   fireEvent.click(screen.getByRole("button",{name:"Press"}));
   fireEvent.change(screen.getByLabelText("Press set 1 reps"),{target:{value:"8"}});
   fireEvent.click(screen.getByText("+ Add another exercise"));
