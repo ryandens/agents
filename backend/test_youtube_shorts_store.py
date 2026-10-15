@@ -137,6 +137,45 @@ def test_a_tracking_parameter_does_not_make_a_second_short(
     assert counted(history_store) == {DAY.isoformat(): (3, 1)}
 
 
+def test_ra_and_plain_urls_within_two_minutes_count_as_one_visit(
+    history_store: BrowserHistoryStore,
+) -> None:
+    history_store.record_visits(
+        [
+            visit(utc(10), shorts_url() + "?ra=m"),
+            visit(datetime(2026, 7, 26, 10, 1, 59, tzinfo=UTC), shorts_url()),
+        ]
+    )
+    assert counted(history_store) == {DAY.isoformat(): (1, 1)}
+
+
+def test_ra_pairing_is_same_video_and_within_120_seconds(
+    history_store: BrowserHistoryStore,
+) -> None:
+    history_store.record_visits(
+        [
+            visit(utc(10), shorts_url("aaaaaaaaaaa") + "?ra=m"),
+            # Different video, despite being close and having the opposite URL form.
+            visit(datetime(2026, 7, 26, 10, 1, tzinfo=UTC), shorts_url("bbbbbbbbbbb")),
+            # Same video, but outside the two-minute pairing window.
+            visit(datetime(2026, 7, 26, 10, 2, 1, tzinfo=UTC), shorts_url("aaaaaaaaaaa")),
+        ]
+    )
+    assert counted(history_store) == {DAY.isoformat(): (3, 2)}
+
+
+def test_ra_parameter_must_be_present_to_pair(
+    history_store: BrowserHistoryStore,
+) -> None:
+    history_store.record_visits(
+        [
+            visit(utc(10), shorts_url() + "?feature=share"),
+            visit(datetime(2026, 7, 26, 10, 1, tzinfo=UTC), shorts_url()),
+        ]
+    )
+    assert counted(history_store) == {DAY.isoformat(): (2, 1)}
+
+
 def test_different_shorts_are_counted_separately(
     history_store: BrowserHistoryStore,
 ) -> None:
