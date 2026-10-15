@@ -52,16 +52,73 @@ _INSERT = """
 # narrower than the predicate it is accelerating. A prefilter that is too wide costs a
 # few rows the date predicate then drops; one that is too narrow silently loses a day.
 _DAILY_SHORTS = """
-    SELECT (visited_at AT TIME ZONE %(tz)s)::date AS day,
+    WITH numbered_shorts AS (
+        SELECT visited_at,
+               url,
+               url_digest,
+               substring(url from %(pattern)s) AS video_id,
+               url ~* '[?&]ra=' AS has_ra,
+               (visited_at AT TIME ZONE %(tz)s)::date AS day,
+               row_number() OVER (ORDER BY visited_at, url_digest) AS row_id
+        FROM browser_visits
+        WHERE visited_at >= %(after)s
+          AND visited_at < %(before)s
+          AND (visited_at AT TIME ZONE %(tz)s)::date BETWEEN %(start)s AND %(end)s
+          AND url ~ %(pattern)s
+    ), candidate_pairs AS (
+        SELECT ra.row_id AS ra_id,
+               plain.row_id AS plain_id,
+               ra.day AS ra_day,
+               plain.day AS plain_day,
+               row_number() OVER (
+                   PARTITION BY ra.row_id
+                   ORDER BY abs(extract(epoch FROM ra.visited_at - plain.visited_at)),
+                            plain.visited_at, plain.url_digest
+               ) AS ra_preference,
+               row_number() OVER (
+                   PARTITION BY plain.row_id
+                   ORDER BY abs(extract(epoch FROM ra.visited_at - plain.visited_at)),
+                            ra.visited_at, ra.url_digest
+               ) AS plain_preference
+        FROM numbered_shorts AS ra
+        JOIN numbered_shorts AS plain
+          ON ra.video_id = plain.video_id
+         AND ra.has_ra
+         AND NOT plain.has_ra
+         AND abs(extract(epoch FROM ra.visited_at - plain.visited_at)) <= 120
+    ), paired AS (
+        -- Pair each record with its closest opposite-form URL, one-to-one. A matched
+        -- pair represents one navigation; unmatched visits remain separate.
+        SELECT * FROM candidate_pairs
+        WHERE ra_preference = 1 AND plain_preference = 1
+    ), history_days AS (
+        SELECT (visited_at AT TIME ZONE %(tz)s)::date AS day
+        FROM browser_visits
+        WHERE visited_at >= %(after)s
+          AND visited_at < %(before)s
+          AND (visited_at AT TIME ZONE %(tz)s)::date BETWEEN %(start)s AND %(end)s
+        GROUP BY day
+    ), shorts_per_day AS (
+        SELECT day,
+               count(*) AS raw_visits,
+               count(DISTINCT video_id) AS unique_shorts
+        FROM numbered_shorts
+        GROUP BY day
+    ), paired_per_day AS (
+        SELECT CASE WHEN ra_day > plain_day THEN ra_day ELSE plain_day END AS day,
+               count(*) AS duplicate_pairs
+        FROM paired
+        GROUP BY 1
+    )
+    SELECT history_days.day,
            true AS has_history,
-           count(*) FILTER (WHERE url ~ %(pattern)s) AS visits,
-           count(DISTINCT substring(url from %(pattern)s)) AS unique_shorts
-    FROM browser_visits
-    WHERE visited_at >= %(after)s
-      AND visited_at < %(before)s
-      AND (visited_at AT TIME ZONE %(tz)s)::date BETWEEN %(start)s AND %(end)s
-    GROUP BY day
-    ORDER BY day
+           coalesce(shorts_per_day.raw_visits, 0)
+             - coalesce(paired_per_day.duplicate_pairs, 0) AS visits,
+           coalesce(shorts_per_day.unique_shorts, 0) AS unique_shorts
+    FROM history_days
+    LEFT JOIN shorts_per_day USING (day)
+    LEFT JOIN paired_per_day USING (day)
+    ORDER BY history_days.day
 """
 
 # Keeps one INSERT under Postgres's 65535-parameter ceiling with room to spare at three
