@@ -158,7 +158,9 @@ def test_ra_pairing_is_same_video_and_within_120_seconds(
             # Different video, despite being close and having the opposite URL form.
             visit(datetime(2026, 7, 26, 10, 1, tzinfo=UTC), shorts_url("bbbbbbbbbbb")),
             # Same video, but outside the two-minute pairing window.
-            visit(datetime(2026, 7, 26, 10, 2, 1, tzinfo=UTC), shorts_url("aaaaaaaaaaa")),
+            visit(
+                datetime(2026, 7, 26, 10, 2, 1, tzinfo=UTC), shorts_url("aaaaaaaaaaa")
+            ),
         ]
     )
     assert counted(history_store) == {DAY.isoformat(): (3, 2)}
