@@ -18,12 +18,14 @@ An AI-powered meal planning and kitchen management app. Chat with the agent to p
 | Database auth | RDS IAM tokens in production (no stored password); password locally |
 | Migrations | Alembic, hand-written SQL, applied as a separate deploy step |
 | Package managers | `uv` (backend, cli), `pnpm` (frontend) |
+| Portable checks | Dagger |
 | Task runner | `just` |
 
 ## Prerequisites
 
 - [just](https://github.com/casey/just)
 - [uv](https://docs.astral.sh/uv/)
+- [Dagger](https://docs.dagger.io/getting-started/introduction/) and a container runtime
 - Node.js 24 (use `nvm` — `.nvmrc` is included)
 - Docker — runs the local Postgres, and the one the tests start
 - An Anthropic API key
@@ -593,7 +595,7 @@ versions pinned to commits and maintained by Renovate.
 just dev            # start both servers with hot-reload
 just serve          # build the frontend and serve everything from :8000, like production
 just docker-run     # build and run the production image on :8080
-just docker-check   # build the production image and smoke-test it (mirrors the CI docker job)
+just docker-check   # Dagger production-image build and smoke test
 just check          # run all checks (mirrors CI)
 
 just backend-test   # pytest (starts a throwaway Postgres container)
@@ -614,7 +616,17 @@ just frontend-build # next build (type-check + compile)
 just cli-test       # pytest
 just cli-lint       # ruff check
 just cli-fmt        # ruff format --check
+just dagger-check   # portable backend, CLI, frontend, and image checks
 ```
+
+`dagger.toml` follows Dagger's workspace model and pins modules in `dagger.lock`.
+The custom `ci` module runs the backend and CLI lint/test suites, frontend lint/build/test
+suite, and production-image smoke test in containers with ephemeral PostgreSQL. Run
+the same pipeline locally with `dagger check` (or `just check`); the aggregate
+`just *-check` recipes are aliases for the corresponding Dagger functions. GitHub
+Actions invokes Dagger directly and sends traces to Dagger Cloud when
+`DAGGER_CLOUD_TOKEN` is configured. Just remains the host-oriented task runner for
+local servers, macOS integration, Docker daemon commands, and AWS operations.
 
 ### How the tests use Postgres
 

@@ -1,0 +1,13 @@
+ignore = [".git/", ".claude/", ".claude/**", ".venv/", "**/node_modules/", "backend/static/"]
+
+[modules.dagger-python-sdk]
+source = "github.com/dagger/python-sdk"
+
+[modules.ci]
+source = ".dagger/modules/ci"
+
+[modules.dagger-python-sdk.as-sdk]
+name = "python"
+
+[[modules.dagger-python-sdk.as-sdk.modules]]
+path = ".dagger/modules/ci"
