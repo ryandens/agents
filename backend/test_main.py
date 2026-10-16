@@ -1,6 +1,8 @@
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 import main
@@ -52,6 +54,23 @@ def test_version_reports_runtime_release(client, monkeypatch, release):
 def test_version_defaults_to_dev(client, monkeypatch):
     monkeypatch.delenv("APP_VERSION", raising=False)
     assert client.get("/api/version").json() == {"version": "dev"}
+
+
+def test_frontend_html_revalidates_but_build_assets_are_immutable(tmp_path: Path):
+    (tmp_path / "index.html").write_text("<html>current build</html>")
+    asset = tmp_path / "_next" / "static" / "chunks" / "app-hash.js"
+    asset.parent.mkdir(parents=True)
+    asset.write_text("current bundle")
+
+    static_app = FastAPI()
+    static_app.middleware("http")(main.frontend_cache_headers)
+    static_app.frontend("/", directory=tmp_path, fallback=None)
+    with TestClient(static_app) as client:
+        html = client.get("/")
+        js = client.get("/_next/static/chunks/app-hash.js")
+
+    assert html.headers["cache-control"] == "no-cache"
+    assert js.headers["cache-control"] == "public, max-age=31536000, immutable"
 
 
 def test_chat_streams_sse(client):

@@ -13,10 +13,9 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import anthropic
 from anthropic.types import MessageParam
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
-from fastapi.staticfiles import StaticFiles
 from psycopg_pool import ConnectionPool
 from pydantic import BaseModel
 from starlette.datastructures import Headers
@@ -65,6 +64,7 @@ static_dir_env = os.environ.get("STATIC_DIR", "")
 STATIC_DIR = (
     Path(static_dir_env) if static_dir_env else Path(__file__).parent / "static"
 )
+
 
 # The pantry lives in Postgres, so the pool is process-wide state with a lifetime tied
 # to the app rather than to a request. Opened here rather than at import so that
@@ -171,6 +171,20 @@ class LimitRequestBody:
 
 
 app = FastAPI(lifespan=lifespan)
+
+
+@app.middleware("http")
+async def frontend_cache_headers(request: Request, call_next):
+    """Revalidate frontend HTML while retaining Next's immutable build assets."""
+    response = await call_next(request)
+    if response.status_code == 200:
+        if response.headers.get("content-type", "").startswith("text/html"):
+            response.headers["Cache-Control"] = "no-cache"
+        elif request.url.path.startswith("/_next/static/"):
+            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    return response
+
+
 # Production is same-origin, so CORS only matters for `next dev` talking to a backend
 # started without the dev proxy. allow_credentials is required for the browser to send
 # the session cookie on those cross-origin calls, and it forbids a wildcard origin.
@@ -404,10 +418,10 @@ def daily_youtube_shorts(
     return fill_gaps(history.daily_shorts(start, end, tz), start, end)
 
 
-# Mounted last so it only sees paths no API route claimed. html=True resolves
-# directories to index.html, matching the export's trailingSlash layout.
+# Register the export as low-priority routes so API paths continue to take precedence.
+# The static build emits one HTML file per route, so there is no SPA fallback.
 if STATIC_DIR.is_dir():
-    app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="frontend")
+    app.frontend("/", directory=STATIC_DIR, fallback=None)
 
 
 if __name__ == "__main__":
