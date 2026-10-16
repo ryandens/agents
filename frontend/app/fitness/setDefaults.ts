@@ -1,9 +1,10 @@
+import { pounds } from "./progress";
 import { newSet, type SetRecord, type Workout } from "./types";
 
 /** Carry measurements forward, never observations or a previous failure. */
 export function copyMeasurements(set: SetRecord): SetRecord {
-  return {...newSet(), reps:set.reps, weight:set.weight, seconds:set.seconds,
-    unit:set.unit, load_basis:set.load_basis};
+  return {...newSet(), reps:set.reps, weight:set.weight === null ? null : pounds(set.weight,set.unit), seconds:set.seconds,
+    unit:"lbs", load_basis:set.load_basis};
 }
 
 export function lastExerciseSet(workouts: Workout[], exerciseId: string, draft: Workout) {

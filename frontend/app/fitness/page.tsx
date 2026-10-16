@@ -4,10 +4,11 @@ import OfflineSetup from "../components/OfflineSetup";
 import WorkoutForm from "./WorkoutForm";
 import BodyWeightLog from "./BodyWeightLog";
 import ExerciseProgress from "./ExerciseProgress";
-import { json, type Workout } from "./types";
+import { pounds } from "./progress";
+import { type Workout } from "./types";
 import { useAuth } from "../components/AuthProvider";
 import { changeLog, emptyLog } from "./database";
-import { deleteWorkout, downloadBackup, localSummary, request, resolveConflict, SyncError, syncLog, savePendingChanges } from "./offline";
+import { deleteWorkout, downloadBackup, localSummary, resolveConflict, SyncError, syncLog, savePendingChanges } from "./offline";
 import "./fitness.css";
 import { useConfirmation } from "./useConfirmation";
 
@@ -71,16 +72,6 @@ function FitnessLog({owner}: {owner:string}) {
     };
   }, [owner]);
   function reload() { window.dispatchEvent(new Event("fitness-sync")); }
-  async function importNotes() {
-    setBusy(true); setError("");
-    try {
-      // Drain local writes before importing demo records.
-      await syncLog(owner);
-      const result = await request<{imported:number}>("/api/fitness/import-samples", json("POST"));
-      setNotice(result.imported ? `Imported ${result.imported} workouts. These are fictional demo workouts.` : "These demo workouts have already been imported.");
-      reload();
-    } catch(e) {setError((e as Error).message);} finally {setBusy(false);}
-  }
   return <main className="fitness mx-auto w-full max-w-5xl px-4 sm:px-8 py-8 space-y-6">
     {confirmationDialog}
     <header hidden={!!editing} className={editing ? "hidden" : "flex flex-wrap justify-between gap-4 items-start"}>
@@ -101,14 +92,10 @@ function FitnessLog({owner}: {owner:string}) {
           try {await changeLog(owner,data => {data.draft=null;});} catch(e) {setError((e as Error).message);}
         }
       }}>Discard draft</button></div>}
-      <section className="fitness-card flex flex-wrap items-center justify-between gap-4">
-        <div><h2 className="font-semibold">Try a fictional workout log</h2><p className="text-sm text-stone-500 max-w-xl mt-1">Import three synthetic sessions dated January 2000. These examples demonstrate reps, loads, timed activity, and missing values; they are not your workout history.</p></div>
-        <button disabled={busy} onClick={importNotes}>{busy ? "Importing…" : "Import demo workouts"}</button>
-      </section>
       {summary && <section className="fitness-card space-y-4">
         <div className="flex items-baseline justify-between"><h2 className="text-lg font-semibold">Exercise overview</h2><span className="text-sm text-stone-500">{summary.workouts} workouts logged</span></div>
         <p className="text-sm text-stone-500">All recorded sessions. Reps are actual counts as logged; time includes cooldowns. Notes without clear sets are excluded. Loads are shown per set below, without combining different equipment or load conventions.</p>
-        {summary.exercises.length === 0 ? <p>No workouts yet. Log a workout or import demo workouts to get started.</p> : <div className="overflow-x-auto"><table className="w-full text-sm text-left"><thead><tr>{["Exercise","Sessions","Sets","Recorded reps","Time","Last trained"].map(h => <th key={h} className="py-3 pr-5 whitespace-nowrap">{h}</th>)}</tr></thead><tbody>{summary.exercises.map(e => <tr key={e.exercise_id} className="border-t border-stone-200 dark:border-stone-700"><td className="py-3 pr-5">{e.name}</td><td>{e.sessions}</td><td>{e.sets}</td><td>{e.reps}{e.unknown_reps > 0 && <span className="block text-xs text-stone-500">{e.unknown_reps} unknown</span>}</td><td className="whitespace-nowrap pr-3">{e.seconds ? `${Math.floor(e.seconds/60)}m ${e.seconds%60}s` : "—"}</td><td className="whitespace-nowrap">{e.last_performed}</td></tr>)}</tbody></table></div>}
+        {summary.exercises.length === 0 ? <p>No workouts yet. Log a workout to get started.</p> : <div className="overflow-x-auto"><table className="w-full text-sm text-left"><thead><tr>{["Exercise","Sessions","Sets","Recorded reps","Time","Last trained"].map(h => <th key={h} className="py-3 pr-5 whitespace-nowrap">{h}</th>)}</tr></thead><tbody>{summary.exercises.map(e => <tr key={e.exercise_id} className="border-t border-stone-200 dark:border-stone-700"><td className="py-3 pr-5">{e.name}</td><td>{e.sessions}</td><td>{e.sets}</td><td>{e.reps}{e.unknown_reps > 0 && <span className="block text-xs text-stone-500">{e.unknown_reps} unknown</span>}</td><td className="whitespace-nowrap pr-3">{e.seconds ? `${Math.floor(e.seconds/60)}m ${e.seconds%60}s` : "—"}</td><td className="whitespace-nowrap">{e.last_performed}</td></tr>)}</tbody></table></div>}
       </section>}
       <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-xl font-semibold">Workout history</h2><label>Filter by exercise<select value={filter} onChange={e => setFilter(e.target.value)}><option value="">All exercises</option>{exercises.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}</select></label></div>
       {workouts.filter(w => !filter || w.exercises.some(e => e.exercise_id === filter)).map(w => <article className="fitness-card space-y-4" key={w.id}>
@@ -129,7 +116,7 @@ function FitnessLog({owner}: {owner:string}) {
           <h4 className="font-medium">{exercises.find(x => x.id === e.exercise_id)?.name ?? e.exercise_id}</h4>
           <ol className="flex flex-wrap gap-2 mt-2">{e.sets.map((s,j) => <li key={`${w.id}:${w.revision}:entry:${i}:set:${j}`} className="rounded-lg bg-stone-100 dark:bg-stone-800 px-3 py-2 text-sm">
             <span className="text-stone-500 mr-2">{j+1}.</span>{s.reps !== null ? `${s.reps} reps` : s.seconds === null ? "Reps unknown" : ""}
-            {s.weight !== null ? ` @ ${s.weight} ${s.unit}` : s.seconds === null && s.load_basis !== "bodyweight" ? " · load unknown" : ""}
+            {s.weight !== null ? ` @ ${pounds(s.weight,s.unit)} lbs` : s.seconds === null && s.load_basis !== "bodyweight" ? " · load unknown" : ""}
             {s.load_basis !== "unspecified" && ` · ${s.load_basis.replace("_"," ")}`}
             {s.seconds !== null && ` ${s.seconds}s`}{s.phase !== "work" && ` · ${s.phase}`}
             {s.failure === true && " · failure"}{s.failure === false && " · no failure"}{s.target_reps !== null && s.target_reps !== s.reps && ` (target ${s.target_reps})`}

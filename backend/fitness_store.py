@@ -133,23 +133,6 @@ class FitnessStore:
                 > 0
             )
 
-    def import_samples(self):
-        from fitness_samples import EXERCISES, WORKOUTS
-
-        with self.pool.connection() as conn:
-            if not conn.execute(
-                "INSERT INTO fitness_imports (key) VALUES ('synthetic-demo-v1') ON CONFLICT DO NOTHING RETURNING key"
-            ).fetchone():
-                return 0
-            for e in EXERCISES:
-                conn.execute(
-                    "INSERT INTO fitness_exercises VALUES (%s,%s) ON CONFLICT DO NOTHING",
-                    (e.id, e.name),
-                )
-            for w in WORKOUTS:
-                self._write(conn, w)
-        return len(WORKOUTS)
-
     def sync(self, mutation: Mutation, actor: str):
         """Receipt and mutation commit together; retries after a lost response are safe."""
         from fastapi import HTTPException
