@@ -23,3 +23,7 @@ export function exerciseProgress(workouts: Workout[], exercise: string, {metric,
   }
   return [...days].sort(([a],[b]) => a.localeCompare(b)).map(([date,value]) => ({id:date,date,value}));
 }
+
+export function pounds(value: number, unit: "lbs" | "kg") {
+  return Number(convertWeight(value,unit,"lbs").toFixed(2));
+}

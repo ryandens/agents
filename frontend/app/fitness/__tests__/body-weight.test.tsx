@@ -29,8 +29,8 @@ it("defaults to pounds and saves an independent measurement to the server",async
   vi.stubGlobal("fetch",fetch);
   const onChange = vi.fn();
   render(<BodyWeightLog owner="owner" log={log} onChange={onChange}/>);
-  expect(screen.getByLabelText("Weight unit")).toHaveValue("lbs");
-  fireEvent.change(screen.getByLabelText("Body weight",{selector:"input"}),{target:{value:"182.4"}});
+  expect(screen.queryByLabelText("Weight unit")).not.toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText("Body weight (lbs)",{selector:"input"}),{target:{value:"182.4"}});
   fireEvent.click(screen.getByText("Log weight"));
   expect(await screen.findByText("Weight saved.")).toBeInTheDocument();
   expect(log.queue).toHaveLength(0);
@@ -42,7 +42,7 @@ it("defaults to pounds and saves an independent measurement to the server",async
 it("retains a failed save and retries the identical measurement after recovery",async () => {
   vi.stubGlobal("fetch",vi.fn().mockRejectedValue(new TypeError("offline")));
   render(<BodyWeightLog owner="owner" log={log} onChange={vi.fn()}/>);
-  fireEvent.change(screen.getByLabelText("Body weight",{selector:"input"}),{target:{value:"180"}});
+  fireEvent.change(screen.getByLabelText("Body weight (lbs)",{selector:"input"}),{target:{value:"180"}});
   fireEvent.click(screen.getByText("Log weight"));
   expect(await screen.findByText(/Weight saved on this device; server save pending/)).toBeInTheDocument();
   const pending = structuredClone(log.queue[0]);

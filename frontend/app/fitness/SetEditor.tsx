@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { pounds } from "./progress";
 import TouchValue from "./TouchValue";
 import { useConfirmation } from "./useConfirmation";
 import type { SetRecord } from "./types";
@@ -9,7 +10,7 @@ export function describeSet(set: SetRecord) {
   const parts = [];
   if (set.reps !== null) parts.push(`${set.reps} reps`);
   if (set.seconds !== null) parts.push(`${set.seconds}s`);
-  if (set.weight !== null) parts.push(`${set.weight} ${set.unit}`);
+  if (set.weight !== null) parts.push(`${pounds(set.weight,set.unit)} lbs`);
   if (set.load_basis === "bodyweight") parts.push("Bodyweight");
   if (!parts.length) parts.push("Not recorded yet");
   if (set.failure === true) parts.push("Failure");
@@ -40,7 +41,7 @@ export default function SetEditor({ set, exercise, number, onChange, onRemove, d
       <span className="set-index" aria-label={`Set ${number}`}>{number}</span>
       <TouchValue label={mode === "reps" ? "Reps" : "Seconds"} name={`${exercise} set ${number} ${mode === "reps" ? "reps" : "seconds"}`} kind={mode === "reps" ? "reps" : "seconds"} value={mode === "reps" ? set.reps : set.seconds} onChange={value => onChange({[mode === "reps" ? "reps" : "seconds"]:value})}/>
       {set.load_basis === "bodyweight" ? <div className="bodyweight-label">Load<strong>Bodyweight</strong></div>
-        : <TouchValue label={`Weight · ${set.unit}`} name={`${exercise} set ${number} weight`} kind="weight" value={set.weight} onChange={weight => onChange({weight})}/>}
+        : <TouchValue label="Weight · lbs" name={`${exercise} set ${number} weight`} kind="weight" value={set.weight === null ? null : pounds(set.weight,set.unit)} onChange={weight => onChange({weight,unit:"lbs"})}/>}
       <button type="button" className="remove-set-button" aria-label={`Remove ${exercise} set ${number}`} onClick={onRemove}>
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 10v7m4-7v7"/></svg>
         <span>Remove</span>
@@ -58,7 +59,6 @@ export default function SetEditor({ set, exercise, number, onChange, onRemove, d
     <details className="workout-details">
       <summary>Set options & notes{set.notes || set.phase !== "work" || set.load_basis !== "unspecified" || set.target_reps !== null ? " · recorded" : ""}</summary>
       <div className="set-options-grid">
-        <label>Weight unit<select value={set.unit} onChange={e => onChange({unit:e.target.value as SetRecord["unit"]})}><option value="lbs">Pounds (lbs)</option><option value="kg">Kilograms (kg)</option></select></label>
         <label>Weight represents<select value={set.load_basis} onChange={async e => {
           const basis = e.target.value as SetRecord["load_basis"];
           if (basis === "bodyweight" && set.weight !== null && !(await requestConfirmation("Remove the recorded weight and mark this as bodyweight?"))) return;

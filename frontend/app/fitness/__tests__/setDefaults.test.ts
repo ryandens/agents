@@ -18,3 +18,7 @@ it("prefers a working set, preserves duration and load basis, and resets observa
 it("does not reach past a blank latest session to invent measurements", () => {
   expect(lastExerciseSet([workout("old","2000-01-01",8),workout("latest","2000-01-02",null)],"press",workout("draft","2000-02-01",null))).toBeNull();
 });
+
+it("converts existing kilogram history to pounds for new sets", () => {
+  expect(copyMeasurements({...newSet(),weight:20,unit:"kg"})).toMatchObject({weight:44.09,unit:"lbs"});
+});

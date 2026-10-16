@@ -93,11 +93,6 @@ def delete(workout_id: UUID, db: Store):
         raise HTTPException(404, "Workout not found")
 
 
-@router.post("/import-samples")
-def import_samples(db: Store):
-    return {"imported": db.import_samples()}
-
-
 @router.get("/summary")
 def summary(db: Store):
     workouts = db.list()

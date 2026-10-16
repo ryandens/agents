@@ -5,8 +5,8 @@ from pydantic import ValidationError
 import fitness_api
 import main
 from fitness import SetRecord, summarize
-from fitness_samples import EXERCISES, WORKOUTS
 from fitness_store import FitnessStore
+from test_fitness_fixtures import EXERCISES, WORKOUTS
 
 
 def test_synthetic_samples_preserve_actual_reps_and_unknowns():
@@ -56,9 +56,17 @@ def client(clean_database):
         main.app.dependency_overrides.clear()
 
 
-def test_import_edit_delete_and_roundtrip(client):
-    assert client.post("/api/fitness/import-samples").json() == {"imported": 3}
-    assert client.post("/api/fitness/import-samples").json() == {"imported": 0}
+def test_edit_delete_and_roundtrip(client):
+    for exercise in EXERCISES:
+        assert (
+            client.post(
+                "/api/fitness/exercises", json=exercise.model_dump(mode="json")
+            ).status_code
+            == 201
+        )
+    for workout in WORKOUTS:
+        data = workout.model_dump(mode="json", exclude={"id", "revision"})
+        assert client.post("/api/fitness/workouts", json=data).status_code == 201
     workouts = client.get("/api/fitness/workouts").json()
     assert len(workouts) == 3
     assert workouts[0]["performed_on"] == "2000-01-12"
@@ -77,7 +85,6 @@ def test_import_edit_delete_and_roundtrip(client):
     assert client.get("/api/fitness/summary").json()["workouts"] == 3
     assert client.delete(f"/api/fitness/workouts/{wid}").status_code == 204
     assert client.delete(f"/api/fitness/workouts/{wid}").status_code == 404
-    assert client.post("/api/fitness/import-samples").json() == {"imported": 0}
     assert len(client.get("/api/fitness/workouts").json()) == 2
 
 
@@ -116,7 +123,6 @@ def test_fitness_requires_auth():
     client = TestClient(main.app)
     for path in ("/workouts", "/exercises", "/summary", "/body-weight"):
         assert client.get("/api/fitness" + path).status_code == 401
-    assert client.post("/api/fitness/import-samples").status_code == 401
 
 
 def sync_request(client, mutation):
@@ -289,3 +295,9 @@ def test_invalid_body_weight_rejected(client, patch):
     mutation = {"id": str(uuid4()), "kind": "bodyweight", "measurement": measurement}
     assert sync_request(client, mutation).status_code == 422
     assert client.get("/api/fitness/body-weight").json() == []
+
+
+def test_demo_import_is_not_a_production_endpoint(client):
+    assert "/api/fitness/import-samples" not in main.app.openapi()["paths"]
+    assert client.post("/api/fitness/import-samples").status_code in (404, 405)
+    assert client.get("/api/fitness/workouts").json() == []

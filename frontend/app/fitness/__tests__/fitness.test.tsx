@@ -69,6 +69,7 @@ it("opens local history while the API is unreachable", async () => {
   expect(await screen.findByText(/No workouts yet/)).toBeInTheDocument();
   expect(await screen.findByText(/API unreachable/)).toBeInTheDocument();
   expect(screen.getByText("+ Log workout")).toBeEnabled();
+  expect(screen.queryByText(/fictional workout|Import demo/i)).not.toBeInTheDocument();
 });
 
 it("repeats recorded values explicitly but does not copy failure or set notes", async () => {
@@ -228,16 +229,16 @@ it("prefills from local history and adds sets from the first, preserving individ
   render(<WorkoutForm owner="test-user" exercises={[{id:"press",name:"Press"}]} workouts={history} onSaved={vi.fn()} onCancel={vi.fn()}/>);
   fireEvent.click(screen.getByRole("button",{name:"Press"}));
   expect(screen.getByLabelText("Press set 1 reps")).toHaveValue(8);
-  expect(screen.getByLabelText("Press set 1 weight")).toHaveValue(65);
+  expect(screen.getByLabelText("Press set 1 weight")).toHaveValue(143.3);
   expect(screen.getByText(/Last workout/)).toHaveTextContent("2000-01-01");
   fireEvent.click(screen.getByText("+ Add set"));
   fireEvent.change(screen.getByLabelText("Press set 2 weight"),{target:{value:"60"}});
   fireEvent.click(screen.getByText("+ Add set"));
-  expect(screen.getByLabelText("Press set 3 weight")).toHaveValue(65);
+  expect(screen.getByLabelText("Press set 3 weight")).toHaveValue(143.3);
   fireEvent.change(screen.getByLabelText("Press set 1 weight"),{target:{value:"70"}});
   expect(screen.getByLabelText("Press set 2 weight")).toHaveValue(60);
-  expect(screen.getByLabelText("Press set 3 weight")).toHaveValue(65);
-  await waitFor(() => expect(log.draft?.exercises[0].sets[0]).toMatchObject({weight:70,unit:"kg",failure:null,notes:""}));
+  expect(screen.getByLabelText("Press set 3 weight")).toHaveValue(143.3);
+  await waitFor(() => expect(log.draft?.exercises[0].sets[0]).toMatchObject({weight:70,unit:"lbs",failure:null,notes:""}));
 });
 
 

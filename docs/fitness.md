@@ -31,24 +31,6 @@ references or edit audit history are promised yet. Offline edits carry expected 
 endpoint increments revisions; it retains last-write-wins behavior for its callers. The log reads all workouts for now, appropriate to this
 small personal dataset; pagination can be added when necessary.
 
-## Synthetic demo data
-
-The page's **Import demo workouts** button imports three entirely fictional
-sessions dated January 2000, with invented exercises, loads, rep counts,
-durations, and source notes. They do not reproduce a person's workout history
-or original prose. These examples cover actual versus target reps, reported
-failure, unknown load, ambiguous set counts, undoubled dumbbell reps, and
-separate cycling work and cooldown records.
-
-The import runs in a single transaction. A database ledger makes retries and
-simultaneous imports idempotent. It does not insert demo data in schema
-migrations. Deleting a demo workout does not reset that ledger or cause it to
-reappear. Demo records are ordinary editable workouts and contribute to the
-overview until deleted.
-
-Replacing the bundled fixtures does not modify previously imported database
-records. Existing real workout logs remain unchanged.
-
 ## First aggregate
 
 The overview derives session count, recorded set count, actual rep sum, recorded
@@ -66,8 +48,8 @@ movement/equipment identity and compatible load and rep conventions.
 ## API and running
 
 Migration `0003` creates the tables. Apply it with `just db-migrate` (or use
-`just dev`, which migrates before starting). Open `/fitness` and import the demo workouts
-or log a workout. Nothing in this change deploys or writes to production.
+`just dev`, which migrates before starting). Open `/fitness` and log a workout. Production contains no demo-import capability;
+synthetic fixtures are confined to tests and excluded from the image.
 
 All routes require the existing authentication:
 
@@ -75,7 +57,6 @@ All routes require the existing authentication:
 - `GET/POST /api/fitness/workouts`
 - `PUT/DELETE /api/fitness/workouts/{uuid}`
 - `GET /api/fitness/summary`
-- `POST /api/fitness/import-samples`
 
 PUT replaces the full workout. Invalid values are rejected before storage;
 unknown exercise references return 422. Missing workouts return 404 and duplicate
@@ -200,8 +181,7 @@ Add set copies measurements and units/load basis from the current first set. Rep
 
 ## Weight logging and progress charts
 
-The **Body weight** view logs dated weigh-ins independently of workouts, defaults
-to pounds, and also accepts kilograms. Migration `0005` stores measurements in
+The **Body weight** view logs dated weigh-ins independently of workouts, uses pounds without a unit selector. Migration `0005` stores measurements in
 `fitness_body_weights`, scoped to the authenticated account. GET
 `/api/fitness/body-weight` returns that account's history; bodyweight mutations
 use the existing durable sync receipts. Retrying a lost response cannot create a
@@ -210,8 +190,8 @@ Existing workout mutation receipts remain compatible with the added payload type
 
 The **Exercise progress** view graphs the best recorded working set per day for
 one exercise: heaviest load, most reps, or longest duration. Warmups, cooldowns,
-and missing values are excluded. Loads are converted to the selected unit but
+and missing values are excluded. Loads are displayed in pounds but
 never mixed across total, per-hand, machine, or unspecified conventions. The
 charts do not estimate one-rep max or invent values for missing days. Body weight
-charts include every weigh-in and convert mixed units consistently. Both charts
+charts include every weigh-in and convert any existing kilogram entries to pounds. Both charts
 use a date axis, show their units, and provide an accessible data table.
