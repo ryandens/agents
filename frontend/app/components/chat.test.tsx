@@ -10,7 +10,7 @@ beforeEach(() => {
   Element.prototype.scrollIntoView = vi.fn();
 });
 it('renders a server-confirmed workout receipt with a link to Fitness',() => {
-  state.messages=[{id:'response',role:'assistant',parts:[{type:'data-workout-saved',data:{id:'workout',performed_on:'2026-10-15',exercises:2,sets:3,already_recorded:false}}]}];
+  state.messages=[{id:'response',role:'assistant',parts:[{type:'data-workout-saved',data:{id:'workout',performed_on:'2026-10-15',exercises:2,sets:3,isAlreadyRecorded:false}}]}];
   render(<Chat/>);
   expect(screen.getByRole('status')).toHaveTextContent('Workout saved');
   expect(screen.getByRole('link',{name:'View in Fitness'})).toHaveAttribute('href','/fitness/');

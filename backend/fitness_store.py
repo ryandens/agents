@@ -67,7 +67,7 @@ class FitnessStore:
                         409,
                         "This message ID was already used for a different workout log. Send a new message.",
                     )
-                return {**payload["result"], "already_recorded": True}
+                return {**payload["result"], "isAlreadyRecorded": True}
             exercises = {}
             # Consistent lock order avoids deadlocks for logs sharing exercises.
             for key, name in sorted(names.items()):
@@ -117,7 +117,7 @@ class FitnessStore:
                 "performed_on": str(workout.performed_on),
                 "exercises": len(workout.exercises),
                 "sets": sum(len(entry.sets) for entry in workout.exercises),
-                "already_recorded": False,
+                "isAlreadyRecorded": False,
             }
             conn.execute(
                 "INSERT INTO fitness_mutations (id,actor,payload) VALUES (%s,%s,%s)",

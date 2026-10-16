@@ -144,7 +144,46 @@ def test_retry_returns_original_workout_even_if_model_rephrases_it(chat_client):
     saved = next(
         event for event in events(response) if event["type"] == "data-workout-saved"
     )
-    assert saved["data"]["already_recorded"]
+    assert saved["data"]["isAlreadyRecorded"]
+
+
+@pytest.mark.parametrize("padding", ["", "x" * 20000])
+@pytest.mark.parametrize("has_partial_receipt", [False, True])
+def test_clarification_preserves_original_log_since_last_saved_workout(
+    chat_client, padding, has_partial_receipt
+):
+    client, store = chat_client
+    original = "Chest press 60lb x8, 70lb x6 to failure; plank 45 seconds." + padding
+    messages = [
+        {"role": "user", "content": "An older workout already recorded"},
+        {
+            "role": "assistant",
+            "parts": [{"type": "data-workout-saved", "data": {"id": "old"}}],
+        },
+        {"id": "pasted-log", "role": "user", "content": original},
+        {"role": "assistant", "content": "What date was the workout?"},
+        {"id": "date-reply", "role": "user", "content": "October 15, 2026"},
+    ]
+    if has_partial_receipt:
+        messages.append(
+            {
+                "role": "assistant",
+                "parts": [{"type": "data-workout-saved", "data": {"id": "current"}}],
+            }
+        )
+    with patch(
+        "main.client.messages.stream",
+        side_effect=[
+            stream_message(arguments=log_input(), stop="tool_use"),
+            stream_message(text="Recorded"),
+        ],
+    ):
+        response = client.post("/api/chat", json={"messages": messages})
+    assert response.status_code == 200
+    assert any(event["type"] == "data-workout-saved" for event in events(response))
+    workout = store.list()[0]
+    assert workout.source_note == (original + "\n\nOctober 15, 2026")[:20000]
+    assert "older workout" not in workout.source_note
 
 
 @pytest.mark.parametrize("stop", ["max_tokens", "end_turn"])

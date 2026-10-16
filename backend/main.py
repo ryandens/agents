@@ -392,7 +392,22 @@ async def chat(request: ChatRequest, user: AuthenticatedUser):
     ]
     if not user_messages:
         raise HTTPException(422, "Send a message first")
-    source_note = user_messages[-1].text()[:20000]
+    # Keep the pasted log when later user turns supply its date or other details.
+    # A saved receipt starts a new log, excluding already-recorded sessions.
+    source_messages = []
+    for message in request.messages:
+        if message.role == "assistant" and any(
+            part.type == "data-workout-saved" for part in message.parts
+        ):
+            source_messages.clear()
+        elif message.role == "user" and message.text():
+            source_messages.append(message.text())
+        if message is user_messages[-1]:
+            # A partial response may already include this log's saved receipt.
+            # Ignore it so retrying retains the original receipt fingerprint.
+            break
+    # Keep the beginning of an oversized log rather than only its final reply.
+    source_note = "\n\n".join(source_messages)[:20000]
     message_id = (
         user_messages[-1].id or hashlib.sha256(source_note.encode()).hexdigest()
     )

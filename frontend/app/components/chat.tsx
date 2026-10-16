@@ -4,10 +4,11 @@ import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
 import { useEffect, useRef, useState } from 'react';
 
-function savedWorkout(value: unknown): value is {id:string;performed_on:string;exercises:number;sets:number;already_recorded:boolean} {
+function savedWorkout(value: unknown): value is {id:string;performed_on:string;exercises:number;sets:number;isAlreadyRecorded:boolean} {
   return typeof value === 'object' && value !== null && 'id' in value && typeof value.id === 'string' &&
     'performed_on' in value && typeof value.performed_on === 'string' &&
-    'exercises' in value && typeof value.exercises === 'number' && 'sets' in value && typeof value.sets === 'number';
+    'exercises' in value && typeof value.exercises === 'number' && 'sets' in value && typeof value.sets === 'number' &&
+    'isAlreadyRecorded' in value && typeof value.isAlreadyRecorded === 'boolean';
 }
 
 export default function Chat() {
@@ -113,7 +114,7 @@ export default function Chat() {
               >
                 {text}
                 {message.parts.map((part,index) => part.type === 'data-workout-saved' && savedWorkout(part.data) ? <div key={`${part.data.id}:${index}`} className="mt-3 rounded-lg border border-emerald-300 p-3 bg-emerald-50 text-emerald-900" role="status">
-                  <p className="font-medium">{part.data.already_recorded ? 'Workout already recorded' : 'Workout saved'}</p>
+                  <p className="font-medium">{part.data.isAlreadyRecorded ? 'Workout already recorded' : 'Workout saved'}</p>
                   <p>{part.data.performed_on} · {part.data.exercises} exercises · {part.data.sets} sets</p>
                   <a href="/fitness/" className="underline">View in Fitness</a>
                 </div> : null)}
