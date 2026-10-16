@@ -1,9 +1,17 @@
-from uuid import UUID
+from uuid import NAMESPACE_URL, UUID, uuid5
 
 from psycopg.types.json import Jsonb
 from psycopg_pool import ConnectionPool
 
-from fitness import BodyWeight, Exercise, Mutation, Workout, WorkoutInput
+from fitness import (
+    BodyWeight,
+    Exercise,
+    Mutation,
+    Workout,
+    WorkoutInput,
+    WorkoutLogInput,
+    WorkoutRecordingContext,
+)
 
 
 class FitnessStore:
@@ -27,6 +35,105 @@ class FitnessStore:
                 "DELETE FROM fitness_body_weights WHERE owner=%s AND id=%s",
                 (owner, measurement_id),
             )
+
+    def record_from_chat(self, data: WorkoutLogInput, context: WorkoutRecordingContext):
+        """Atomically record a whole log; one durable result per account/message."""
+        from fastapi import HTTPException
+
+        receipt_id = uuid5(
+            NAMESPACE_URL, f"fitness-chat:{context.actor}:{context.message_id}"
+        )
+        names = {
+            " ".join(entry.name.split()).casefold(): " ".join(entry.name.split())
+            for entry in data.exercises
+        }
+        with self.pool.connection() as conn:
+            conn.execute(
+                "SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))",
+                (str(receipt_id),),
+            )
+            prior = conn.execute(
+                "SELECT actor, payload FROM fitness_mutations WHERE id=%s",
+                (receipt_id,),
+            ).fetchone()
+            if prior:
+                payload = prior["payload"]
+                if (
+                    prior["actor"] != context.actor
+                    or payload.get("kind") != "chat-workout"
+                    or payload.get("source_note") != context.source_note
+                ):
+                    raise HTTPException(
+                        409,
+                        "This message ID was already used for a different workout log. Send a new message.",
+                    )
+                return {**payload["result"], "already_recorded": True}
+            exercises = {}
+            # Consistent lock order avoids deadlocks for logs sharing exercises.
+            for key, name in sorted(names.items()):
+                conn.execute(
+                    "SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))",
+                    ("fitness-exercise:" + key,),
+                )
+                matches = conn.execute(
+                    "SELECT id FROM fitness_exercises WHERE lower(name)=lower(%s) ORDER BY id",
+                    (name,),
+                ).fetchall()
+                if len(matches) > 1:
+                    raise HTTPException(
+                        422,
+                        f"Multiple exercises are named {name}. Choose a unique exercise name before recording.",
+                    )
+                exercise_id = (
+                    matches[0]["id"]
+                    if matches
+                    else str(uuid5(NAMESPACE_URL, "fitness-exercise:" + key))
+                )
+                if not matches:
+                    conn.execute(
+                        "INSERT INTO fitness_exercises (id,name) VALUES (%s,%s)",
+                        (exercise_id, name),
+                    )
+                exercises[key] = exercise_id
+            workout = Workout(
+                id=receipt_id,
+                performed_on=data.performed_on,
+                notes=data.notes,
+                source_note=context.source_note,
+                exercises=[
+                    {
+                        "exercise_id": exercises[
+                            " ".join(entry.name.split()).casefold()
+                        ],
+                        "notes": entry.notes,
+                        "sets": entry.sets,
+                    }
+                    for entry in data.exercises
+                ],
+            )
+            self._write(conn, workout)
+            result = {
+                "id": str(workout.id),
+                "performed_on": str(workout.performed_on),
+                "exercises": len(workout.exercises),
+                "sets": sum(len(entry.sets) for entry in workout.exercises),
+                "already_recorded": False,
+            }
+            conn.execute(
+                "INSERT INTO fitness_mutations (id,actor,payload) VALUES (%s,%s,%s)",
+                (
+                    receipt_id,
+                    context.actor,
+                    Jsonb(
+                        {
+                            "kind": "chat-workout",
+                            "source_note": context.source_note,
+                            "result": result,
+                        }
+                    ),
+                ),
+            )
+            return result
 
     def exercises(self):
         with self.pool.connection() as conn:

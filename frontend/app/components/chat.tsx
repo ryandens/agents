@@ -4,15 +4,21 @@ import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
 import { useEffect, useRef, useState } from 'react';
 
+function savedWorkout(value: unknown): value is {id:string;performed_on:string;exercises:number;sets:number;already_recorded:boolean} {
+  return typeof value === 'object' && value !== null && 'id' in value && typeof value.id === 'string' &&
+    'performed_on' in value && typeof value.performed_on === 'string' &&
+    'exercises' in value && typeof value.exercises === 'number' && 'sets' in value && typeof value.sets === 'number';
+}
+
 export default function Chat() {
   // No auth header: the session rides an HttpOnly cookie the browser attaches itself.
-  const { messages, sendMessage, status } = useChat({
-    transport: new DefaultChatTransport({ api: '/api/chat' }),
+  const { messages, sendMessage, status, error, regenerate } = useChat({
+    transport: new DefaultChatTransport({ api: '/api/chat', body: () => ({ timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }) }),
   });
 
   const [input, setInput] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
-  const isStreaming = status === 'streaming';
+  const isStreaming = status === 'streaming' || status === 'submitted';
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -43,7 +49,7 @@ export default function Chat() {
             Kitchen Agent
           </h1>
           <p className="text-xs text-stone-500 dark:text-stone-400">
-            Meal planning &amp; kitchen management agent
+            Meal planning, kitchen management &amp; workout logging
           </p>
         </div>
       </header>
@@ -57,14 +63,14 @@ export default function Chat() {
               What&apos;s on the menu?
             </h2>
             <p className="text-sm text-stone-500 dark:text-stone-400 max-w-sm">
-              Ask me to plan meals, find recipes, build a grocery list, or use up what&apos;s in your fridge.
+              Ask about meals and your kitchen, or paste a completed workout log with its date to record it in Fitness.
             </p>
             <div className="flex flex-wrap justify-center gap-2 mt-2">
               {[
                 'Plan this week\'s dinners',
                 'What can I make with chicken and rice?',
                 'Build me a grocery list for 4 people',
-                'Suggest a healthy 30-minute meal',
+                'I want to record a workout log',
               ].map((prompt) => (
                 <button
                   key={prompt}
@@ -106,6 +112,11 @@ export default function Chat() {
                 }`}
               >
                 {text}
+                {message.parts.map((part,index) => part.type === 'data-workout-saved' && savedWorkout(part.data) ? <div key={`${part.data.id}:${index}`} className="mt-3 rounded-lg border border-emerald-300 p-3 bg-emerald-50 text-emerald-900" role="status">
+                  <p className="font-medium">{part.data.already_recorded ? 'Workout already recorded' : 'Workout saved'}</p>
+                  <p>{part.data.performed_on} · {part.data.exercises} exercises · {part.data.sets} sets</p>
+                  <a href="/fitness/" className="underline">View in Fitness</a>
+                </div> : null)}
               </div>
             </div>
           );
@@ -126,6 +137,10 @@ export default function Chat() {
           </div>
         )}
 
+        {error && <div role="alert" className="text-sm text-red-700">
+          <p>{error.message || 'The request failed. Please try again.'}</p>
+          <button type="button" disabled={isStreaming} onClick={() => void regenerate()} className="underline">Retry message</button>
+        </div>}
         <div ref={bottomRef} />
       </div>
 
@@ -139,7 +154,8 @@ export default function Chat() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Ask about meals, recipes, or your kitchen…"
+            aria-label="Chat message"
+            placeholder="Ask a question or paste a dated workout log…"
             rows={1}
             className="flex-1 resize-none bg-transparent text-sm text-stone-900 dark:text-stone-100 placeholder:text-stone-400 focus:outline-none py-1.5 max-h-40 overflow-y-auto"
             style={{ fieldSizing: 'content' } as React.CSSProperties}
@@ -147,6 +163,7 @@ export default function Chat() {
           />
           <button
             type="submit"
+            aria-label="Send message"
             disabled={!input.trim() || isStreaming}
             suppressHydrationWarning
             className="shrink-0 w-8 h-8 rounded-full bg-emerald-600 disabled:bg-stone-200 dark:disabled:bg-stone-700 flex items-center justify-center transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed"

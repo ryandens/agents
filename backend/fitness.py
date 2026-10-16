@@ -1,5 +1,6 @@
 """Workout facts, not prescriptions. Null means unrecorded, never zero."""
 
+from dataclasses import dataclass
 from datetime import date
 from typing import Literal
 from uuid import UUID, uuid4
@@ -52,6 +53,25 @@ class WorkoutInput(Model):
 class Workout(WorkoutInput):
     id: UUID = Field(default_factory=uuid4)
     revision: int = Field(default=1, ge=0)
+
+
+class NamedWorkoutExercise(Model):
+    name: str = Field(min_length=1, max_length=120)
+    notes: str = Field(default="", max_length=4000)
+    sets: list[SetRecord] = Field(default_factory=list, max_length=100)
+
+
+class WorkoutLogInput(Model):
+    performed_on: date
+    notes: str = Field(default="", max_length=10000)
+    exercises: list[NamedWorkoutExercise] = Field(min_length=1, max_length=100)
+
+
+@dataclass(frozen=True)
+class WorkoutRecordingContext:
+    actor: str
+    message_id: str
+    source_note: str
 
 
 def summarize(workouts: list[Workout], exercises: list[Exercise]) -> list[dict]:

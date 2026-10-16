@@ -1,3 +1,4 @@
+import hashlib
 import json
 import logging
 import os
@@ -6,7 +7,7 @@ from collections.abc import AsyncGenerator, AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Annotated, Any, cast
+from typing import Annotated, Any, Literal, cast
 from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -17,7 +18,7 @@ from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from psycopg_pool import ConnectionPool
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from starlette.datastructures import Headers
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.types import ASGIApp, Receive, Scope, Send
@@ -27,7 +28,10 @@ import db
 from auth import authenticated
 from browser_history import SiteVisit
 from browser_history_store import BrowserHistoryStore
+from chat_workouts import WORKOUT_TOOL, WorkoutToolSession
+from fitness import WorkoutRecordingContext
 from fitness_api import router as fitness_router
+from fitness_store import FitnessStore
 from pantry import PantryItem, PantryItemCreate, PantryItemUpdate, StorageLocation
 from pantry_store import PantryStore
 from youtube_shorts import DEFAULT_DAYS, MAX_DAYS, ShortsDay, fill_gaps, window
@@ -230,7 +234,8 @@ class Part(BaseModel):
 class Message(BaseModel):
     model_config = {"extra": "ignore"}
 
-    role: str
+    id: str | None = Field(default=None, max_length=200)
+    role: Literal["user", "assistant"]
     # AI SDK v6 UIMessage.content is "" with text only in parts
     content: str | list[Any] = ""
     parts: list[Part] = []
@@ -251,24 +256,92 @@ class ChatRequest(BaseModel):
     model_config = {"extra": "ignore"}
 
     messages: list[Message]
+    timezone: str = "UTC"
 
 
 def sse(chunk: dict) -> str:
     return f"data: {json.dumps(chunk)}\n\n"
 
 
-async def ui_message_stream(messages: list[MessageParam]) -> AsyncGenerator[str]:
+async def ui_message_stream(
+    messages: list[MessageParam], workouts: WorkoutToolSession
+) -> AsyncGenerator[str]:
     # AI SDK v6 expects SSE with UIMessageChunk objects
     text_id = "text-0"
     yield sse({"type": "start"})
     yield sse({"type": "text-start", "id": text_id})
-    async with client.messages.stream(
-        model="claude-opus-4-7",
-        max_tokens=2048,
-        messages=messages,
-    ) as stream:
-        async for delta in stream.text_stream:
-            yield sse({"type": "text-delta", "id": text_id, "delta": delta})
+    conversation = list(messages)
+    try:
+        for _ in range(4):
+            async with client.messages.stream(
+                model="claude-opus-4-7",
+                max_tokens=8192,
+                system=workouts.system,
+                tools=[WORKOUT_TOOL],
+                tool_choice={"type": "auto", "disable_parallel_tool_use": True},
+                messages=conversation,
+            ) as stream:
+                async for delta in stream.text_stream:
+                    yield sse({"type": "text-delta", "id": text_id, "delta": delta})
+                final = await stream.get_final_message()
+            if final.stop_reason != "tool_use":
+                if final.stop_reason == "max_tokens":
+                    yield sse(
+                        {
+                            "type": "text-delta",
+                            "id": text_id,
+                            "delta": "\nThe response was cut off. Please send a shorter workout log; incomplete tool calls were not recorded.",
+                        }
+                    )
+                break
+            conversation.append(
+                {
+                    "role": "assistant",
+                    "content": [
+                        block.model_dump(mode="json", exclude_none=True)
+                        for block in final.content
+                    ],
+                }
+            )
+            results = []
+            for block in final.content:
+                if block.type != "tool_use":
+                    continue
+                result = await workouts.execute(block.name, block.input)
+                failed = "error" in result
+                if not failed:
+                    yield sse(
+                        {
+                            "type": "data-workout-saved",
+                            "id": result["id"],
+                            "data": result,
+                        }
+                    )
+                results.append(
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": block.id,
+                        "content": json.dumps(result),
+                        "is_error": failed,
+                    }
+                )
+            conversation.append({"role": "user", "content": results})
+        else:
+            yield sse(
+                {
+                    "type": "text-delta",
+                    "id": text_id,
+                    "delta": "\nI couldn't complete the remaining steps. Check any saved-workout card above, or send the missing details to continue.",
+                }
+            )
+    except Exception:
+        logger.exception("chat stream failed")
+        yield sse(
+            {
+                "type": "error",
+                "errorText": "The chat request failed. Any workout shown in a saved-workout card is already recorded; retrying the same message will not duplicate it.",
+            }
+        )
     yield sse({"type": "text-end", "id": text_id})
     yield sse({"type": "finish"})
 
@@ -307,13 +380,34 @@ def health():
 
 
 @app.post("/api/chat")
-async def chat(request: ChatRequest, _: AuthenticatedUser):
+async def chat(request: ChatRequest, user: AuthenticatedUser):
+    try:
+        zone = ZoneInfo(request.timezone)
+    except ZoneInfoNotFoundError, ValueError:
+        raise HTTPException(400, "Unknown time zone") from None
+    user_messages = [
+        message
+        for message in request.messages
+        if message.role == "user" and message.text()
+    ]
+    if not user_messages:
+        raise HTTPException(422, "Send a message first")
+    source_note = user_messages[-1].text()[:20000]
+    message_id = (
+        user_messages[-1].id or hashlib.sha256(source_note.encode()).hexdigest()
+    )
+    workouts = WorkoutToolSession(
+        FitnessStore(pool) if pool else None,
+        WorkoutRecordingContext(user["sub"], message_id, source_note),
+        datetime.now(zone).date().isoformat(),
+        request.timezone,
+    )
     messages = cast(
         list[MessageParam],
         [{"role": m.role, "content": m.text()} for m in request.messages if m.text()],
     )
     return StreamingResponse(
-        ui_message_stream(messages),
+        ui_message_stream(messages, workouts),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache"},
     )
