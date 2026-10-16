@@ -238,6 +238,26 @@ production, a container in development and in tests. `backend/db.py` owns the po
 `backend/migrations/` owns the schema, and `backend/pantry_store.py` is the only module
 that writes SQL — the API layer knows nothing about how any of it is stored.
 
+### Fitness (`/fitness`)
+
+Log strength workouts as individual exercises and ordered sets, including actual
+reps, optional targets, load and units, duration, and reported failure. Add or edit
+workouts, filter history by exercise, and view basic per-exercise totals. A one-time
+button imports three clearly labelled synthetic demo sessions, including fictional
+source notes and missing values. No personal workout history is bundled.
+
+Fitness loads from the server and saves changes immediately while connected.
+If a request fails, it keeps workouts and drafts on the phone and retries pending
+changes when the VPN/API is reachable. After one connected visit, the cached app
+can also open during an outage. The home-screen app opens directly to Fitness.
+
+Use **Body weight** to record weigh-ins (pounds by default) separately from
+workouts. **Exercise progress** charts working-set load, reps, or duration over
+time; the body-weight view charts weigh-ins with consistent units.
+
+See [the fitness domain model](docs/fitness.md) for assumptions, aggregate
+definitions, API routes, and the shared-log access model.
+
 ### Browser history (`/api/browser-history`)
 
 `POST /api/browser-history` accepts an array of `SiteVisit` objects — a `timestamp` (with

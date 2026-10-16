@@ -40,6 +40,14 @@ const ERROR_MESSAGES: Record<string, string> = {
   nonce_mismatch: 'Sign-in could not be verified. Please try again.',
 };
 
+const OFFLINE_IDENTITY = "fitness-offline-identity";
+function cachedIdentity(): User | null {
+  try {
+    const value = JSON.parse(localStorage.getItem(OFFLINE_IDENTITY) ?? "null");
+    return value && typeof value.sub === "string" && typeof value.email === "string" ? value : null;
+  } catch { return null; }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [checked, setChecked] = useState(false);
@@ -57,13 +65,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       window.history.replaceState({}, '', window.location.pathname + (query ? `?${query}` : ''));
     }
 
-    // The session cookie is HttpOnly, so asking the backend is the only way to find out
-    // whether there is a valid session. Both setState calls land in async callbacks, not
-    // the effect body, so this does not cascade renders.
-    fetch('/api/auth/me')
-      .then((res) => (res.ok ? res.json() : null))
-      .then(setUser)
-      .catch(() => setUser(null))
+    // This is a local profile, never an auth token. Only Fitness may open with it;
+    // every API request still requires the real HttpOnly session.
+    const offlineFitness = window.location.pathname.replace(/\/$/, "") === "/fitness";
+    const cached = offlineFitness ? cachedIdentity() : null;
+    fetch('/api/auth/me', {cache:"no-store", signal:AbortSignal.timeout(6000)})
+      .then(async res => {
+        if (!res.ok) {
+          // A rejected session requires sign-in; only server/network failures
+          // may fall back to the cached local profile.
+          setUser(res.status >= 500 ? cached : null);
+          return;
+        }
+        const current = await res.json();
+        try { localStorage.setItem(OFFLINE_IDENTITY, JSON.stringify(current)); } catch { /* Local storage can be unavailable. */ }
+        setUser(current);
+      })
+      .catch(() => { setUser(cached); })
       .finally(() => {
         if (reason) setError(ERROR_MESSAGES[reason] ?? 'Sign-in failed. Please try again.');
         setChecked(true);
@@ -71,10 +89,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signOut = useCallback(async () => {
-    const res = await fetch('/api/auth/logout', { method: 'POST' });
-    if (res.ok) {
+    try {
+      const res = await fetch('/api/auth/logout', { method: 'POST', signal:AbortSignal.timeout(6000) });
+      if (!res.ok) throw new Error("Sign out failed");
+      localStorage.removeItem(OFFLINE_IDENTITY);
       setUser(null);
-    }
+      // IndexedDB stays partitioned by account; unsynced work is available after
+      // signing into that same account again, never under the next account.
+    } catch { setError("Connect to the VPN to sign out. Your local workouts are still saved."); }
   }, []);
 
   if (!checked) {
@@ -114,5 +136,5 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     );
   }
 
-  return <AuthContext.Provider value={{ user, signOut }}>{children}</AuthContext.Provider>;
+  return <AuthContext.Provider value={{ user, signOut }}>{error && <p role="alert" className="p-3 text-sm text-red-600">{error}</p>}{children}</AuthContext.Provider>;
 }

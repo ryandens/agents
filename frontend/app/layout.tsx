@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
 import { AuthProvider } from "./components/AuthProvider";
@@ -16,7 +16,12 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+export const viewport: Viewport = { width: "device-width", initialScale: 1, viewportFit: "cover", themeColor: "#047857" };
+
 export const metadata: Metadata = {
+  manifest: "/manifest.webmanifest",
+  icons: { apple: "/fitness-icon-192.png" },
+  appleWebApp: { capable: true, statusBarStyle: "default", title: "Fitness" },
   title: "Kitchen Agent",
   description: "AI-powered meal planning and kitchen management agent",
 };
@@ -55,6 +60,7 @@ export default function RootLayout({
             >
               Shorts
             </Link>
+            <a href="/fitness/" className="px-3 py-1.5 text-sm font-medium rounded-lg hover:bg-stone-100 dark:hover:bg-stone-800">Fitness</a>
             <UserMenu />
           </nav>
           <div className="flex-1 flex flex-col min-h-0">{children}</div>

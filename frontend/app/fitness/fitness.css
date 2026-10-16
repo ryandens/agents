@@ -1,0 +1,149 @@
+.fitness-card { border: 1px solid var(--chart-gridline); border-radius: 16px; padding: 24px; }
+.fitness label { display: block; font-size: 0.8rem; }
+.fitness input, .fitness select, .fitness textarea { display: block; margin-top: 6px; width: 100%; border: 1px solid var(--chart-axis); border-radius: 8px; padding: 9px 10px; background: var(--background); color: var(--foreground); font-size: 0.9rem; }
+.fitness button { border: 1px solid var(--chart-axis); border-radius: 8px; padding: 8px 12px; font-size: 0.85rem; cursor: pointer; }
+.fitness button:hover { border-color: var(--chart-series); }
+.fitness button:disabled { opacity: .5; cursor: default; }
+.fitness .fitness-primary { background: #047857; border-color: #047857; color: white; }
+.fitness :focus-visible { outline: 2px solid var(--chart-series); outline-offset: 3px; }
+
+/* Prevent iPhone input zoom, provide comfortable touch targets and safe areas. */
+.fitness input, .fitness select, .fitness textarea { font-size: 16px; min-height: 44px; }
+.fitness button { min-height: 44px; touch-action: manipulation; }
+.fitness { padding-bottom: max(32px, env(safe-area-inset-bottom)); }
+
+/* Workout entry: a narrow, touch-first workspace with progressive disclosure. */
+.workout-form { max-width: 680px; margin-inline: auto; --workout-muted: #57534e; --workout-surface: #f5f5f4; --workout-tint: #ecfdf5; }
+.workout-form-header { padding: 8px 0 20px; }
+.workout-eyebrow { color: #047857; font-size: 11px; text-transform: uppercase; font-weight: 700; letter-spacing: .12em; }
+.workout-form h2 { font-size: clamp(26px, 5vw, 34px); font-weight: 650; letter-spacing: -.035em; margin: 6px 0; }
+.workout-form-header > p { font-size: 14px; color: var(--workout-muted); }
+.workout-form-header .draft-state { margin-top: 12px; font-size: 12px; color: #047857; }
+.workout-form-header .draft-error { color: #b91c1c; }
+.workout-body { min-width: 0; display: grid; gap: 16px; }
+.workout-form h3, .workout-form h4 { font-weight: 650; }
+.workout-form button, .workout-details summary { min-height: 48px; }
+.workout-form button { font-weight: 550; }
+.workout-form textarea { min-height: 84px; resize: vertical; }
+.workout-form input, .workout-form select { min-width: 0; }
+.workout-details { border-top: 1px solid var(--chart-gridline); }
+.workout-details summary { cursor: pointer; align-content: center; font-size: 13px; color: var(--workout-muted); padding-block: 12px; }
+.workout-details[open] > summary { margin-bottom: 8px; }
+.workout-details > label { margin-bottom: 14px; }
+.workout-session { border: 1px solid var(--chart-gridline); border-radius: 12px; padding: 0 16px; }
+.workout-session summary span + span { float: right; font-size: 12px; }
+.workout-session summary span:first-child { color: var(--foreground); font-weight: 600; }
+.workout-session > button { margin-bottom: 14px; }
+.workout-empty { text-align: center; padding: 20px 12px 8px; }
+.workout-empty > span { display: block; margin: 0 auto 12px; width: 40px; padding: 8px; border-radius: 50%; background: var(--workout-tint); color: #047857; font-size: 14px; font-weight: 600; }
+.workout-empty p, .workout-hint { font-size: 13px; color: var(--workout-muted); margin-top: 6px; line-height: 1.5; }
+.workout-exercise { border: 1px solid var(--chart-gridline); border-radius: 16px; overflow: hidden; scroll-margin-top: 16px; }
+.exercise-panel { padding: 0 16px 8px; }
+.set-editor { margin-top: 20px; }
+.set-mode { display: flex; gap: 4px; }
+.fitness .set-mode button { min-height: 44px; padding: 8px 16px; border-color: transparent; color: var(--workout-muted); }
+.fitness .set-mode button[aria-pressed="true"] { background: var(--workout-surface); color: var(--foreground); }
+.bodyweight-label { padding-top: 2px; font-size: 12px; color: var(--workout-muted); }
+.bodyweight-label strong { display: grid; place-content: center; min-height: 68px; font-size: 16px; color: var(--foreground); }
+.set-shortcuts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-block: 12px; }
+.fitness .set-shortcuts button { border-radius: 999px; font-size: 12px; }
+.fitness .set-shortcuts button[aria-pressed="true"] { border-color: #d97706; background: #fffbeb; color: #92400e; }
+.set-shortcuts > span { font-size: 11px; color: var(--workout-muted); margin-left: auto; }
+.set-options-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+.set-options-grid label { min-width: 0; }
+.set-add-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-block: 16px; }
+.fitness .workout-danger { color: #b91c1c; border-color: transparent; margin-block: 4px 12px; }
+.exercise-picker { padding: 16px; border: 1px solid var(--chart-gridline); border-radius: 16px; }
+.picker-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.exercise-results { max-height: 280px; overflow-y: auto; margin-top: 12px; overscroll-behavior: contain; }
+.fitness .exercise-results button { display: flex; justify-content: space-between; align-items: center; text-align: left; gap: 16px; width: 100%; border: 0; border-radius: 0; border-bottom: 1px solid var(--chart-gridline); padding: 14px 4px; overflow-wrap: anywhere; }
+.fitness .create-exercise { width: 100%; margin-top: 12px; color: #047857; border-color: #059669; overflow-wrap: anywhere; }
+.fitness .add-exercise-button { border-style: dashed; min-height: 56px; color: #047857; }
+.workout-save-bar { position: sticky; bottom: 0; z-index: 10; background: var(--background); border-top: 1px solid var(--chart-gridline); margin-top: 24px; padding: 12px 0 max(12px, env(safe-area-inset-bottom)); box-shadow: 0 -12px 24px var(--background); }
+.workout-save-info { display: flex; justify-content: space-between; gap: 8px; font-size: 11px; color: var(--workout-muted); margin-bottom: 10px; }
+.workout-save-actions { display: grid; grid-template-columns: 1fr 1.5fr; gap: 10px; }
+.workout-save-actions button { min-height: 52px; }
+.workout-error, .workout-missing { padding: 12px; margin-bottom: 12px; border-radius: 10px; font-size: 13px; }
+.workout-error { color: #b91c1c; background: #fef2f2; }
+.workout-missing { background: #fffbeb; color: #92400e; }
+.workout-totals { display: flex; gap: 12px; margin-bottom: 16px; }
+.workout-totals strong { flex: 1; padding: 18px 12px; text-align: center; background: var(--workout-surface); border-radius: 12px; }
+.workout-review-exercise { border: 1px solid var(--chart-gridline); border-radius: 14px; padding: 16px; margin-bottom: 12px; }
+.workout-review-exercise ol { margin-block: 12px; }
+.workout-review-exercise li { display: grid; grid-template-columns: 48px 1fr; gap: 8px; border-top: 1px solid var(--chart-gridline); padding-block: 10px; font-size: 14px; }
+.workout-review-exercise li > span, .workout-review-exercise small { font-size: 12px; color: var(--workout-muted); }
+.workout-review-exercise small { display: block; margin-top: 4px; }
+.workout-review-exercise p { font-size: 13px; color: var(--workout-muted); margin-bottom: 12px; }
+@media (max-width: 420px) {
+  .fitness:has(.workout-form) { padding: 16px 12px 0; }
+  .fitness:has(.workout-form) > .fitness-card { padding: 12px; }
+  .set-options-grid { grid-template-columns: 1fr; }
+  .workout-session summary span + span { float: none; margin-left: 12px; }
+}
+@media (prefers-color-scheme: dark) {
+  .workout-form { --workout-muted: #a8a29e; --workout-surface: #1c1917; --workout-tint: #052e23; }
+  .workout-eyebrow, .workout-form-header .draft-state, .fitness .create-exercise, .fitness .add-exercise-button { color: #6ee7b7; }
+  .workout-form-header .draft-error, .fitness .workout-danger { color: #fca5a5; }
+  .workout-error { color: #fca5a5; background: #450a0a; }
+  .workout-missing, .fitness .set-shortcuts button[aria-pressed="true"] { color: #fcd34d; background: #422006; }
+}
+
+/* All sets stay in place: no selector, remount, or forced scroll while typing. */
+.exercise-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px; }
+.exercise-heading h3 { font-size: 17px; overflow-wrap: anywhere; }
+.exercise-heading > div { min-width: 0; }
+.exercise-heading span { font-size: 12px; color: var(--workout-muted); }
+.fitness .remove-control { flex-shrink: 0; border: 0; color: #b91c1c; font-size: 12px; }
+.set-editor { margin: 0; padding-block: 12px 4px; border-top: 1px solid var(--chart-gridline); }
+.set-entry-row { display: grid; grid-template-columns: 24px minmax(0,1fr) minmax(0,1fr) 48px; align-items: end; gap: 8px; }
+.set-index { align-self: center; padding-top: 20px; color: var(--workout-muted); text-align: center; font-size: 13px; font-weight: 600; }
+.set-entry-row label { min-width: 0; font-size: 12px; color: var(--workout-muted); }
+.fitness .set-entry-row input { text-align: center; font-size: 22px; min-height: 52px; padding: 8px 4px; }
+.fitness .remove-set-button { border: 0; min-height: 52px; padding: 6px 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: #b91c1c; }
+.remove-set-button span { font-size: 10px; }
+.set-entry-row .bodyweight-label strong { min-height: 52px; font-size: 13px; }
+.set-shortcuts { justify-content: space-between; margin-block: 4px; }
+.set-shortcuts .set-mode button { padding: 6px 10px; font-size: 12px; }
+.set-editor > .workout-details { border-top: 0; }
+.workout-form-header { padding-bottom: 10px; }
+.workout-form-header h2 { font-size: 26px; }
+.workout-form-header > p:not(.draft-state) { display: none; }
+.fitness .preview-workout { min-height: 36px; padding: 4px; border: 0; margin-bottom: 8px; color: var(--workout-muted); font-size: 12px; text-decoration: underline; }
+.removal-notice { display: flex; align-items: center; justify-content: space-between; gap: 12px; background: var(--workout-tint); border: 1px solid #059669; padding: 8px 12px; border-radius: 10px; margin-bottom: 10px; font-size: 13px; }
+.removal-notice button { flex-shrink: 0; }
+@media (prefers-color-scheme: dark) {
+  .fitness .remove-control, .fitness .remove-set-button { color: #fca5a5; }
+}
+
+/* Browse first, with equipment and body area as independent filters. */
+.exercise-browser h4, .saved-exercises-heading { margin: 20px 0 10px; font-size: 12px; color: var(--workout-muted); }
+.exercise-category-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; }
+.fitness .exercise-category-grid button { display: flex; align-items: center; gap: 10px; padding: 14px 10px; min-height: 66px; border-color: var(--chart-gridline); background: var(--workout-surface); text-align: left; }
+.exercise-category-grid button > span:first-child { width: 28px; text-align: center; font-size: 25px; color: #059669; }
+.exercise-category-grid strong { font-size: 13px; flex: 1; }
+.exercise-category-grid button > span:last-child { color: var(--workout-muted); }
+.exercise-breadcrumb, .category-filters { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.exercise-breadcrumb > span { padding: 10px; font-size: 13px; }
+.exercise-results small { display: block; color: var(--workout-muted); font-size: 12px; margin-top: 4px; }
+.library-results { max-height: none; }
+.set-editor { position: relative; }
+.touch-value input { cursor: pointer; caret-color: transparent; }
+.touch-value-panel { position: absolute; z-index: 11; top: 80px; left: 0; right: 0; border: 1px solid var(--chart-axis); border-radius: 16px; background: var(--background); padding: 14px; box-shadow: 0 12px 32px #0003; }
+.value-presets { display: flex; flex-wrap: wrap; gap: 6px; }
+.fitness .value-presets button { flex: 1; min-width: 44px; background: var(--workout-surface); }
+.value-stepper { display: grid; grid-template-columns: 52px 1fr 52px; gap: 12px; align-items: center; margin-block: 12px; text-align: center; }
+.value-stepper output { font-size: 28px; font-variant-numeric: tabular-nums; }
+.value-keypad { display: grid; grid-template-columns: repeat(3,1fr); gap: 6px; }
+.fitness .value-keypad button { font-size: 20px; min-height: 48px; }
+.value-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+.workout-exercise { overflow: visible; }
+.touch-value { display: contents; }
+.touch-value-panel { position: static; grid-column: 1 / -1; order: 10; margin-top: 8px; box-shadow: none; }
+.set-history { background: var(--workout-surface); border-radius: 10px; padding: 12px; margin-bottom: 12px; font-size: 13px; }
+.set-history span { display: block; color: var(--workout-muted); font-size: 12px; margin-top: 4px; }
+/* Read-only tap targets should not show nonfunctional native number spinners. */
+.touch-value input { appearance: textfield; -moz-appearance: textfield; }
+.touch-value input::-webkit-inner-spin-button, .touch-value input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+
+.fitness-confirmation { margin: auto; width: min(90vw, 28rem); padding: 24px; border: 1px solid #78716c; border-radius: 16px; background: white; color: #1c1917; }
+.fitness-confirmation::backdrop { background: rgb(0 0 0 / 50%); }
