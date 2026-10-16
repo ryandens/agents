@@ -581,6 +581,14 @@ start-session`, e.g. `just ssh --profile prod`.
 
 ## Development
 
+Pull requests run [Promptfoo Code Scan](https://www.promptfoo.dev/docs/code-scanning/github-action/)
+for LLM security risks. The installed Promptfoo Scanner GitHub App authenticates
+through OIDC, so no API key secret is required. Medium and higher findings appear
+in PR reviews and GitHub code scanning. Fork PRs require a maintainer to request a
+scan by commenting `@promptfoo-scanner`; automatic fork scanning is disabled.
+The workflow lives in `.github/workflows/promptfoo-code-scan.yml`, with action
+versions pinned to commits and maintained by Renovate.
+
 ```sh
 just dev            # start both servers with hot-reload
 just serve          # build the frontend and serve everything from :8000, like production
