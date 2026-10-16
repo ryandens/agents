@@ -20,12 +20,12 @@ it("preloads the complete build manifest before installation succeeds",async () 
   await done;
   expect(w.cache.addAll).toHaveBeenCalledWith(["/fitness/","/_next/static/chunk.js"]);
 });
-it("launches Fitness from cache without waiting for a failed network request",async () => {
+it("falls back to the cached Fitness shell after a failed request",async () => {
   const w = worker();
   let result:Promise<Response> | undefined;
   w.listeners.fetch({request:{url:"https://test.invalid/fitness/",method:"GET",mode:"navigate"},respondWith:(p:Promise<Response>)=>{result=p;}});
   expect(await (await result)?.text()).toBe("offline shell");
-  expect(w.fetch).not.toHaveBeenCalled();
+  expect(w.fetch).toHaveBeenCalledTimes(1);
 });
 it("does not intercept authenticated API requests",() => {
   const w = worker();
@@ -38,4 +38,24 @@ it("recovers old home-screen root shortcuts into Fitness offline",async () => {
   let result:Promise<Response> | undefined;
   w.listeners.fetch({request:{url:"https://test.invalid/",method:"GET",mode:"navigate"},respondWith:(p:Promise<Response>)=>{result=p;}});
   expect((await result)?.headers.get("location")).toBe("https://test.invalid/fitness/");
+});
+
+it("prefers the current server page over the cached shell",async () => {
+  const w = worker();
+  w.fetch.mockResolvedValue(new Response("current server shell"));
+  let result:Promise<Response> | undefined;
+  w.listeners.fetch({request:{url:"https://test.invalid/fitness/",method:"GET",mode:"navigate"},respondWith:(p:Promise<Response>)=>{result=p;}});
+  expect(await (await result)?.text()).toBe("current server shell");
+  expect(w.cache.match).not.toHaveBeenCalled();
+});
+it("falls back on server errors without hiding client errors",async () => {
+  const w = worker();
+  let result:Promise<Response> | undefined;
+  const event = {request:{url:"https://test.invalid/fitness/",method:"GET",mode:"navigate"},respondWith:(p:Promise<Response>)=>{result=p;}};
+  w.fetch.mockResolvedValue(new Response("unavailable",{status:503}));
+  w.listeners.fetch(event);
+  expect(await (await result)?.text()).toBe("offline shell");
+  w.fetch.mockResolvedValue(new Response("not found",{status:404}));
+  w.listeners.fetch(event);
+  expect((await result)?.status).toBe(404);
 });

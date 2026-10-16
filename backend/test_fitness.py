@@ -114,7 +114,7 @@ def test_create_and_validation(client):
 
 def test_fitness_requires_auth():
     client = TestClient(main.app)
-    for path in ("/workouts", "/exercises", "/summary"):
+    for path in ("/workouts", "/exercises", "/summary", "/body-weight"):
         assert client.get("/api/fitness" + path).status_code == 401
     assert client.post("/api/fitness/import-samples").status_code == 401
 
@@ -193,3 +193,99 @@ def test_sync_rolls_back_receipt_for_retry_and_checks_account(client):
     )
     assert client.post("/api/fitness/exercises", json=exercise).status_code == 201
     assert sync_request(client, mutation).status_code == 200
+
+
+def test_body_weight_persists_independently_and_retries_safely(client):
+    from uuid import uuid4
+
+    measurement = {
+        "id": str(uuid4()),
+        "measured_on": "2026-10-15",
+        "weight": 182.4,
+        "unit": "lbs",
+    }
+    mutation = {"id": str(uuid4()), "kind": "bodyweight", "measurement": measurement}
+    assert sync_request(client, mutation).status_code == 200
+    assert sync_request(client, mutation).status_code == 200
+    assert client.get("/api/fitness/body-weight").json() == [measurement]
+    assert client.get("/api/fitness/workouts").json() == []
+    # A new store reads the persisted row, not process-local state.
+    original = main.app.dependency_overrides[fitness_api.store]()
+    assert FitnessStore(original.pool).body_weights("test-user")[0].weight == 182.4
+    assert (
+        sync_request(
+            client, {**mutation, "measurement": {**measurement, "weight": 180}}
+        ).status_code
+        == 409
+    )
+    assert (
+        client.delete(f"/api/fitness/body-weight/{measurement['id']}").status_code
+        == 200
+    )
+    assert (
+        client.delete(f"/api/fitness/body-weight/{measurement['id']}").status_code
+        == 200
+    )
+    # Retrying an earlier acknowledged create cannot resurrect a deletion.
+    assert sync_request(client, mutation).status_code == 200
+    assert client.get("/api/fitness/body-weight").json() == []
+
+
+def test_body_weight_is_private_to_account(client):
+    from uuid import uuid4
+
+    measurement = {
+        "id": str(uuid4()),
+        "measured_on": "2026-10-15",
+        "weight": 80,
+        "unit": "kg",
+    }
+    mutation = {"id": str(uuid4()), "kind": "bodyweight", "measurement": measurement}
+    assert sync_request(client, mutation).status_code == 200
+    main.app.dependency_overrides[main.authenticated] = lambda: {"sub": "other-user"}
+    assert client.get("/api/fitness/body-weight").json() == []
+    assert (
+        client.delete(f"/api/fitness/body-weight/{measurement['id']}").status_code
+        == 200
+    )
+    assert sync_request(client, mutation).status_code == 403
+    main.app.dependency_overrides[main.authenticated] = lambda: {"sub": "test-user"}
+    assert client.get("/api/fitness/body-weight").json() == [measurement]
+    assert (
+        client.get(
+            "/api/fitness/body-weight", headers={"X-Fitness-Owner": "other-user"}
+        ).status_code
+        == 403
+    )
+    assert (
+        client.delete(
+            f"/api/fitness/body-weight/{measurement['id']}",
+            headers={"X-Fitness-Owner": "other-user"},
+        ).status_code
+        == 403
+    )
+
+
+@pytest.mark.parametrize(
+    "patch",
+    [
+        {"weight": 0},
+        {"weight": -1},
+        {"weight": 2001},
+        {"unit": "stone"},
+        {"measured_on": "2026-02-30"},
+    ],
+)
+def test_invalid_body_weight_rejected(client, patch):
+    from uuid import uuid4
+
+    measurement = {
+        "id": str(uuid4()),
+        "measured_on": "2026-10-15",
+        "weight": 182.4,
+        "unit": "lbs",
+        **patch,
+    }
+    mutation = {"id": str(uuid4()), "kind": "bodyweight", "measurement": measurement}
+    assert sync_request(client, mutation).status_code == 422
+    assert client.get("/api/fitness/body-weight").json() == []

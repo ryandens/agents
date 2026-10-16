@@ -1,3 +1,4 @@
+export interface BodyWeight { id: string; measured_on: string; weight: number; unit: "lbs" | "kg" }
 export interface Exercise { id: string; name: string }
 export interface SetRecord {
   reps: number | null; target_reps: number | null; weight: number | null;

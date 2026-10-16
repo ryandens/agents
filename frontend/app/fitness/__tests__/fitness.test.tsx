@@ -22,7 +22,7 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllGlobals());
 
-it("saves locally when completely offline and does not wait for an API", async () => {
+it("attempts the server and preserves the workout when the request fails", async () => {
   const fetch = vi.fn().mockRejectedValue(new TypeError("offline"));
   vi.stubGlobal("fetch", fetch);
   const saved = vi.fn();
@@ -36,7 +36,8 @@ it("saves locally when completely offline and does not wait for an API", async (
   expect(log.workouts[0].exercises[0].sets[0]).toMatchObject({reps:7,weight:null,failure:true});
   expect(log.queue).toHaveLength(1);
   expect(log.draft).toBeNull();
-  expect(fetch).not.toHaveBeenCalled();
+  expect(fetch).toHaveBeenCalled();
+  expect(saved).toHaveBeenCalledWith(expect.stringContaining("API unreachable"));
 });
 
 it("retains the draft and shows local storage failure", async () => {
@@ -237,4 +238,46 @@ it("prefills from local history and adds sets from the first, preserving individ
   expect(screen.getByLabelText("Press set 2 weight")).toHaveValue(60);
   expect(screen.getByLabelText("Press set 3 weight")).toHaveValue(65);
   await waitFor(() => expect(log.draft?.exercises[0].sets[0]).toMatchObject({weight:70,unit:"kg",failure:null,notes:""}));
+});
+
+
+it("waits for the server before reporting a successful save", async () => {
+  let acknowledge!: () => void;
+  const fetch = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url === "/api/auth/me") return {ok:true,json:async () => ({sub:"test-user"})};
+    if (url === "/api/fitness/sync") {
+      await new Promise<void>(resolve => {acknowledge=resolve;});
+      return {ok:true,json:async () => ({acknowledged:JSON.parse(init!.body as string).id})};
+    }
+    return {ok:true,json:async () => url.endsWith("workouts") ? log.workouts : log.exercises};
+  });
+  vi.stubGlobal("fetch",fetch);
+  const saved = vi.fn();
+  render(<WorkoutForm owner="test-user" exercises={[{id:"press",name:"Press"}]} onSaved={saved} onCancel={vi.fn()}/>);
+  fireEvent.click(screen.getByRole("button",{name:"Press"}));
+  fireEvent.click(screen.getByText("Save workout"));
+  await waitFor(() => expect(acknowledge).toBeDefined());
+  expect(saved).not.toHaveBeenCalled();
+  expect(log.queue).toHaveLength(1);
+  acknowledge();
+  await waitFor(() => expect(saved).toHaveBeenCalledWith());
+  expect(log.queue).toHaveLength(0);
+});
+
+it("loads server history before displaying the recovery copy", async () => {
+  let finish!: () => void;
+  vi.stubGlobal("fetch",vi.fn(async (url: string) => {
+    if (url === "/api/auth/me") {
+      await new Promise<void>(resolve => {finish=resolve;});
+      return {ok:true,json:async () => ({sub:"test-user"})};
+    }
+    return {ok:true,json:async () => []};
+  }));
+  render(<FitnessPage/>);
+  expect(screen.getByText("Loading workouts…")).toBeInTheDocument();
+  expect(screen.getByText("+ Log workout")).toBeDisabled();
+  await waitFor(() => expect(finish).toBeDefined());
+  finish();
+  expect(await screen.findByText(/No workouts yet/)).toBeInTheDocument();
+  expect(screen.getByLabelText("Connection and backup status")).not.toHaveAttribute("open");
 });

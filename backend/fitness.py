@@ -87,14 +87,32 @@ def summarize(workouts: list[Workout], exercises: list[Exercise]) -> list[dict]:
     return result
 
 
+class BodyWeight(Model):
+    id: UUID = Field(default_factory=uuid4)
+    measured_on: date
+    weight: float = Field(gt=0, le=2000, allow_inf_nan=False)
+    unit: Literal["lbs", "kg"] = "lbs"
+
+
 class Mutation(Model):
     id: UUID
-    kind: Literal["save", "delete", "exercise"]
+    kind: Literal["save", "delete", "exercise", "bodyweight"]
     workout: Workout | None = None
     exercise: Exercise | None = None
+    measurement: BodyWeight | None = None
 
     @model_validator(mode="after")
     def matching_payload(self):
+        if self.kind == "bodyweight":
+            if (
+                self.measurement is None
+                or self.workout is not None
+                or self.exercise is not None
+            ):
+                raise ValueError("Body weight mutation requires only a measurement")
+            return self
+        if self.measurement is not None:
+            raise ValueError("Only body weight mutations accept a measurement")
         if self.kind == "exercise":
             if self.exercise is None or self.workout is not None:
                 raise ValueError("Exercise mutation requires only an exercise")

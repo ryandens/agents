@@ -84,7 +84,7 @@ workouts. Tests exercise the real migrations and persistence, authentication,
 synthetic examples, aggregates, and the logging UI.
 
 
-## Offline iPhone / home-screen use
+## Online use and connection failures
 
 After deployment, open Fitness once with the VPN connected and sign in. Wait for
 **Ready to open offline**. The production build precaches the Fitness HTML plus
@@ -92,11 +92,18 @@ all exported JS, CSS, fonts, and app icons. The web manifest opens at `/fitness/
 older home-screen shortcuts pointing to `/` fall back to Fitness if the server
 cannot be reached. Development mode deliberately does not install a worker.
 
-Workouts and the exercise catalog live in IndexedDB, partitioned by Google
-subject ID. Each save/delete and its outgoing mutation commit in one transaction.
-A save is reported successful only after the transaction commits. New exercises
-can also be created offline and are queued before the workouts that reference
-them. Summaries use the local records immediately.
+Fitness requests the current session, workout history, and exercise catalog from
+the server before showing the log. The app shell also uses the network first,
+falling back to its cached version on connection failures, timeouts, or server
+errors. Connection and backup details stay collapsed during normal use.
+
+IndexedDB retains a recovery copy partitioned by Google subject ID. Each
+save/delete and its outgoing mutation commit in one transaction before the
+request, so a lost response cannot lose the change. Save waits for the server;
+only a successful sync is reported as saved. Failed requests instead report a
+local pending change and retry later. New exercises are queued before the
+workouts that reference them. Summaries use the refreshed records while connected
+and the recovery copy after a failed request.
 
 The form saves an unfinished draft locally as fields change. Closing/reloading
 the app leaves a **Resume draft** action. Drafts do not sync until **Save workout**
@@ -111,8 +118,9 @@ connectivity does not imply VPN access. **Sync now** is available too. The app
 does not promise uploads while iOS has suspended or closed it: reopen it with the
 VPN connected to finish syncing.
 
-A cached local profile permits opening Fitness when offline or when the session
-expires; it does not authenticate API requests. Sync checks the current account
+The current session is checked first. A cached local profile permits opening
+Fitness after a network failure or server error; an explicit session rejection
+requires sign-in. The cached profile does not authenticate API requests. Sync checks the current account
 and the server independently checks the `X-Fitness-Owner` header. A 401 pauses
 upload and offers sign-in without deleting the queue. Sign-out removes the cached
 profile but retains account-partitioned local work for the next sign-in. Cached
@@ -188,3 +196,22 @@ Primary measurements use tap presets or a built-in numeric keypad, including fra
 New exercise entries prefill their first set from the first recorded working set in the most recent locally saved workout for that exact exercise ID (falling back to a recorded warmup/cooldown only when no working set is recorded). The lookup excludes the workout being edited and dates later than its selected date. No-history and unknown measurements remain blank. A dated history hint makes the starting values visible; they are editable defaults, not a progression recommendation. Existing drafts and saved sets are never rewritten when history refreshes.
 
 Add set copies measurements and units/load basis from the current first set. Repeat last set remains available for a different most recent set. Both actions clear failure, notes, and target reps and create a working set. Later edits affect only the edited set, not previously added sets. These defaults use the account's local history and work offline.
+
+
+## Weight logging and progress charts
+
+The **Body weight** view logs dated weigh-ins independently of workouts, defaults
+to pounds, and also accepts kilograms. Migration `0005` stores measurements in
+`fitness_body_weights`, scoped to the authenticated account. GET
+`/api/fitness/body-weight` returns that account's history; bodyweight mutations
+use the existing durable sync receipts. Retrying a lost response cannot create a
+duplicate. Deletion requires a successful online request and is safe to retry.
+Existing workout mutation receipts remain compatible with the added payload type.
+
+The **Exercise progress** view graphs the best recorded working set per day for
+one exercise: heaviest load, most reps, or longest duration. Warmups, cooldowns,
+and missing values are excluded. Loads are converted to the selected unit but
+never mixed across total, per-hand, machine, or unspecified conventions. The
+charts do not estimate one-rep max or invent values for missing days. Body weight
+charts include every weigh-in and convert mixed units consistently. Both charts
+use a date axis, show their units, and provide an accessible data table.

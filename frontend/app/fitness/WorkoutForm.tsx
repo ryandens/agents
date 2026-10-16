@@ -3,14 +3,14 @@
 import { useEffect, useRef, useState } from "react";
 import { newSet, type Exercise, type Workout, type SetRecord, type Entry } from "./types";
 import { changeLog } from "./database";
-import { createExercise, ensureLibraryExercise, downloadBackup, saveWorkout, validateWorkout } from "./offline";
+import { createExercise, ensureLibraryExercise, downloadBackup, saveWorkout, savePendingChanges, validateWorkout } from "./offline";
 import { copyMeasurements, lastExerciseSet } from "./setDefaults";
 import ExerciseBrowser from "./ExerciseBrowser";
 import { libraryEntry, type LibraryExercise } from "./library";
 import SetEditor, { describeSet } from "./SetEditor";
 
 export default function WorkoutForm({ owner, initial, exercises, workouts = [], onSaved, onCancel }: {
-  owner: string; initial?: Workout; exercises: Exercise[]; workouts?: Workout[]; onSaved: () => void; onCancel: () => void;
+  owner: string; initial?: Workout; exercises: Exercise[]; workouts?: Workout[]; onSaved: (pendingReason?: string) => void; onCancel: () => void;
 }) {
   const [draft, setDraft] = useState<Workout>(() => initial ?? {
     id: crypto.randomUUID(), revision: 0, performed_on: new Date().toLocaleDateString("en-CA"),
@@ -125,6 +125,11 @@ export default function WorkoutForm({ owner, initial, exercises, workouts = [], 
       validateWorkout(draft);
       setBusy(true);
       await saveWorkout(owner, draft);
+      try { await savePendingChanges(owner); }
+      catch (e) {
+        onSaved((e as Error).message);
+        return;
+      }
       onSaved();
     } catch (e) {
       setError((e as Error).message);
@@ -134,7 +139,7 @@ export default function WorkoutForm({ owner, initial, exercises, workouts = [], 
     <header className="workout-form-header">
       <div className="workout-eyebrow">{review ? "Workout summary" : "Workout log"}</div>
       <h2 ref={title} tabIndex={-1}>{review ? "Ready to save?" : initial?.revision ? "Edit your workout" : "Your workout"}</h2>
-      <p>{review ? "Check what you recorded. You can save without a connection." : "Enter your sets below. Everything saves to your draft as you go."}</p>
+      <p>{review ? "Check what you recorded before saving." : "Enter your sets below. Your draft is saved as you go."}</p>
       <p className={draftStatus ? "draft-state draft-error" : "draft-state"} role="status">
         {draftStatus || (storedDraft === draft ? "✓ Draft saved on this device" : "Saving draft on this device…")}
       </p>
@@ -193,7 +198,7 @@ export default function WorkoutForm({ owner, initial, exercises, workouts = [], 
           <label>Search exercises<input type="search" maxLength={120} autoComplete="off" placeholder="e.g. Leg press" value={query} onChange={e => setQuery(e.target.value)}/></label>
           </details>
           <div className="exercise-results">{results.map(e => <button type="button" key={e.id} disabled={draft.exercises.length >= 100} onClick={() => addExercise(e)}><span>{e.name}</span><span aria-hidden="true">+</span></button>)}</div>
-          {!results.length && <p className="workout-hint">{query.trim() ? "No matching exercises. You can create one below." : "Choose from the categories above, available offline."}</p>}
+          {!results.length && <p className="workout-hint">{query.trim() ? "No matching exercises. You can create one below." : "Choose from the categories above."}</p>}
           {query.trim() && !catalog.some(e => e.name.toLowerCase() === query.trim().toLowerCase()) && <button className="create-exercise" type="button" disabled={busy || draft.exercises.length >= 100} onClick={createAndAdd}>Create & add “{query.trim()}”</button>}
           <p className="workout-hint">Use separate names for different machines or movement variations.</p>
         </section> : <button className="add-exercise-button" type="button" disabled={draft.exercises.length >= 100} onClick={openPicker}>+ Add another exercise</button>}
@@ -203,7 +208,7 @@ export default function WorkoutForm({ owner, initial, exercises, workouts = [], 
     <footer className="workout-save-bar">
       {removed && <div className="removal-notice"><span role="status">{removed.label}</span><button type="button" disabled={busy} onClick={undoRemoval}>Undo</button></div>}
       {error && <p role="alert" className="workout-error">{error}</p>}
-      <div className="workout-save-info"><span>{draft.exercises.length} {draft.exercises.length === 1 ? "exercise" : "exercises"} · {count} {count === 1 ? "set" : "sets"}</span><span>{busy ? "Saving…" : review ? "Saves on this device first" : "Finish when you’re ready"}</span></div>
+      <div className="workout-save-info"><span>{draft.exercises.length} {draft.exercises.length === 1 ? "exercise" : "exercises"} · {count} {count === 1 ? "set" : "sets"}</span><span>{busy ? "Saving…" : "Finish when you’re ready"}</span></div>
       {!review && draft.exercises.length > 0 && <button className="preview-workout" disabled={busy} type="button" onClick={() => {
         setReview(true); setTimeout(() => title.current?.focus(),0);
       }}>Preview summary</button>}

@@ -246,9 +246,14 @@ workouts, filter history by exercise, and view basic per-exercise totals. A one-
 button imports three clearly labelled synthetic demo sessions, including fictional
 source notes and missing values. No personal workout history is bundled.
 
-Fitness saves workouts and in-progress drafts on the phone, works offline after
-one connected visit, and automatically retries queued changes when the app is
-open and the VPN/API is reachable. The home-screen app opens directly to Fitness.
+Fitness loads from the server and saves changes immediately while connected.
+If a request fails, it keeps workouts and drafts on the phone and retries pending
+changes when the VPN/API is reachable. After one connected visit, the cached app
+can also open during an outage. The home-screen app opens directly to Fitness.
+
+Use **Body weight** to record weigh-ins (pounds by default) separately from
+workouts. **Exercise progress** charts working-set load, reps, or duration over
+time; the body-weight view charts weigh-ins with consistent units.
 
 See [the fitness domain model](docs/fitness.md) for assumptions, aggregate
 definitions, API routes, and the shared-log access model.

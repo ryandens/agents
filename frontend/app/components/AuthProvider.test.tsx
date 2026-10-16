@@ -6,15 +6,26 @@ function Profile() { return <p>Local account: {useAuth().user.sub}</p>; }
 beforeEach(() => {localStorage.clear(); window.history.replaceState({},"","/fitness/");});
 afterEach(() => vi.unstubAllGlobals());
 const cached = {sub:"original",email:"demo@example.test",name:"Demo",picture:""};
-it("opens cached Fitness without waiting for the VPN",async () => {
+it("waits for the current session before using the cached profile",async () => {
   localStorage.setItem("fitness-offline-identity",JSON.stringify(cached));
-  vi.stubGlobal("fetch",vi.fn(() => new Promise(() => {})));
+  let reject!: (reason: Error) => void;
+  vi.stubGlobal("fetch",vi.fn(() => new Promise((_, fail) => {reject=fail;})));
   render(<AuthProvider><Profile/></AuthProvider>);
+  expect(screen.getByText("Loading…")).toBeInTheDocument();
+  expect(screen.queryByText("Local account: original")).not.toBeInTheDocument();
+  reject(new TypeError("network unavailable"));
   expect(await screen.findByText("Local account: original")).toBeInTheDocument();
 });
-it("keeps local Fitness accessible when the session expires",async () => {
+it("requires sign-in when the server rejects the session",async () => {
   localStorage.setItem("fitness-offline-identity",JSON.stringify(cached));
   vi.stubGlobal("fetch",vi.fn().mockResolvedValue({ok:false,status:401}));
+  render(<AuthProvider><Profile/></AuthProvider>);
+  expect(await screen.findByText("Sign in with Google")).toBeInTheDocument();
+  expect(screen.queryByText("Local account: original")).not.toBeInTheDocument();
+});
+it("uses the recovery profile on a server error",async () => {
+  localStorage.setItem("fitness-offline-identity",JSON.stringify(cached));
+  vi.stubGlobal("fetch",vi.fn().mockResolvedValue({ok:false,status:503}));
   render(<AuthProvider><Profile/></AuthProvider>);
   expect(await screen.findByText("Local account: original")).toBeInTheDocument();
 });

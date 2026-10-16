@@ -1,11 +1,11 @@
-import type { Exercise, Workout } from "./types";
+import type { BodyWeight, Exercise, Workout } from "./types";
 
-export type Mutation = { id: string; kind: "save" | "delete"; workout: Workout } | { id: string; kind: "exercise"; exercise: Exercise };
+export type Mutation = { id: string; kind: "save" | "delete"; workout: Workout } | { id: string; kind: "exercise"; exercise: Exercise } | {id: string; kind: "bodyweight"; measurement: BodyWeight};
 export interface LocalLog {
-  workouts: Workout[]; exercises: Exercise[]; queue: Mutation[];
+  workouts: Workout[]; exercises: Exercise[]; bodyWeights: BodyWeight[]; queue: Mutation[];
   draft: Workout | null; generation: number; lastSync: string | null;
 }
-export const emptyLog = (): LocalLog => ({workouts:[], exercises:[], queue:[], draft:null, generation:0, lastSync:null});
+export const emptyLog = (): LocalLog => ({workouts:[], exercises:[], bodyWeights:[], queue:[], draft:null, generation:0, lastSync:null});
 let database: Promise<IDBDatabase> | undefined;
 function open(): Promise<IDBDatabase> {
   if (!database) database = new Promise((resolve, reject) => {
@@ -30,7 +30,7 @@ export async function changeLog(owner: string, update?: (log: LocalLog) => void)
     const request = store.get(owner);
     let log: LocalLog;
     request.onsuccess = () => {
-      log = request.result ?? emptyLog();
+      log = {...emptyLog(), ...request.result};
       if (update) {
         try { update(log); log.generation++; store.put(log, owner); }
         catch (error) { tx.abort(); reject(error); }

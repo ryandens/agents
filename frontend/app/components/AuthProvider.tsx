@@ -69,21 +69,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // every API request still requires the real HttpOnly session.
     const offlineFitness = window.location.pathname.replace(/\/$/, "") === "/fitness";
     const cached = offlineFitness ? cachedIdentity() : null;
-    if (cached) {
-      // Async boundary keeps the cached first render hydration-safe.
-      Promise.resolve().then(() => { setUser(cached); setChecked(true); });
-    }
     fetch('/api/auth/me', {cache:"no-store", signal:AbortSignal.timeout(6000)})
       .then(async res => {
         if (!res.ok) {
-          if (!cached) setUser(null);
+          // A rejected session requires sign-in; only server/network failures
+          // may fall back to the cached local profile.
+          setUser(res.status >= 500 ? cached : null);
           return;
         }
         const current = await res.json();
         try { localStorage.setItem(OFFLINE_IDENTITY, JSON.stringify(current)); } catch { /* Local storage can be unavailable. */ }
         setUser(current);
       })
-      .catch(() => { if (!cached) setUser(null); })
+      .catch(() => { setUser(cached); })
       .finally(() => {
         if (reason) setError(ERROR_MESSAGES[reason] ?? 'Sign-in failed. Please try again.');
         setChecked(true);

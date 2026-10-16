@@ -2,10 +2,12 @@
 import { useEffect, useState } from "react";
 import OfflineSetup from "../components/OfflineSetup";
 import WorkoutForm from "./WorkoutForm";
+import BodyWeightLog from "./BodyWeightLog";
+import ExerciseProgress from "./ExerciseProgress";
 import { json, type Workout } from "./types";
 import { useAuth } from "../components/AuthProvider";
 import { changeLog, emptyLog } from "./database";
-import { deleteWorkout, downloadBackup, localSummary, request, resolveConflict, SyncError, syncLog } from "./offline";
+import { deleteWorkout, downloadBackup, localSummary, request, resolveConflict, SyncError, syncLog, savePendingChanges } from "./offline";
 import "./fitness.css";
 import { useConfirmation } from "./useConfirmation";
 
@@ -20,23 +22,25 @@ function FitnessLog({owner}: {owner:string}) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const [syncStatus, setSyncStatus] = useState("Saved on this device");
+  const [syncStatus, setSyncStatus] = useState("Connecting…");
   const [syncError, setSyncError] = useState<SyncError | null>(null);
   const [editing, setEditing] = useState<Workout | "new" | null>(null);
   const [busy, setBusy] = useState(false);
   const [filter, setFilter] = useState("");
+  const [view,setView] = useState<"workouts" | "progress" | "weight">("workouts");
   const workouts = [...log.workouts].sort((a,b) => b.performed_on.localeCompare(a.performed_on));
   const exercises = log.exercises;
   const summary = localSummary(log);
   useEffect(() => {
     let cancelled = false;
-    const read = () => changeLog(owner).then(data => {
+    let initialRequestComplete = false;
+    const read = () => !initialRequestComplete ? Promise.resolve() : changeLog(owner).then(data => {
       if (!cancelled) { setLog(data); setLoading(false); }
     }).catch(() => {
       if (!cancelled) { setError("Local storage is unavailable. Workouts cannot be safely saved on this device."); setLoading(false); }
     });
     const sync = async () => {
-      if (document.visibilityState === "hidden") return;
+      if (document.visibilityState === "hidden" && initialRequestComplete) return;
       if (!cancelled) setSyncStatus("Checking connection…");
       try {
         await syncLog(owner);
@@ -47,9 +51,9 @@ function FitnessLog({owner}: {owner:string}) {
           setSyncError(e instanceof SyncError ? e : null);
         }
       }
+      initialRequestComplete = true;
       await read();
     };
-    void read();
     void sync();
     window.addEventListener("fitness-local-change",read);
     window.addEventListener("fitness-sync",sync);
@@ -80,33 +84,18 @@ function FitnessLog({owner}: {owner:string}) {
   return <main className="fitness mx-auto w-full max-w-5xl px-4 sm:px-8 py-8 space-y-6">
     {confirmationDialog}
     <header hidden={!!editing} className={editing ? "hidden" : "flex flex-wrap justify-between gap-4 items-start"}>
-      <div><p className="text-xs uppercase tracking-widest text-emerald-700 dark:text-emerald-400 font-semibold">Your training log</p><h1 className="text-3xl font-semibold mt-2">Fitness</h1><p className="text-stone-500 mt-2">One workout. One exercise. One set at a time.</p></div>
-      {!editing && <button className="fitness-primary" disabled={loading} onClick={() => setEditing(log.draft ?? "new")}>{log.draft ? "Resume draft" : "+ Log workout"}</button>}
+      <div><p className="text-xs uppercase tracking-widest text-emerald-700 dark:text-emerald-400 font-semibold">Your training log</p><h1 className="text-3xl font-semibold mt-2">Fitness</h1><p className="text-stone-500 mt-2">Track workouts, body weight, and progress.</p></div>
+      {!editing && view === "workouts" && <button className="fitness-primary" disabled={loading} onClick={() => setEditing(log.draft ?? "new")}>{log.draft ? "Resume draft" : "+ Log workout"}</button>}
     </header>
-    <details open={!editing} className="fitness-card space-y-3" aria-label="Offline and sync status">
-      <summary className="cursor-pointer text-sm font-medium">Connection & backups</summary>
-      <OfflineSetup />
-      <p role="status" className="font-medium">{log.queue.length ? `${log.queue.length} changes saved on this device · waiting to sync` : log.lastSync ? (log.draft ? "Completed workouts synced · draft stays on this device" : "All saved changes synced") : "Ready to save on this device"}</p>
-      <p className="text-sm text-stone-500">{syncStatus}</p>
-      {log.lastSync && <p className="text-xs text-stone-500">Last synced {new Date(log.lastSync).toLocaleString()}</p>}
-      <div className="flex flex-wrap gap-2">
-        <button onClick={reload}>Sync now</button>
-        <button onClick={() => downloadBackup(log)}>Export local backup</button>
-        {syncError?.status === 401 && <a href="/api/auth/login" className="underline p-2">Sign in to sync</a>}
-      </div>
-      <p className="text-xs text-stone-500">Sync retries while this app is open and when you return to it. Your VPN must be connected. Saved drafts survive closing the app.</p>
-      {syncError?.status === 409 && syncError.mutation && syncError.mutation.kind !== "exercise" && <div className="space-y-2">
-        <p>Another device changed this workout. You can use the server version, or keep a separate copy if your local workout still exists.</p>
-        <div className="flex flex-wrap gap-2">{(log.workouts.some(w => w.id === (syncError.mutation?.kind !== "exercise" ? syncError.mutation?.workout.id : undefined)) ? [true,false] : [false]).map(copy => <button key={String(copy)} onClick={async () => {
-          if (!copy && !(await requestConfirmation("Discard the queued local changes for this workout and use the server version?"))) return;
-          try {await resolveConflict(owner,syncError.mutation!,copy); setSyncError(null); reload();}
-          catch(e) {setError((e as Error).message);}
-        }}>{copy ? "Keep local as a new workout" : "Use server version"}</button>)}</div>
-      </div>}
-    </details>
     {error && <div role="alert" className="fitness-card text-red-600">{error} <button onClick={reload}>Retry</button></div>}
     {notice && <p role="status">{notice}</p>}
-    {loading ? <p role="status">Loading workouts…</p> : editing ? <WorkoutForm owner={owner} initial={editing === "new" ? undefined : editing} exercises={exercises} workouts={log.workouts} onCancel={() => setEditing(null)} onSaved={() => {setEditing(null); setNotice("Workout saved on this device."); reload();}} /> : <>
+    {loading ? <p role="status">Loading workouts…</p> : editing ? <WorkoutForm owner={owner} initial={editing === "new" ? undefined : editing} exercises={exercises} workouts={log.workouts} onCancel={() => setEditing(null)} onSaved={pendingReason => {setEditing(null); setNotice(pendingReason ? `Workout saved on this device; server save pending. ${pendingReason}` : "Workout saved."); reload();}} /> : <>
+      <nav className="flex flex-wrap gap-2" aria-label="Fitness views">
+        {([['workouts','Workouts'],['progress','Exercise progress'],['weight','Body weight']] as const).map(([key,label]) => <button key={key} className={view === key ? "fitness-primary" : ""} aria-pressed={view === key} onClick={() => setView(key)}>{label}</button>)}
+      </nav>
+      {view === "weight" && <BodyWeightLog owner={owner} log={log} onChange={reload}/>}
+      {view === "progress" && <ExerciseProgress workouts={log.workouts} exercises={exercises}/>}
+      {view === "workouts" && <>
       {log.draft && <div className="fitness-card flex flex-wrap gap-3 items-center"><p>You have an unfinished workout saved on this device.</p><button onClick={() => setEditing(log.draft)}>Resume draft</button><button onClick={async () => {
         if (await requestConfirmation("Discard the unfinished draft?")) {
           try {await changeLog(owner,data => {data.draft=null;});} catch(e) {setError((e as Error).message);}
@@ -126,9 +115,14 @@ function FitnessLog({owner}: {owner:string}) {
         <div className="flex justify-between items-center"><h3 className="text-lg font-semibold">{new Date(w.performed_on + "T12:00:00").toLocaleDateString(undefined,{weekday:"short",month:"long",day:"numeric",year:"numeric"})}</h3><div className="flex gap-2"><button onClick={async () => {if (!log.draft || await requestConfirmation("Replace the unfinished draft with this workout?")) setEditing(w);}}>Edit</button><button disabled={busy} onClick={async () => {
           if (!(await requestConfirmation("Delete this workout and its sets?"))) return;
           setBusy(true);
-          try {await deleteWorkout(owner,w); reload();} catch(e) {setError((e as Error).message);} finally {setBusy(false);}
+          try {
+            await deleteWorkout(owner,w);
+            try {await savePendingChanges(owner); setNotice("Workout deleted.");}
+            catch(e) {setNotice(`Deletion saved on this device; server update pending. ${(e as Error).message}`);}
+            reload();
+          } catch(e) {setError((e as Error).message);} finally {setBusy(false);}
         }}>Delete</button></div></div>
-        {log.queue.some(m => m.kind !== "exercise" && m.workout.id === w.id) && <p className="text-sm text-amber-700 dark:text-amber-400">Saved on this device · pending sync</p>}
+        {log.queue.some(m => "workout" in m && m.workout.id === w.id) && <p className="text-sm text-amber-700 dark:text-amber-400">Saved on this device · pending sync</p>}
         {w.notes && <p className="text-sm text-stone-500">{w.notes}</p>}
         {/* Persisted entry/set positions identify rows within a workout revision. */}
         {w.exercises.map((e,i) => <div key={`${w.id}:${w.revision}:entry:${i}`} className="border-t border-stone-200 dark:border-stone-700 pt-3">
@@ -146,6 +140,28 @@ function FitnessLog({owner}: {owner:string}) {
         {w.source_note && <details className="text-sm"><summary className="cursor-pointer">Original notes</summary><pre className="whitespace-pre-wrap mt-3 text-stone-500">{w.source_note}</pre></details>}
       </article>)}
       {filter && !workouts.some(w => w.exercises.some(e => e.exercise_id === filter)) && <p>No workouts for this exercise.</p>}
+      </>}
     </>}
+    <details open={!!syncError} className="fitness-card space-y-3" aria-label="Connection and backup status">
+      <summary className="cursor-pointer text-sm font-medium">Connection & backups</summary>
+      <OfflineSetup />
+      <p role="status" className="font-medium">{log.queue.length ? `${log.queue.length} changes saved on this device · waiting to sync` : log.lastSync ? (log.draft ? "Completed workouts synced · draft stays on this device" : "All saved changes synced") : "Connected"}</p>
+      <p className="text-sm text-stone-500">{syncStatus}</p>
+      {log.lastSync && <p className="text-xs text-stone-500">Last synced {new Date(log.lastSync).toLocaleString()}</p>}
+      <div className="flex flex-wrap gap-2">
+        <button onClick={reload}>Sync now</button>
+        <button onClick={() => downloadBackup(log)}>Export local backup</button>
+        {syncError?.status === 401 && <a href="/api/auth/login" className="underline p-2">Sign in to sync</a>}
+      </div>
+      <p className="text-xs text-stone-500">Sync retries while this app is open and when you return to it. Your VPN must be connected. Saved drafts survive closing the app.</p>
+      {syncError?.status === 409 && syncError.mutation && "workout" in syncError.mutation && <div className="space-y-2">
+        <p>Another device changed this workout. You can use the server version, or keep a separate copy if your local workout still exists.</p>
+        <div className="flex flex-wrap gap-2">{(log.workouts.some(w => w.id === (syncError.mutation && "workout" in syncError.mutation ? syncError.mutation?.workout.id : undefined)) ? [true,false] : [false]).map(copy => <button key={String(copy)} onClick={async () => {
+          if (!copy && !(await requestConfirmation("Discard the queued local changes for this workout and use the server version?"))) return;
+          try {await resolveConflict(owner,syncError.mutation!,copy); setSyncError(null); reload();}
+          catch(e) {setError((e as Error).message);}
+        }}>{copy ? "Keep local as a new workout" : "Use server version"}</button>)}</div>
+      </div>}
+    </details>
   </main>;
 }

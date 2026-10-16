@@ -3,12 +3,30 @@ from uuid import UUID
 from psycopg.types.json import Jsonb
 from psycopg_pool import ConnectionPool
 
-from fitness import Exercise, Mutation, Workout, WorkoutInput
+from fitness import BodyWeight, Exercise, Mutation, Workout, WorkoutInput
 
 
 class FitnessStore:
     def __init__(self, pool: ConnectionPool):
         self.pool = pool
+
+    def body_weights(self, owner: str):
+        with self.pool.connection() as conn:
+            return [
+                BodyWeight(**row)
+                for row in conn.execute(
+                    "SELECT id, measured_on, weight, unit FROM fitness_body_weights "
+                    "WHERE owner=%s ORDER BY measured_on, created_at, id",
+                    (owner,),
+                ).fetchall()
+            ]
+
+    def delete_body_weight(self, owner: str, measurement_id: UUID):
+        with self.pool.connection() as conn:
+            conn.execute(
+                "DELETE FROM fitness_body_weights WHERE owner=%s AND id=%s",
+                (owner, measurement_id),
+            )
 
     def exercises(self):
         with self.pool.connection() as conn:
@@ -136,7 +154,10 @@ class FitnessStore:
         """Receipt and mutation commit together; retries after a lost response are safe."""
         from fastapi import HTTPException
 
-        payload = mutation.model_dump(mode="json")
+        payload = mutation.model_dump(
+            mode="json",
+            exclude={"measurement"} if mutation.measurement is None else set(),
+        )
         with self.pool.connection() as conn:
             inserted = conn.execute(
                 "INSERT INTO fitness_mutations (id, actor, payload) VALUES (%s,%s,%s) "
@@ -151,6 +172,24 @@ class FitnessStore:
                 if prior["actor"] != actor or prior["payload"] != payload:
                     raise HTTPException(
                         409, "Mutation ID was already used for different data"
+                    )
+                return
+            if mutation.kind == "bodyweight":
+                measurement = mutation.measurement
+                row = conn.execute(
+                    "INSERT INTO fitness_body_weights (owner,id,measured_on,weight,unit) "
+                    "VALUES (%s,%s,%s,%s,%s) ON CONFLICT DO NOTHING RETURNING id",
+                    (
+                        actor,
+                        measurement.id,
+                        measurement.measured_on,
+                        measurement.weight,
+                        measurement.unit,
+                    ),
+                ).fetchone()
+                if row is None:
+                    raise HTTPException(
+                        409, "Weight entry already exists; refresh your history"
                     )
                 return
             if mutation.kind == "exercise":

@@ -24,16 +24,19 @@ self.addEventListener("fetch", event => {
   if (url.origin !== self.location.origin || event.request.method !== "GET" || url.pathname.startsWith("/api/")) return;
   if (event.request.mode === "navigate") {
     event.respondWith((async () => {
-      const cache = await caches.open(CACHE);
+      let response;
+      try {
+        response = await fetch(event.request, {signal:AbortSignal.timeout(4000)});
+        if (response.status < 500) return response;
+      } catch { /* Use the saved Fitness shell only after a failed request. */ }
       if (url.pathname.replace(/\/$/, "") === "/fitness") {
+        const cache = await caches.open(CACHE);
         const shell = await cache.match("/fitness/");
         if (shell) return shell;
       }
-      try {
-        const response = await fetch(event.request, {signal:AbortSignal.timeout(4000)});
-        if (response.ok) return response;
-      } catch { /* Existing home-screen shortcuts may still start at /. */ }
-      return Response.redirect(new URL("/fitness/", self.location.origin).href);
+      // Existing home-screen shortcuts may still start at /.
+      if (url.pathname === "/") return Response.redirect(new URL("/fitness/", self.location.origin).href);
+      return response ?? Response.error();
     })());
     return;
   }

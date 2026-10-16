@@ -4,7 +4,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Header, HTTPException
 
 from auth import authenticated
-from fitness import Exercise, Mutation, Workout, WorkoutInput, summarize
+from fitness import BodyWeight, Exercise, Mutation, Workout, WorkoutInput, summarize
 from fitness_store import FitnessStore
 
 router = APIRouter(prefix="/api/fitness", dependencies=[Depends(authenticated)])
@@ -19,6 +19,34 @@ def store():
 
 
 Store = Annotated[FitnessStore, Depends(store)]
+
+
+@router.get("/body-weight", response_model=list[BodyWeight])
+def body_weights(
+    db: Store,
+    user: Annotated[dict, Depends(authenticated)],
+    owner: Annotated[str | None, Header(alias="X-Fitness-Owner")] = None,
+):
+    if owner is not None and owner != user["sub"]:
+        raise HTTPException(
+            403, "The signed-in account changed. Reload before continuing"
+        )
+    return db.body_weights(user["sub"])
+
+
+@router.delete("/body-weight/{measurement_id}")
+def delete_body_weight(
+    measurement_id: UUID,
+    db: Store,
+    user: Annotated[dict, Depends(authenticated)],
+    owner: Annotated[str | None, Header(alias="X-Fitness-Owner")] = None,
+):
+    if owner is not None and owner != user["sub"]:
+        raise HTTPException(
+            403, "The signed-in account changed. Reload before continuing"
+        )
+    db.delete_body_weight(user["sub"], measurement_id)
+    return {"deleted": str(measurement_id)}
 
 
 @router.get("/exercises", response_model=list[Exercise])

@@ -1,5 +1,5 @@
 import { changeLog, type LocalLog, type Mutation } from "./database";
-import { json, type Exercise, type Summary, type Workout } from "./types";
+import { json, type BodyWeight, type Exercise, type Summary, type Workout } from "./types";
 
 export async function saveWorkout(owner: string, value: Workout) {
   validateWorkout(value);
@@ -107,13 +107,14 @@ export function syncLog(owner: string): Promise<void> {
       }
     }
     const before = await changeLog(owner);
-    const [workouts, exercises] = await Promise.all([
+    const [workouts, exercises, bodyWeights] = await Promise.all([
       request<Workout[]>("/api/fitness/workouts"),request<Exercise[]>("/api/fitness/exercises"),
+      request<BodyWeight[]>("/api/fitness/body-weight",{headers:{"X-Fitness-Owner":owner}}),
     ]);
     await changeLog(owner, log => {
       // Never overwrite a save made while the refresh was in flight.
       if (log.generation !== before.generation || log.queue.length) return;
-      log.workouts = workouts; log.exercises = exercises; log.lastSync = new Date().toISOString();
+      log.workouts = workouts; log.exercises = exercises; log.bodyWeights = bodyWeights; log.lastSync = new Date().toISOString();
     });
   };
   const promise = (navigator.locks ? navigator.locks.request("fitness-sync-" + owner, run) : run())
@@ -125,10 +126,10 @@ export function syncLog(owner: string): Promise<void> {
 // another device's changes. The next refresh restores the server version too.
 export async function resolveConflict(owner: string, mutation: Mutation, keepCopy: boolean) {
   await changeLog(owner, log => {
-    if (mutation.kind === "exercise") throw new Error("Export your backup and contact support to resolve this exercise.");
+    if (!("workout" in mutation)) throw new Error("Export your backup and contact support to resolve this exercise.");
     const current = log.workouts.find(w => w.id === mutation.workout.id);
     if (keepCopy && !current) throw new Error("There is no local workout to copy. Use the server version to resolve this deletion.");
-    log.queue = log.queue.filter(m => m.kind === "exercise" || m.workout.id !== mutation.workout.id);
+    log.queue = log.queue.filter(m => !("workout" in m) || m.workout.id !== mutation.workout.id);
     log.workouts = log.workouts.filter(w => w.id !== mutation.workout.id);
     if (keepCopy && current) {
       const copy = {...current,id:crypto.randomUUID(),revision:0};
@@ -142,4 +143,24 @@ export function downloadBackup(value: unknown) {
   const link = document.createElement("a");
   link.href = url; link.download = "fitness-backup.json"; link.click();
   setTimeout(() => URL.revokeObjectURL(url),1000);
+}
+
+
+export async function saveBodyWeight(owner: string, measurement: BodyWeight) {
+  if (!Number.isFinite(measurement.weight) || measurement.weight <= 0 || measurement.weight > 2000)
+    throw new Error("Enter a weight greater than zero and at most 2,000.");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(measurement.measured_on) || !Number.isFinite(Date.parse(measurement.measured_on)) || new Date(measurement.measured_on).toISOString().slice(0,10) !== measurement.measured_on)
+    throw new Error("Enter a valid measurement date.");
+  await changeLog(owner, log => {
+    log.bodyWeights.push(measurement);
+    log.queue.push({id:crypto.randomUUID(),kind:"bodyweight",measurement});
+  });
+}
+
+// A concurrent refresh may finish before a newly queued change is uploaded.
+// Never report that change as saved on the server until its queue is empty.
+export async function savePendingChanges(owner: string) {
+  await syncLog(owner);
+  if ((await changeLog(owner)).queue.length) await syncLog(owner);
+  if ((await changeLog(owner)).queue.length) throw new SyncError("Changes are still pending. They will retry automatically.");
 }
