@@ -304,10 +304,10 @@ Three decisions worth knowing about:
   in UTC would file an evening of scrolling under tomorrow, which is precisely the
   reading the graph exists to give.
 - **`visits` is not quite "watched"**. It estimates navigations from Safari history and
-  collapses a same-video URL pair with and without an `ra` query parameter when the two
-  records are within two minutes. Other recorded Shorts URLs count separately. Swiping
-  through the feed without the address bar changing is one count, not ten, and history
-  cannot prove whether a video played.
+  collapses same-video records on each local day when successive timestamps are
+  within two minutes, across host and query-string variants. A gap longer than two
+  minutes starts a new visit. Swiping through the feed without the address bar changing
+  is one count, not ten, and history cannot prove whether a video played.
 
 Note that `tzdata` is a backend dependency for this: the deployed image is distroless
 and carries no `/usr/share/zoneinfo`, so without it every zone but UTC would fail in

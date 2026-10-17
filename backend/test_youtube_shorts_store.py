@@ -6,7 +6,7 @@ database. A fake would be a second implementation of both, and it is the differe
 between the two implementations that this feature can actually get wrong.
 """
 
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 
@@ -166,7 +166,7 @@ def test_ra_pairing_is_same_video_and_within_120_seconds(
     assert counted(history_store) == {DAY.isoformat(): (3, 2)}
 
 
-def test_ra_parameter_must_be_present_to_pair(
+def test_tracking_and_plain_urls_within_two_minutes_count_as_one_visit(
     history_store: BrowserHistoryStore,
 ) -> None:
     history_store.record_visits(
@@ -175,7 +175,85 @@ def test_ra_parameter_must_be_present_to_pair(
             visit(datetime(2026, 7, 26, 10, 1, tzinfo=UTC), shorts_url()),
         ]
     )
+    assert counted(history_store) == {DAY.isoformat(): (1, 1)}
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+def test_redirect_chain_and_later_video_are_two_visits(history_store, reverse):
+    shared = shorts_url("aaaaaaaaaaa", host="youtube.com") + "?is=share-token"
+    mobile = shorts_url("aaaaaaaaaaa", host="m.youtube.com")
+    records = [
+        visit(datetime(2026, 7, 26, 12, 55, 47, tzinfo=UTC), shared),
+        visit(
+            datetime(2026, 7, 26, 12, 55, 47, tzinfo=UTC), mobile + "?is=share-token"
+        ),
+        visit(datetime(2026, 7, 26, 12, 55, 50, tzinfo=UTC), mobile),
+        visit(datetime(2026, 7, 26, 12, 55, 50, tzinfo=UTC), mobile + "?ra=m"),
+        visit(datetime(2026, 7, 26, 23, 13, 38, tzinfo=UTC), shorts_url("bbbbbbbbbbb")),
+    ]
+    history_store.record_visits(records[::-1] if reverse else records)
+    assert counted(history_store) == {DAY.isoformat(): (2, 2)}
+    # Retrying an export must not change the aggregate or discard the source records.
+    assert history_store.record_visits(records) == 0
+    assert counted(history_store) == {DAY.isoformat(): (2, 2)}
+    assert history_store.count() == 5
+
+
+@pytest.mark.parametrize("gap, expected", [(119, 1), (120, 1), (121, 2)])
+@pytest.mark.parametrize("variant", ["same", "host", "query"])
+def test_same_video_visit_gap(history_store, gap, expected, variant):
+    first = shorts_url()
+    second = {
+        "same": first,
+        "host": shorts_url(host="m.youtube.com"),
+        "query": first + "?feature=share",
+    }[variant]
+    history_store.record_visits(
+        [visit(utc(10), first), visit(utc(10) + timedelta(seconds=gap), second)]
+    )
+    assert counted(history_store) == {DAY.isoformat(): (expected, 1)}
+
+
+def test_redirect_chain_uses_gap_since_previous_record(history_store):
+    history_store.record_visits(
+        [
+            visit(utc(10), shorts_url(host="youtube.com") + "?is=token"),
+            visit(utc(10, 1), shorts_url(host="m.youtube.com") + "?is=token"),
+            visit(utc(10, 2), shorts_url(host="m.youtube.com")),
+            visit(utc(10, 3), shorts_url(host="m.youtube.com") + "?ra=m"),
+            visit(utc(10, 6), shorts_url()),
+        ]
+    )
     assert counted(history_store) == {DAY.isoformat(): (2, 1)}
+
+
+def test_nearby_different_video_ids_remain_distinct(history_store):
+    history_store.record_visits(
+        [
+            visit(utc(10), shorts_url("aaaaaaaaaaa")),
+            visit(utc(10), shorts_url("Aaaaaaaaaaa")),
+            visit(utc(10, 1), shorts_url("bbbbbbbbbbb")),
+        ]
+    )
+    assert counted(history_store) == {DAY.isoformat(): (3, 3)}
+
+
+def test_deduplication_keeps_local_days_and_reporting_windows_independent(
+    history_store,
+):
+    history_store.record_visits(
+        [
+            visit(utc(3, 59), shorts_url() + "?is=token"),
+            visit(utc(4), shorts_url(host="m.youtube.com")),
+        ]
+    )
+    previous_day = date(2026, 7, 25)
+    expected = {previous_day.isoformat(): (1, 1), DAY.isoformat(): (1, 1)}
+    assert counted(history_store, previous_day, DAY, EASTERN) == expected
+    for day in (previous_day, DAY):
+        assert counted(history_store, day, day, EASTERN) == {
+            day.isoformat(): expected[day.isoformat()]
+        }
 
 
 def test_different_shorts_are_counted_separately(
