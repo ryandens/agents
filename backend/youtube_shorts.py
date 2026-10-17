@@ -22,8 +22,8 @@ from pydantic import BaseModel
 # and the set of URLs that can be told apart can never drift.
 #
 # The capture group is the video id, so URL parameters do not turn one video into two
-# unique Shorts. The daily visit count also collapses a matching `ra`/no-`ra` URL pair
-# for the same video when their timestamps are within two minutes.
+# unique Shorts. The daily visit count also collapses same-video records
+# separated by at most two minutes, regardless of host or query parameters.
 #
 # (?i) rather than matching with ~* : the case-insensitivity has to be part of the
 # pattern itself, because substring() has no case-insensitive operator form to pair
@@ -50,8 +50,9 @@ class ShortsDay(BaseModel):
     # Presence of any browser history in the requested time zone. An absent day is
     # unknown, even though its numeric counts remain zero for API compatibility.
     has_history: bool = False
-    # Estimated Shorts navigations from Safari history. Matching `ra` and no-`ra` URLs
-    # for the same video within two minutes count as one visit. This is not a view count:
+    # Estimated Shorts navigations from Safari history. Same-video records within
+    # two minutes of the previous record on that local day count as one visit.
+    # Hosts and query parameters do not distinguish visits. This is not a view count:
     # Safari history cannot show whether the video actually played.
     visits: int
     # Distinct video ids among those visits. The pair is the interesting part — 40
