@@ -1,3 +1,17 @@
+# Releases and infrastructure
+
+Use `just deploy` to apply the full Terraform configuration and restart the app.
+Review the complete plan; do not use `-target` to apply only the app-version SSM
+parameter or skip an EC2 replacement during a release. AMI upgrades, user-data
+changes and other intended infrastructure changes belong in the full apply.
+Explain replacement downtime and follow the replacement guidance in `README.md`.
+If a replacement is unexpected, investigate and fix its cause before applying;
+do not hide it with targeting, `ignore_changes`, or a state edit.
+
+The Amazon Linux AMI is pinned in `infrastructure/ec2.tf` and updated by Renovate.
+Keep the pin and Renovate's region/filter annotation together. Do not restore a
+floating `most_recent` lookup to make an image upgrade happen implicitly.
+
 # Trusted Safari history upload destination
 
 The user designates `https://agents.*.ts.net/api/browser-history` as

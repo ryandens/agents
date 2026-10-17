@@ -9,6 +9,17 @@
   "customManagers": [
     {
       "customType": "regex",
+      "description": "Propose reviewed Amazon Linux ARM64 AMI replacements instead of resolving latest at deploy time",
+      "managerFilePatterns": ["/^infrastructure/ec2\\.tf$/"],
+      "matchStrings": [
+        "# amiFilter=(?<packageName>[^\\n]+)\\n\\s*# currentImageName=(?<currentDigest>[^\\n]+)\\n\\s*al2023_arm64_ami_id\\s*=\\s*\"(?<currentValue>ami-[0-9a-f]{17})\""
+      ],
+      "depNameTemplate": "amazon-linux-2023-arm64",
+      "datasourceTemplate": "aws-machine-image",
+      "versioningTemplate": "aws-machine-image"
+    },
+    {
+      "customType": "regex",
       "description": "Update annotated versions and optional digests from the declared datasource",
       "managerFilePatterns": ["/^\\.github/workflows/.+\\.ya?ml$/"],
       "matchStrings": [
@@ -46,6 +57,11 @@
     }
   },
   "packageRules": [
+    {
+      "description": "Review AMI updates explicitly because applying them replaces the app instance.",
+      "matchDatasources": ["aws-machine-image"],
+      "automerge": false
+    },
     {
       "description": "Update the Chainguard Python builder and runtime images together.",
       "matchDatasources": ["docker"],

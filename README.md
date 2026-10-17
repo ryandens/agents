@@ -447,7 +447,7 @@ Local runs default to `dev`; set the `APP_VERSION` environment variable to overr
 
 ### Deploying a new version
 
-Deploying does **not** replace the EC2 instance. The image tag and every config value live
+An app-version-only change updates the running EC2 instance in place. The image tag and runtime config values live
 in SSM Parameter Store; the systemd unit reads them on start, so a release is an in-place
 parameter update followed by a restart of `agents.service`. The app is down only for the
 few seconds the container takes to come back, and the pantry is untouched — it lives in
@@ -472,14 +472,37 @@ app_version = "0.2.0@sha256:<digest from step 1>"
 just deploy
 ```
 
-That runs `terraform apply` and then `just restart`. Terraform should show only
-`aws_ssm_parameter.app_version` being updated in place — if the plan wants to replace
-`aws_instance.app`, something changed `user_data`, which is worth understanding before
-confirming. `just restart` then restarts the unit over SSM (no SSH, no open port) and
+That runs a full `terraform apply` and then `just restart`. An app-version-only plan
+should update `aws_ssm_parameter.app_version` in place. Review the complete plan:
+merged AMI upgrades and changes to `user_data` or instance settings can also replace
+`aws_instance.app`. Apply intended replacements as part of the full deployment and
+allow for the downtime and Tailscale requirements described below. Investigate and fix
+unexpected replacements before applying. **Do not use `-target` to deploy only the SSM
+parameter or avoid a replacement**, and do not suppress AMI changes with
+`ignore_changes`. `just restart` then restarts the unit over SSM (no SSH, no open port) and
 polls `app_url/health` from your machine until it answers, so a green run has exercised
 the whole path a user takes: tailnet, `tailscale serve`, then the app.
 
 The frontend ships inside that image, so there is no separate frontend deploy.
+
+The Amazon Linux 2023 ARM64 AMI is pinned by ID in `infrastructure/ec2.tf`, initially
+to the image recorded for the deployed instance. The lookup validates that exact image
+against Amazon ownership, architecture and availability; it does not select the newest
+image on every plan. Renovate's
+[`aws-machine-image` datasource](https://docs.renovatebot.com/modules/datasource/aws-machine-image/)
+updates the ID and image-name comment together, limited to the standard ARM64 image
+with kernel 6.12. AMI PRs require review and are not automerged. Merging one intentionally
+schedules an instance replacement on the next full apply.
+
+AMI discovery requires AWS credentials in the **Renovate runner**, with
+`ec2:DescribeImages` on `*`. Configure those through the runner's AWS credential chain
+or an administrator-managed `aws-machine-image` host rule; do not commit credentials
+to this repository. The hosted GitHub app does not inherit the deployment workflow's
+AWS role. Until its runner has credentials, the pin remains stable but automatic AMI
+lookups cannot succeed. The ID and the `amiFilter` region are for `us-east-1`; when
+changing `aws_region`, select the corresponding image ID and update that annotation
+together. A missing or deregistered pinned image should be fixed with a reviewed pin
+update rather than a floating lookup or a targeted apply.
 
 Changing config works exactly the same way. `allowed_emails`, `allowed_service_accounts`,
 `google_client_id` and the derived `app_base_url` are all parameters now, so editing one
