@@ -485,13 +485,13 @@ the whole path a user takes: tailnet, `tailscale serve`, then the app.
 
 The frontend ships inside that image, so there is no separate frontend deploy.
 
-The Amazon Linux 2023 ARM64 AMI is pinned by ID in `infrastructure/ec2.tf`, initially
-to the image recorded for the deployed instance. The lookup validates that exact image
+The Amazon Linux 2023 ARM64 AMI is pinned by ID in `infrastructure/ec2.tf`.
+The lookup validates that exact image
 against Amazon ownership, architecture and availability; it does not select the newest
 image on every plan. Renovate's
 [`aws-machine-image` datasource](https://docs.renovatebot.com/modules/datasource/aws-machine-image/)
 updates the ID and image-name comment together, limited to the standard ARM64 image
-with kernel 6.12. AMI PRs require review and are not automerged. Merging one intentionally
+with kernel 6.18. AMI PRs require review and are not automerged. Merging one intentionally
 schedules an instance replacement on the next full apply.
 
 AMI discovery requires AWS credentials in the **Renovate runner**, with
