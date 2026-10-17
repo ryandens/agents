@@ -246,7 +246,7 @@ env-sync:
         echo ""
         if [ -n "$app_version" ]; then
             echo "# Carried over from the previous terraform.tfvars — 1Password does not track it."
-            echo "# Bump it by hand to deploy a new build; the instance is replaced on change."
+            echo "# Bump it by hand to deploy a new build; the parameter updates in place."
             echo "app_version = \"$(hcl "$app_version")\""
         else
             echo "# No previous terraform.tfvars to carry app_version over from. Set it to the"
@@ -842,7 +842,7 @@ restart:
     echo "       check 'just ssh' → journalctl -u agents.service" >&2
     exit 1
 
-# Apply infrastructure changes, then roll them out without replacing the instance
+# Apply the full infrastructure plan (including intended replacements), then restart
 deploy *args:
     terraform -chdir=infrastructure apply {{ args }}
     {{ just_executable() }} restart

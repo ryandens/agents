@@ -1,6 +1,18 @@
+locals {
+  # Regional pin, initialized from the deployed instance. Renovate proposes upgrades;
+  # publishing a new Amazon Linux image must not change an unrelated release plan.
+  # amiFilter=[{"Name":"owner-alias","Values":["amazon"]},{"Name":"name","Values":["al2023-ami-2023*-kernel-6.12-arm64"]},{"Name":"architecture","Values":["arm64"]},{"Name":"state","Values":["available"]},{"region":"us-east-1"}]
+  # currentImageName=al2023-ami-2023.12.20261014.0-kernel-6.12-arm64
+  al2023_arm64_ami_id = "ami-08b402898eddd60ed"
+}
+
 data "aws_ami" "al2023_arm64" {
-  most_recent = true
-  owners      = ["amazon"]
+  owners = ["amazon"]
+
+  filter {
+    name   = "image-id"
+    values = [local.al2023_arm64_ami_id]
+  }
 
   filter {
     name   = "name"
