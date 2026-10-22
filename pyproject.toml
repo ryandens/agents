@@ -1,9 +1,9 @@
 [tool.uv]
 # renovate: datasource=github-releases depName=astral-sh/uv
 required-version = "==0.13.4"
-# Eight hours matches the project's pnpm dependency cooldown.
+# One hour is the deliberate Python dependency cooldown for this project.
 # nosemgrep: package_managers.uv.uv-missing-dependency-cooldown.uv-missing-dependency-cooldown
-exclude-newer = "8 hours"
+exclude-newer = "1 hour"
 
 [tool.uv.workspace]
 members = ["backend", "cli"]

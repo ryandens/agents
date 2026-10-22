@@ -71,9 +71,9 @@
     {
       "description": "Keep the uv requirement used locally and in CI on the same release as the Docker builder.",
       "matchPackageNames": ["astral-sh/uv", "ghcr.io/astral-sh/uv"],
-      // Eight hours matches the project's deliberate pnpm dependency cooldown.
+      // One hour is the deliberate uv release cooldown for this project.
       // nosemgrep: package_managers.renovate.renovate-missing-minimum-release-age.renovate-missing-minimum-release-age
-      "minimumReleaseAge": "8 hours",
+      "minimumReleaseAge": "1 hour",
       "groupName": "uv"
     },
     {
