@@ -9,17 +9,6 @@
   "customManagers": [
     {
       "customType": "regex",
-      "description": "Update the uv version required by local commands and CI.",
-      "managerFilePatterns": ["/^pyproject\\.toml$/"],
-      "matchStrings": [
-        "# renovate: datasource=github-releases depName=astral-sh/uv\\nrequired-version = \"==(?<currentValue>[^\"]+)\""
-      ],
-      "depNameTemplate": "astral-sh/uv",
-      "datasourceTemplate": "github-releases",
-      "extractVersionTemplate": "^v(?<version>.+)$"
-    },
-    {
-      "customType": "regex",
       "description": "Propose reviewed Amazon Linux ARM64 AMI replacements instead of resolving latest at deploy time",
       "managerFilePatterns": ["/^infrastructure/ec2\\.tf$/"],
       "matchStrings": [
@@ -68,14 +57,6 @@
     }
   },
   "packageRules": [
-    {
-      "description": "Keep the uv requirement used locally and in CI on the same release as the Docker builder.",
-      "matchPackageNames": ["astral-sh/uv", "ghcr.io/astral-sh/uv"],
-      // Eight hours matches the project's deliberate pnpm dependency cooldown.
-      // nosemgrep: package_managers.renovate.renovate-missing-minimum-release-age.renovate-missing-minimum-release-age
-      "minimumReleaseAge": "8 hours",
-      "groupName": "uv"
-    },
     {
       "description": "Review AMI updates explicitly because applying them replaces the app instance.",
       "matchDatasources": ["aws-machine-image"],

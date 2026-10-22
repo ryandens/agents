@@ -1,9 +1,2 @@
-[tool.uv]
-# renovate: datasource=github-releases depName=astral-sh/uv
-required-version = "==0.13.5"
-# Eight hours matches the project's pnpm dependency cooldown.
-# nosemgrep: package_managers.uv.uv-missing-dependency-cooldown.uv-missing-dependency-cooldown
-exclude-newer = "8 hours"
-
 [tool.uv.workspace]
 members = ["backend", "cli"]
