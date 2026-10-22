@@ -40,7 +40,7 @@ requires-dist = [
     { name = "alembic", specifier = ">=1.20.0" },
     { name = "anthropic", specifier = ">=1.17.0" },
     { name = "boto3", specifier = ">=1.43.117" },
-    { name = "fastapi", specifier = ">=0.146.0" },
+    { name = "fastapi", specifier = ">=0.159.1" },
     { name = "google-auth", extras = ["requests"], specifier = ">=2.62.0" },
     { name = "itsdangerous", specifier = ">=2.2.0" },
     { name = "psycopg", extras = ["binary", "pool"], specifier = ">=3.3.6" },
