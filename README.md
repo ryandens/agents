@@ -34,6 +34,13 @@ The backend (`agents`) and CLI (`safari-history-export`) are uv workspace member
 They share the root `uv.lock`, `.python-version`, and development `.venv`; each
 member declares its own dependencies in its `pyproject.toml`.
 
+The root `pyproject.toml` pins uv with `tool.uv.required-version`. CI reads that
+pin, and Renovate updates it together with the Docker builder's uv image. Run
+`uv self update 0.13.4` to install the required version (or use your package manager
+if it manages uv).
+New Python dependency releases wait one hour before resolution; Renovate uses the
+same window when proposing uv upgrades.
+
 ```sh
 uv sync --locked --all-packages  # Install both members and their dev dependencies
 uv run --locked --package agents pytest backend
