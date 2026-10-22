@@ -130,38 +130,13 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          fetch-depth: 0
-
-      - name: Detect Renovate config changes
-        id: renovate
-        env:
-          BASE_REF: ${{ github.base_ref }}
-          BEFORE: ${{ github.event.before }}
-          CURRENT: ${{ github.sha }}
-        run: |
-          set -euo pipefail
-          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
-            changed_files="$(git diff --name-only "origin/$BASE_REF...HEAD" -- renovate.json)"
-          elif [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
-            changed_files=renovate.json
-          else
-            changed_files="$(git diff --name-only "$BEFORE" "$CURRENT" -- renovate.json)"
-          fi
-          if [ -n "$changed_files" ]; then
-            echo "changed=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-          fi
 
       - name: Setup Node
-        if: steps.renovate.outputs.changed == 'true'
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 24
 
       - name: Validate Renovate config
-        if: steps.renovate.outputs.changed == 'true'
         run: npx --yes --package renovate -- renovate-config-validator --no-global renovate.json
 
   # Datadog's static analyzer, run straight from its release archive rather than through
