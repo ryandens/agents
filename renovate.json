@@ -72,13 +72,18 @@
       "description": "Keep the minimum uv version tested in CI on the same release as the Docker builder.",
       "matchPackageNames": ["astral-sh/uv", "ghcr.io/astral-sh/uv"],
       "matchUpdateTypes": ["major", "minor", "patch"],
-      // One hour is the deliberate uv release cooldown for this project.
-      // nosemgrep: package_managers.renovate.renovate-missing-minimum-release-age.renovate-missing-minimum-release-age
-      "minimumReleaseAge": "1 hour",
-      // GHCR has no Renovate release timestamps; the paired GitHub release gates age.
-      "minimumReleaseAgeBehaviour": "timestamp-optional",
+      // Require both files in the group; the GitHub release's cooldown gates the GHCR image.
       "minimumGroupSize": 2,
       "groupName": "uv"
+    },
+    {
+      "description": "Apply the uv release cooldown using the timestamped GitHub release.",
+      "matchPackageNames": ["astral-sh/uv"],
+      "matchUpdateTypes": ["major", "minor", "patch"],
+      // One hour is the deliberate uv release cooldown for this project.
+      // GHCR has no Renovate release timestamp, so it inherits the grouped release's age gate.
+      // nosemgrep: package_managers.renovate.renovate-missing-minimum-release-age.renovate-missing-minimum-release-age
+      "minimumReleaseAge": "1 hour"
     },
     {
       "description": "Review AMI updates explicitly because applying them replaces the app instance.",
