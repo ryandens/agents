@@ -12,11 +12,11 @@
       "description": "Update the uv version required by local commands and CI.",
       "managerFilePatterns": ["/^pyproject\\.toml$/"],
       "matchStrings": [
-        "# renovate: datasource=github-releases depName=astral-sh/uv\\nrequired-version = \"==(?<currentValue>[^\"]+)\""
+        "# renovate: datasource=github-releases depName=astral-sh/uv\\nrequired-version = \">=(?<currentValue>[^\"]+)\""
       ],
       "depNameTemplate": "astral-sh/uv",
       "datasourceTemplate": "github-releases",
-      "extractVersionTemplate": "^v(?<version>.+)$"
+      "extractVersionTemplate": "^v?(?<version>.+)$"
     },
     {
       "customType": "regex",
@@ -69,7 +69,7 @@
   },
   "packageRules": [
     {
-      "description": "Keep the uv requirement used locally and in CI on the same release as the Docker builder.",
+      "description": "Keep the minimum uv version tested in CI on the same release as the Docker builder.",
       "matchPackageNames": ["astral-sh/uv", "ghcr.io/astral-sh/uv"],
       // One hour is the deliberate uv release cooldown for this project.
       // nosemgrep: package_managers.renovate.renovate-missing-minimum-release-age.renovate-missing-minimum-release-age
