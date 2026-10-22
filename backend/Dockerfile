@@ -29,7 +29,7 @@ RUN pnpm run build
 FROM cgr.dev/chainguard/python:latest-dev@sha256:0b910dae63d43312eaa75acc83766fd8687b7cc953de79158a58851fda52f254 AS builder
 
 USER root
-COPY --from=ghcr.io/astral-sh/uv:0.13.4@sha256:9f130421e930bfbdc563c00740466603f8723158e90297d07957c2294640262b /uv /usr/local/bin/uv
+COPY --from=ghcr.io/astral-sh/uv:0.13.5@sha256:32a7bb39b496babbd997b0a39a4d66c126bdaf5661b302bf6f06abda8deca6ff /uv /usr/local/bin/uv
 
 WORKDIR /app
 
