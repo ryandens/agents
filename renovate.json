@@ -71,9 +71,13 @@
     {
       "description": "Keep the minimum uv version tested in CI on the same release as the Docker builder.",
       "matchPackageNames": ["astral-sh/uv", "ghcr.io/astral-sh/uv"],
+      "matchUpdateTypes": ["major", "minor", "patch"],
       // One hour is the deliberate uv release cooldown for this project.
       // nosemgrep: package_managers.renovate.renovate-missing-minimum-release-age.renovate-missing-minimum-release-age
       "minimumReleaseAge": "1 hour",
+      // GHCR has no Renovate release timestamps; the paired GitHub release gates age.
+      "minimumReleaseAgeBehaviour": "timestamp-optional",
+      "minimumGroupSize": 2,
       "groupName": "uv"
     },
     {
