@@ -802,6 +802,59 @@ restart:
         exit 1
     fi
 
+    # Terraform can report an instance as created while cloud-init is still installing
+    # Docker/Tailscale and writing the units. SSM can register even earlier, so wait for
+    # it to be online before sending the bootstrap wait command.
+    echo "waiting for $instance to register with Systems Manager"
+    ssm_status=""
+    for _ in $(seq 1 120); do
+        ssm_status="$(aws ssm describe-instance-information \
+            --region "$region" \
+            --filters "Key=InstanceIds,Values=$instance" \
+            --query 'InstanceInformationList[0].PingStatus' --output text 2>/dev/null || true)"
+        if [ "$ssm_status" = "Online" ]; then
+            break
+        fi
+        sleep 5
+    done
+    if [ "$ssm_status" != "Online" ]; then
+        echo "error: $instance did not register with Systems Manager (last status: '$ssm_status')" >&2
+        exit 1
+    fi
+
+    # SSM may become Online before user-data has created agents.service or joined
+    # Tailscale. cloud-init status --wait holds this command until that bootstrap work,
+    # including its local app health gate, has finished.
+    echo "waiting for cloud-init and the instance's Tailscale/app setup"
+    bootstrap_command_id="$(aws ssm send-command \
+        --instance-ids "$instance" \
+        --region "$region" \
+        --document-name AWS-RunShellScript \
+        --comment "wait for instance bootstrap before app restart" \
+        --timeout-seconds 600 \
+        --parameters 'commands=["cloud-init status --wait"]' \
+        --query Command.CommandId --output text)"
+    bootstrap_status="InProgress"
+    for _ in $(seq 1 120); do
+        bootstrap_status="$(aws ssm get-command-invocation \
+            --command-id "$bootstrap_command_id" --instance-id "$instance" \
+            --region "$region" --query Status --output text 2>/dev/null || true)"
+        case "$bootstrap_status" in
+            Success|Failed|Cancelled|TimedOut|Cancelling) break ;;
+        esac
+        sleep 5
+    done
+    if [ "$bootstrap_status" != "Success" ]; then
+        echo "error: instance bootstrap finished as '$bootstrap_status'" >&2
+        aws ssm get-command-invocation --command-id "$bootstrap_command_id" \
+            --instance-id "$instance" --region "$region" \
+            --query 'StandardOutputContent' --output text >&2 || true
+        aws ssm get-command-invocation --command-id "$bootstrap_command_id" \
+            --instance-id "$instance" --region "$region" \
+            --query 'StandardErrorContent' --output text >&2 || true
+        exit 1
+    fi
+
     # The unit fetches every value on start, so a plain restart is the whole rollout.
     echo "restarting agents.service on $instance"
     command_id="$(aws ssm send-command \
@@ -831,14 +884,14 @@ restart:
     # takes — tailnet, `tailscale serve`, then the app — not just that systemd is happy.
     url="$(terraform -chdir=infrastructure output -raw app_url)"
     echo "waiting for $url/health"
-    for _ in $(seq 1 60); do
+    for _ in $(seq 1 120); do
         if curl -fsS --max-time 5 "$url/health" >/dev/null 2>&1; then
             echo "healthy"
             exit 0
         fi
-        sleep 2
+        sleep 5
     done
-    echo "error: $url/health did not respond after the restart" >&2
+    echo "error: $url/health did not respond within 10 minutes of the restart" >&2
     echo "       check 'just ssh' → journalctl -u agents.service" >&2
     exit 1
 
