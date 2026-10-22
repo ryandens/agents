@@ -1,7 +1,7 @@
 [tool.uv]
 # Accept newer uv installations, including Renovate's runner. CI tests this floor.
 # renovate: datasource=github-releases depName=astral-sh/uv
-required-version = ">=0.13.4"
+required-version = ">=0.13.5"
 # One hour is the deliberate Python dependency cooldown for this project.
 # nosemgrep: package_managers.uv.uv-missing-dependency-cooldown.uv-missing-dependency-cooldown
 exclude-newer = "1 hour"
