@@ -1,2 +1,6 @@
+[tool.uv]
+# renovate: datasource=github-releases depName=astral-sh/uv
+required-version = "==0.13.5"
+
 [tool.uv.workspace]
 members = ["backend", "cli"]
