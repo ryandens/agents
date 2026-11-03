@@ -170,10 +170,10 @@ env-sync:
     # constrain what a field in the tailscale section is called. A miss is not fatal: the
     # value falls back to the previous terraform.tfvars and then to a commented-out line,
     # the same way a missing API key does, rather than blanking out a working config.
-    ts_key_labels="tailscale_auth_key, auth_key, authkey, 'tailscale auth key'"
-    ts_net_labels="tailscale_tailnet, tailnet, tailnet_name, 'tailscale tailnet'"
-    tailscale_auth_key="$(op_field "$oauth_item" tailscale_auth_key auth_key authkey "tailscale auth key" || true)"
-    tailscale_tailnet="$(op_field "$oauth_item" tailscale_tailnet tailnet tailnet_name "tailscale tailnet" || true)"
+    ts_key_labels="tailscale_auth_key, auth_key, authkey, 'tailscale auth key', 'access key'"
+    ts_net_labels="tailscale_tailnet, tailnet, tailnet_name, 'tailscale tailnet', 'Tailnet DNS name'"
+    tailscale_auth_key="$(op_field "$oauth_item" tailscale_auth_key auth_key authkey "tailscale auth key" "access key" || true)"
+    tailscale_tailnet="$(op_field "$oauth_item" tailscale_tailnet tailnet tailnet_name "tailscale tailnet" "Tailnet DNS name" || true)"
     # No label loop worth widening here: tailscale_hostname is the one tailscale variable
     # terraform defaults ("agents"), so an unfound value is the normal case, not a miss.
     tailscale_hostname="$(op_field "$oauth_item" tailscale_hostname || true)"
