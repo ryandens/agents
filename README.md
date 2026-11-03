@@ -24,7 +24,9 @@ An AI-powered meal planning and kitchen management app. Chat with the agent to p
 
 - [just](https://github.com/casey/just)
 - [uv](https://docs.astral.sh/uv/)
-- Node.js 24 (use `nvm` — `.nvmrc` is included)
+- Node.js 26 (use `nvm` — `frontend/.nvmrc` is included)
+- pnpm (the exact standalone version is pinned in `frontend/package.json`)
+- [Socket Firewall](https://socket.dev/docs/socket-firewall) (`sfw`)
 - Docker — runs the local Postgres, and the one the tests start
 - An Anthropic API key
 
@@ -41,6 +43,31 @@ accepted. Run `uv self update` to upgrade your local installation (or use your
 package manager if it manages uv).
 New Python dependency releases wait one hour before resolution; Renovate uses the
 same window when proposing uv upgrades.
+
+## Dependency updates and installation
+
+Renovate waits eight hours for npm releases and one hour for Python releases,
+matching `frontend/pnpm-workspace.yaml` and the root `pyproject.toml`. Both package
+managers also enforce those windows for transitive dependencies. Renovate bumps
+manifest version floors and regenerates the lockfiles together; for pnpm this
+avoids `update --no-save`, which conflicts with its strict release-age policy.
+Weekly lockfile maintenance refreshes transitive dependencies under the same
+package manager policies. A release can still wait longer if one of its
+dependencies is too new.
+
+Use `just frontend-install`, `just backend-install`, and `just cli-dev-install`
+for installs through Socket Firewall. CI runs the same recipes after enabling
+Socket. Renovate's hosted runner generates candidate lockfiles; CI then checks
+their installs through Socket before merge. Socket's malicious-package checks
+complement the package managers' cooldowns. Docker builds use the reviewed
+lockfiles with frozen/locked installs; they do not run the local Socket proxy.
+
+CI reads pnpm's version from `frontend/package.json`; Renovate groups that pin
+with the standalone Docker image. The uv minimum and Docker image are grouped
+as well. Keep those pairs together when upgrading manually. If an install reports
+that uv is below the required version, update uv using its installation method.
+
+## Python workspace commands
 
 ```sh
 uv sync --locked --all-packages  # Install both members and their dev dependencies

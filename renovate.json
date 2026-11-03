@@ -73,13 +73,19 @@
       "matchManagers": ["npm"],
       // This repo deliberately uses an eight-hour quarantine; the generic rule's seven-day default is not our policy.
       // nosemgrep: package_managers.renovate.renovate-missing-minimum-release-age.renovate-missing-minimum-release-age
-      "minimumReleaseAge": "8 hours"
+      "minimumReleaseAge": "8 hours",
+      // Update the manifest floor as well as the lockfile. pnpm's strict age policy
+      // rejects the `pnpm update --no-save` path used for in-range lockfile updates.
+      "rangeStrategy": "bump"
     },
+    // Both pins select the standalone pnpm binary; review them on the same release.
+    // nosemgrep: package_managers.renovate.renovate-missing-minimum-release-age.renovate-missing-minimum-release-age
     {
-      "description": "Let pnpm enforce its own release-age policy while regenerating lockfiles.",
-      "matchManagers": ["npm"],
-      "matchUpdateTypes": ["lockFileMaintenance"],
-      "minimumReleaseAge": null
+      "description": "Keep pnpm's packageManager pin and Docker build stage on the same version.",
+      "matchPackageNames": ["pnpm", "ghcr.io/pnpm/pnpm"],
+      "matchUpdateTypes": ["major", "minor", "patch"],
+      "minimumGroupSize": 2,
+      "groupName": "pnpm"
     },
     // This rule only groups the uv binary and container updates; the following rule applies the one-hour age gate.
     // nosemgrep: package_managers.renovate.renovate-missing-minimum-release-age.renovate-missing-minimum-release-age
@@ -117,12 +123,21 @@
     {
       "description": "Bump the >= floors in the workspace member pyproject.toml files, which also regenerates the root uv.lock. The default rangeStrategy only edits a manifest when the new version escapes the declared range, and an open-ended '>=x' is satisfied by every release — so without this the backend gets no update PRs at all.",
       "matchManagers": ["pep621"],
+      // Match tool.uv.exclude-newer in the root pyproject.toml.
+      // nosemgrep: package_managers.renovate.renovate-missing-minimum-release-age.renovate-missing-minimum-release-age
+      "minimumReleaseAge": "1 hour",
       "rangeStrategy": "bump"
     },
     {
       "description": "Manage Python minor upgrades manually across pyproject.toml, .python-version, Dockerfile, and the matching Chainguard runtime. Disable Renovate updates to requires-python so the pep621 bump strategy does not introduce patch-level minimum versions.",      "matchManagers": ["pep621"],
       "matchDepNames": ["python"],
       "enabled": false
+    },
+    {
+      "description": "Let pnpm and uv enforce their own release-age policies during lockfile maintenance, which has no individual release timestamp.",
+      "matchManagers": ["npm", "pep621"],
+      "matchUpdateTypes": ["lockFileMaintenance"],
+      "minimumReleaseAge": null
     },
     // This compatibility cap is reviewed by CI; immediate compatible releases are allowed.
     // nosemgrep: package_managers.renovate.renovate-missing-minimum-release-age.renovate-missing-minimum-release-age
