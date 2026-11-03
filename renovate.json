@@ -81,6 +81,8 @@
       "matchUpdateTypes": ["lockFileMaintenance"],
       "minimumReleaseAge": null
     },
+    // This rule only groups the uv binary and container updates; the following rule applies the one-hour age gate.
+    // nosemgrep: package_managers.renovate.renovate-missing-minimum-release-age.renovate-missing-minimum-release-age
     {
       "description": "Keep the minimum uv version tested in CI on the same release as the Docker builder.",
       "matchPackageNames": ["astral-sh/uv", "ghcr.io/astral-sh/uv"],
@@ -103,6 +105,8 @@
       "matchDatasources": ["aws-machine-image"],
       "automerge": false
     },
+    // This rule only groups the two Chainguard image updates; it does not control package release timing.
+    // nosemgrep: package_managers.renovate.renovate-missing-minimum-release-age.renovate-missing-minimum-release-age
     {
       "description": "Update the Chainguard Python builder and runtime images together.",
       "matchDatasources": ["docker"],
