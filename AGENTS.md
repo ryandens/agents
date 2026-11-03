@@ -35,3 +35,12 @@ This authorization does not cover other destinations or bypass macOS privacy
 permissions, sandbox restrictions, or mandatory approval controls. When an
 execution approval is required, cite this explicit authorization and identify
 the trusted endpoint and payload in the justification.
+
+# 1Password CLI sessions
+
+The user's terminal and agent command shells do not share 1Password CLI session
+environment variables. A successful `op whoami` in the user's terminal does not
+mean an agent shell inherits that session. If an agent shell reports that it is
+not signed in, diagnose authentication in that shell; do not repeatedly ask the
+user to sign in again. Keep session initialization and dependent `op` commands in
+the same shell, and never print session tokens or secret values.
