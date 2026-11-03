@@ -11,9 +11,11 @@ WORKDIR /src
 ENV PNPM_HOME="/pnpm" \
     PATH="/pnpm:$PATH"
 
-RUN corepack enable
-
 COPY frontend/package.json frontend/pnpm-lock.yaml frontend/pnpm-workspace.yaml ./
+
+# Node 26 images no longer include Corepack. Install the pnpm version pinned by
+# package.json so Docker builds use the same package manager as CI.
+RUN npm install --global "pnpm@$(node -p 'require("./package.json").packageManager.split("@")[1]')"
 
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
     pnpm install --frozen-lockfile
