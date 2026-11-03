@@ -69,6 +69,17 @@
   },
   "packageRules": [
     {
+      "description": "Match Renovate's npm cooldown to pnpm's eight-hour quarantine so direct dependency PRs are not opened before pnpm will accept them.",
+      "matchManagers": ["npm"],
+      "minimumReleaseAge": "8 hours"
+    },
+    {
+      "description": "Let pnpm enforce its own release-age policy while regenerating lockfiles.",
+      "matchManagers": ["npm"],
+      "matchUpdateTypes": ["lockFileMaintenance"],
+      "minimumReleaseAge": null
+    },
+    {
       "description": "Keep the minimum uv version tested in CI on the same release as the Docker builder.",
       "matchPackageNames": ["astral-sh/uv", "ghcr.io/astral-sh/uv"],
       "matchUpdateTypes": ["major", "minor", "patch"],
