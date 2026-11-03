@@ -74,7 +74,8 @@
       "description": "Keep the Renovate 44 validator on its supported Node 24 runtime; update this constraint when Renovate supports a newer Node major.",
       "matchManagers": ["github-actions"],
       "matchFileNames": [".github/workflows/renovate-config.yml"],
-      "matchPackageNames": ["node"],
+      // setup-node inputs have depName=node but packageName=actions/node-versions.
+      "matchDepNames": ["node"],
       "allowedVersions": "<25"
     },
     {
