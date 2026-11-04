@@ -28,7 +28,7 @@ RUN pnpm run build
 
 
 # Build with the same Python minor and distribution as the runtime image.
-FROM cgr.dev/chainguard/python:latest-dev@sha256:e63f203676982bd645ab325340ae5e847f84106392a4a3bab8575fda41340a46 AS builder
+FROM cgr.dev/chainguard/python:latest-dev@sha256:29ab100be9f9be1ec5e31d7b7c384134171ee8f052e24e2285e697538c199aa6 AS builder
 
 USER root
 COPY --from=ghcr.io/astral-sh/uv:0.13.7@sha256:96f40d3904aad8d0bd010539001d36c8e2188b981e1334471a90c4a1d93bb490 /uv /usr/local/bin/uv
