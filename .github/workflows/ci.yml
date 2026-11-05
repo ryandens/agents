@@ -319,7 +319,9 @@ jobs:
           push: false
           tags: agents:ci
           cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # PRs reuse main's cache without paying the export cost. Populate it
+          # after merges; repeated PR builds won't retain their own new layers.
+          cache-to: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && 'type=gha,mode=max' || '' }}
 
       # Scan the image only after it lands on main. SARIF feeds vulnerability findings
       # to code scanning; deliberately omit Trivy's `format: github` and `github-pat`
