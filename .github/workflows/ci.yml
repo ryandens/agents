@@ -97,6 +97,20 @@ jobs:
           cache: true
           cache_dependency_path: frontend/pnpm-lock.yaml
 
+      - name: Regenerate pnpm boot lock for version upgrade
+        run: |
+          sfw pnpm --dir frontend install --lockfile-only --ignore-scripts
+          python3 - <<'PY'
+          import hashlib
+          from pathlib import Path
+          text = Path("frontend/pnpm-lock.yaml").read_text()
+          boot, app = text.split("\n---\n", 1)
+          print("PNPM_BOOT_LOCK_BEGIN")
+          print(boot)
+          print("PNPM_BOOT_LOCK_END")
+          print("PNPM_APP_LOCK_SHA256=" + hashlib.sha256(app.encode()).hexdigest())
+          PY
+
       - name: Install dependencies
         run: just frontend-install
 
