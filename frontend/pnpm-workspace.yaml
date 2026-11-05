@@ -2,7 +2,7 @@ allowBuilds:
   unrs-resolver: true
 overrides:
   # GHSA-g3hv-75wg-m249: remove once typescript-estree accepts minimatch >=11.0.1.
-  '@typescript-eslint/typescript-estree>minimatch': '11.0.1'
+  '@typescript-eslint/typescript-estree>minimatch': '11.0.4'
 # Eight hours is the deliberate project quarantine window; the default day is too slow
 # for this app's dependency update cadence.
 # nosemgrep: package_managers.pnpm.pnpm-missing-minimum-release-age.pnpm-minimum-release-age
