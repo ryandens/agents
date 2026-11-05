@@ -676,6 +676,11 @@ just cli-fmt        # ruff format --check
 
 ### How the tests use Postgres
 
+`just check`, `just backend-check`, and `just backend-test` verify that Docker is
+available before running their checks. If Docker is stopped or inaccessible, they
+exit with startup guidance and Docker's error. This preflight is skipped when
+`TEST_DATABASE_URL` is set to use an existing test database.
+
 The store is almost entirely SQL, so testing it against a fake would test the fake.
 `backend/conftest.py` starts a `postgres:17-alpine` container once per session with
 [testcontainers](https://testcontainers.com/) and truncates between tests — the same
