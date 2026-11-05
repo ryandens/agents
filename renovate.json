@@ -68,16 +68,6 @@
     }
   },
   "packageRules": [
-    // Compatibility constraint for the validator's runtime, not a release-age policy.
-    // nosemgrep: package_managers.renovate.renovate-missing-minimum-release-age.renovate-missing-minimum-release-age
-    {
-      "description": "Keep the Renovate 44 validator on its supported Node 24 runtime; update this constraint when Renovate supports a newer Node major.",
-      "matchManagers": ["github-actions"],
-      "matchFileNames": [".github/workflows/renovate-config.yml"],
-      // setup-node inputs have depName=node but packageName=actions/node-versions.
-      "matchDepNames": ["node"],
-      "allowedVersions": "<25"
-    },
     {
       "description": "Match Renovate's npm manager (used for this pnpm workspace) to pnpm's eight-hour quarantine so direct dependency PRs are not opened before pnpm will accept them.",
       "matchManagers": ["npm"],
