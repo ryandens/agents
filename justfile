@@ -922,12 +922,31 @@ backend-lint:
 backend-fmt:
     uv run --locked --package agents ruff format --check backend scripts
 
+# Check Docker before starting checks that need the test database.
+[private]
+_backend-test-preflight:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    # The fixtures can use an explicitly supplied database instead of Docker.
+    if [ -n "${TEST_DATABASE_URL:-}" ]; then
+        exit 0
+    fi
+    if ! command -v docker >/dev/null 2>&1; then
+        echo "error: backend tests require Docker. Install Docker and start its daemon, then retry." >&2
+        exit 1
+    fi
+    if ! docker_status=$(docker info 2>&1 >/dev/null); then
+        echo "error: Docker is unavailable. Start Docker Desktop or your Docker daemon and retry. If it is already running, check your Docker context and socket permissions." >&2
+        echo "$docker_status" >&2
+        exit 1
+    fi
+
 # Run backend tests
-backend-test:
+backend-test: _backend-test-preflight
     uv run --locked --package agents pytest backend
 
 # Run all backend checks
-backend-check: backend-lint backend-fmt backend-test
+backend-check: _backend-test-preflight backend-lint backend-fmt backend-test
 
 # ── Frontend ───────────────────────────────────────────────────────────────────
 
