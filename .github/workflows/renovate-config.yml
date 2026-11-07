@@ -31,4 +31,4 @@ jobs:
         run: npx --yes --package "renovate@${RENOVATE_VERSION}" -- renovate-config-validator --no-global renovate.json
         env:
           # renovate: datasource=npm depName=renovate
-          RENOVATE_VERSION: 44.220.0
+          RENOVATE_VERSION: 44.222.2
