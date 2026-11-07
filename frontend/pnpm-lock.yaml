@@ -190,7 +190,7 @@ importers:
         version: 4.3.5
       '@testing-library/jest-dom':
         specifier: ^7.0.1
-        version: 7.0.1(@testing-library/dom@10.4.2)(vitest@5.1.0(@types/node@26.6.6)(jsdom@31.0.0)(vite@8.3.5(@types/node@26.6.6)(jiti@2.7.0)))
+        version: 7.0.1(@testing-library/dom@10.4.2)(vitest@5.1.0(@types/node@26.6.6)(jsdom@31.0.0)(vite@8.3.6(@types/node@26.6.6)(jiti@2.7.0)))
       '@testing-library/react':
         specifier: ^16.3.3
         version: 16.3.3(@testing-library/dom@10.4.2)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
@@ -208,7 +208,7 @@ importers:
         version: 19.3.0(@types/react@19.3.0)
       '@vitejs/plugin-react':
         specifier: ^6.2.1
-        version: 6.2.1(vite@8.3.5(@types/node@26.6.6)(jiti@2.7.0))
+        version: 6.2.1(vite@8.3.6(@types/node@26.6.6)(jiti@2.7.0))
       eslint:
         specifier: ^9.39.5
         version: 9.39.5(jiti@2.7.0)(supports-color@7.2.0)
@@ -226,7 +226,7 @@ importers:
         version: 6.0.3
       vitest:
         specifier: ^5.1.0
-        version: 5.1.0(@types/node@26.6.6)(jsdom@31.0.0)(vite@8.3.5(@types/node@26.6.6)(jiti@2.7.0))
+        version: 5.1.0(@types/node@26.6.6)(jsdom@31.0.0)(vite@8.3.6(@types/node@26.6.6)(jiti@2.7.0))
 
 packages:
 
@@ -1290,8 +1290,8 @@ packages:
     resolution: {integrity: sha512-P8BjAsXvZS+VIDUI11hHCQEv74YT67YUi5JJFNWIqL235sBmjX4+qx9Muvls5ivyNENctx46xQLQ3aTuE7ssaQ==}
     engines: {node: '>=6'}
 
-  caniuse-lite@1.0.30001820:
-    resolution: {integrity: sha512-gfWD6MxqVCqAOwmODfZf7DchWvlrA+SRdNX7ceLfg3xRqe5ssjjpF7EgslC/0tiLiNTajdaNN/q8c/5u/7Gz8w==}
+  caniuse-lite@1.0.30001823:
+    resolution: {integrity: sha512-TQ5s/djDjNk1axreUW+4rULH+BmdCMLiJkhaXnO5wqivG7tITkSUj4ItIdzqdZHKaXcHAV8dhH3JxOM7/7bwqw==}
 
   chai@6.3.0:
     resolution: {integrity: sha512-XWAtwJ6OHO+tj0EKCs0Y2UamnyOxseZWltU4x2U2wh8g4AigdjwvtUjvLP2tqkA/avxHEtzxNaqGq/YGNwckKg==}
@@ -1399,8 +1399,8 @@ packages:
     resolution: {integrity: sha512-KIN/nDJBQRcXw0MLVhZE9iQHmG68qAVIBg9CqmUYjmQIhgij9U5MFvrqkUL5FbtyyzZuOeOt0zdeRe4UY7ct+A==}
     engines: {node: '>= 0.4'}
 
-  electron-to-chromium@1.5.476:
-    resolution: {integrity: sha512-LnPnRZ0esKB9NjsSIaC+mffW+5dAtBui6kbK5f9Qykblj4Q33cn6yIhuCcTVjwpvL3YJPqqQ4IlsNyriGNpyFQ==}
+  electron-to-chromium@1.5.478:
+    resolution: {integrity: sha512-pftG+ma5Lm8O6/p45bhYT6StBN5ziQymaRzmCZwFl8DwWHKPPD93FdOmP1aqftcepolQYvrcyTLa17kE8Yf+jg==}
 
   emoji-regex@9.2.2:
     resolution: {integrity: sha512-L18DaJsXSUk2+42pv8mLs5jJT2hqFkFE4j21wOmgbUqsZ2hL72NsUU785g9RXgo3s0ZNgVl42TiHp3ZtOv/Vyg==}
@@ -2480,8 +2480,8 @@ packages:
     resolution: {integrity: sha512-65P7iz6X5yEr1cwcgvQxbbIw7Uk3gOy5dIdtZ4rDveLqhrdJP+Li/Hx6tyK0NEb+2GCyneCMJiGqrADCSNk8sQ==}
     engines: {node: '>=8.0'}
 
-  tough-cookie@6.0.2:
-    resolution: {integrity: sha512-exgYmnmL/sJpR3upZfXG5PoatXQii55xAiXGXzY+sROLZ/Y+SLcp9PgJNI9Vz37HpQ74WvDcLT8eqm+kV3FzrA==}
+  tough-cookie@6.1.0:
+    resolution: {integrity: sha512-FTxc8u8Kl2tz0Lat1u8ksvcy8bwHRyEMawwTWybo51JqaC6O7SvfuhAKg+Ld6VqyIe2QRJBzY9HA7y2WyFRT2w==}
     engines: {node: '>=16'}
 
   tr46@7.0.0:
@@ -2539,12 +2539,12 @@ packages:
   undici-types@8.9.0:
     resolution: {integrity: sha512-KTDyRTYX8sWmKXAikPHHSyc63CRPETMctyjKFupcC6OBLXT3xsN0e9aF7m+mIXutFWpUXuedtowG7iLOzp0kQg==}
 
-  undici@7.30.1:
-    resolution: {integrity: sha512-03KrMbjIFDWQR5RNPrSw3bd1r12JpyFQl9/yxjUbJtqkjmllqC5lFjZh6ujeuJCKr8EOQvRW872Oy/az+nLYxg==}
+  undici@7.30.2:
+    resolution: {integrity: sha512-mLyPQnHwUxaM/rideoK/+KL8DaAJLRl4aBCfmX444aCSLnIaomqPLtNRe2jdCYcsk5wZzXrDIQC8ZeYNRAYyIA==}
     engines: {node: '>=20.18.1'}
 
-  undici@8.12.3:
-    resolution: {integrity: sha512-+fdndUTwBP86cVjihTp21hZHo7d6oj1c/47XPA3lL8mM0XHs+C4EkcjmgRsFnFk2f/UONGDy9ItBItmXsLOQHw==}
+  undici@8.12.4:
+    resolution: {integrity: sha512-8Mx+uNKKER2bA4AdtedkqRbwUCIJFr2nJckXRe5yrDqzePqwLP7VNcctN8/XdmDSbF7mS+jJKIszlL+vbam1VA==}
     engines: {node: '>=22.19.0'}
 
   unrs-resolver@1.13.0:
@@ -2564,8 +2564,8 @@ packages:
     peerDependencies:
       react: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
 
-  vite@8.3.5:
-    resolution: {integrity: sha512-z1YpjieJ9g0ebTmQpLBv/oq9E3F9EIlOe+7LahW8SrE3LTiG3udBRUXQOlYXP9b+IC2q2phHeVxj9xGlw34OEQ==}
+  vite@8.3.6:
+    resolution: {integrity: sha512-UI7dK29NnS54Fk+mmo7o+jI6U8Fp7hDl+X5Q1k45WH+d4dSlbLVUETGQ+hfkNgvLQGyoElPj837nZyv4MBc0VA==}
     engines: {node: ^20.19.0 || >=22.12.0}
     hasBin: true
     peerDependencies:
@@ -2742,7 +2742,7 @@ snapshots:
       '@standard-schema/spec': 1.1.0
       '@workflow/serde': 4.1.0
       eventsource-parser: 3.1.1
-      undici: 7.30.1
+      undici: 7.30.2
       zod: 4.6.7
 
   '@ai-sdk/provider@4.0.36':
@@ -3251,7 +3251,7 @@ snapshots:
       picocolors: 1.1.1
       pretty-format: 27.5.1
 
-  '@testing-library/jest-dom@7.0.1(@testing-library/dom@10.4.2)(vitest@5.1.0(@types/node@26.6.6)(jsdom@31.0.0)(vite@8.3.5(@types/node@26.6.6)(jiti@2.7.0)))':
+  '@testing-library/jest-dom@7.0.1(@testing-library/dom@10.4.2)(vitest@5.1.0(@types/node@26.6.6)(jsdom@31.0.0)(vite@8.3.6(@types/node@26.6.6)(jiti@2.7.0)))':
     dependencies:
       '@adobe/css-tools': 4.5.0
       '@testing-library/dom': 10.4.2
@@ -3261,7 +3261,7 @@ snapshots:
       picocolors: 1.1.1
       redent: 3.0.0
     optionalDependencies:
-      vitest: 5.1.0(@types/node@26.6.6)(jsdom@31.0.0)(vite@8.3.5(@types/node@26.6.6)(jiti@2.7.0))
+      vitest: 5.1.0(@types/node@26.6.6)(jsdom@31.0.0)(vite@8.3.6(@types/node@26.6.6)(jiti@2.7.0))
 
   '@testing-library/react@16.3.3(@testing-library/dom@10.4.2)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)':
     dependencies:
@@ -3460,19 +3460,19 @@ snapshots:
 
   '@vercel/oidc@3.2.0': {}
 
-  '@vitejs/plugin-react@6.2.1(vite@8.3.5(@types/node@26.6.6)(jiti@2.7.0))':
+  '@vitejs/plugin-react@6.2.1(vite@8.3.6(@types/node@26.6.6)(jiti@2.7.0))':
     dependencies:
       '@rolldown/pluginutils': 1.0.1
-      vite: 8.3.5(@types/node@26.6.6)(jiti@2.7.0)
+      vite: 8.3.6(@types/node@26.6.6)(jiti@2.7.0)
 
-  '@vitest/mocker@5.1.0(vite@8.3.5(@types/node@26.6.6)(jiti@2.7.0))':
+  '@vitest/mocker@5.1.0(vite@8.3.6(@types/node@26.6.6)(jiti@2.7.0))':
     dependencies:
       '@jridgewell/trace-mapping': 0.3.31
       '@vitest/spy': 5.1.0
       estree-walker: 3.0.3
       magic-string: 1.4.5
     optionalDependencies:
-      vite: 8.3.5(@types/node@26.6.6)(jiti@2.7.0)
+      vite: 8.3.6(@types/node@26.6.6)(jiti@2.7.0)
 
   '@vitest/spy@5.1.0': {}
 
@@ -3625,8 +3625,8 @@ snapshots:
   browserslist@4.29.5:
     dependencies:
       baseline-browser-mapping: 2.11.35
-      caniuse-lite: 1.0.30001820
-      electron-to-chromium: 1.5.476
+      caniuse-lite: 1.0.30001823
+      electron-to-chromium: 1.5.478
       node-releases: 2.0.63
       update-browserslist-db: 1.3.4(browserslist@4.29.5)
 
@@ -3649,7 +3649,7 @@ snapshots:
 
   callsites@3.1.0: {}
 
-  caniuse-lite@1.0.30001820: {}
+  caniuse-lite@1.0.30001823: {}
 
   chai@6.3.0: {}
 
@@ -3753,7 +3753,7 @@ snapshots:
       es-errors: 1.3.0
       gopd: 1.2.0
 
-  electron-to-chromium@1.5.476: {}
+  electron-to-chromium@1.5.478: {}
 
   emoji-regex@9.2.2: {}
 
@@ -4426,8 +4426,8 @@ snapshots:
       parse5: 8.1.0
       parse5-parser-stream: 8.1.0
       saxes: 6.0.0
-      tough-cookie: 6.0.2
-      undici: 8.12.3
+      tough-cookie: 6.1.0
+      undici: 8.12.4
       w3c-xmlserializer: 6.0.0
       webidl-conversions: 8.0.1
       whatwg-mimetype: 5.0.0
@@ -4580,7 +4580,7 @@ snapshots:
       '@next/env': 16.4.5
       '@swc/helpers': 0.5.23
       baseline-browser-mapping: 2.11.35
-      caniuse-lite: 1.0.30001820
+      caniuse-lite: 1.0.30001823
       postcss: 8.5.23
       react: 19.3.1
       react-dom: 19.3.1(react@19.3.1)
@@ -5044,7 +5044,7 @@ snapshots:
     dependencies:
       is-number: 7.0.0
 
-  tough-cookie@6.0.2:
+  tough-cookie@6.1.0:
     dependencies:
       tldts: 7.4.19
 
@@ -5123,9 +5123,9 @@ snapshots:
 
   undici-types@8.9.0: {}
 
-  undici@7.30.1: {}
+  undici@7.30.2: {}
 
-  undici@8.12.3: {}
+  undici@8.12.4: {}
 
   unrs-resolver@1.13.0:
     dependencies:
@@ -5167,7 +5167,7 @@ snapshots:
     dependencies:
       react: 19.3.1
 
-  vite@8.3.5(@types/node@26.6.6)(jiti@2.7.0):
+  vite@8.3.6(@types/node@26.6.6)(jiti@2.7.0):
     dependencies:
       lightningcss: 1.33.0
       picomatch: 4.0.7
@@ -5179,10 +5179,10 @@ snapshots:
       fsevents: 2.3.3
       jiti: 2.7.0
 
-  vitest@5.1.0(@types/node@26.6.6)(jsdom@31.0.0)(vite@8.3.5(@types/node@26.6.6)(jiti@2.7.0)):
+  vitest@5.1.0(@types/node@26.6.6)(jsdom@31.0.0)(vite@8.3.6(@types/node@26.6.6)(jiti@2.7.0)):
     dependencies:
       '@types/chai': 5.2.3
-      '@vitest/mocker': 5.1.0(vite@8.3.5(@types/node@26.6.6)(jiti@2.7.0))
+      '@vitest/mocker': 5.1.0(vite@8.3.6(@types/node@26.6.6)(jiti@2.7.0))
       chai: 6.3.0
       es-module-lexer: 2.3.2
       expect-type: 1.4.0
@@ -5193,7 +5193,7 @@ snapshots:
       tinybench: 6.2.3
       tinyexec: 1.3.1
       tinyglobby: 0.2.17
-      vite: 8.3.5(@types/node@26.6.6)(jiti@2.7.0)
+      vite: 8.3.6(@types/node@26.6.6)(jiti@2.7.0)
       why-is-node-running: 3.2.1
     optionalDependencies:
       '@types/node': 26.6.6
