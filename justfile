@@ -747,7 +747,8 @@ smoke image="agents:local" port="8080":
     python3 scripts/smoke_test.py "http://127.0.0.1:{{ port }}"
 
 # Build the production image and smoke-test it
-docker-check: docker-build smoke
+docker-check:
+    scripts/dagger check --generated=false --check image-amd-64 --check image-arm-64 --check smoke -j 2 --progress report
 
 # Run the production image at http://localhost:8080, against the local Postgres
 docker-run: docker-build db-up db-migrate
@@ -916,37 +917,19 @@ backend-dev: db-up db-migrate
 
 # Run backend linter (scripts/ holds the smoke test, held to the same standard)
 backend-lint:
-    uv run --locked --package agents ruff check backend scripts
+    scripts/dagger check --generated=false --check backend-lint --progress report
 
 # Run backend format check
 backend-fmt:
-    uv run --locked --package agents ruff format --check backend scripts
+    scripts/dagger check --generated=false --check backend-format --progress report
 
-# Check Docker before starting checks that need the test database.
-[private]
-_backend-test-preflight:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    # The fixtures can use an explicitly supplied database instead of Docker.
-    if [ -n "${TEST_DATABASE_URL:-}" ]; then
-        exit 0
-    fi
-    if ! command -v docker >/dev/null 2>&1; then
-        echo "error: backend tests require Docker. Install Docker and start its daemon, then retry." >&2
-        exit 1
-    fi
-    if ! docker_status=$(docker info 2>&1 >/dev/null); then
-        echo "error: Docker is unavailable. Start Docker Desktop or your Docker daemon and retry. If it is already running, check your Docker context and socket permissions." >&2
-        echo "$docker_status" >&2
-        exit 1
-    fi
+# Run backend tests with a disposable Dagger Postgres service
+backend-test:
+    scripts/dagger check --generated=false --check backend-test --progress report
 
-# Run backend tests
-backend-test: _backend-test-preflight
-    uv run --locked --package agents pytest backend
-
-# Run all backend checks
-backend-check: _backend-test-preflight backend-lint backend-fmt backend-test
+# Run all backend checks and a fresh Socket policy check
+backend-check:
+    scripts/dagger check --generated=false --check backend-lint --check backend-format --check backend-test --check socket-python --progress report
 
 # ── Frontend ───────────────────────────────────────────────────────────────────
 
@@ -960,18 +943,19 @@ frontend-dev:
 
 # Run frontend linter
 frontend-lint:
-    pnpm --dir frontend run lint
+    scripts/dagger check --generated=false --check frontend-lint --progress report
 
 # Build frontend (type check + compile)
 frontend-build:
-    pnpm --dir frontend run build
+    scripts/dagger api call frontend-dist export --path "{{ justfile_directory() }}/frontend/out" --wipe --progress report
 
 # Run frontend tests
 frontend-test:
-    pnpm --dir frontend run test
+    scripts/dagger check --generated=false --check frontend-test --progress report
 
 # Run all frontend checks
-frontend-check: frontend-lint frontend-build frontend-test
+frontend-check:
+    scripts/dagger check --generated=false --check frontend-lint --check frontend-build --check frontend-test --check socket-frontend --progress report
 
 # ── CLI (Safari history export) ────────────────────────────────────────────────
 
@@ -1115,20 +1099,36 @@ cli-dev-install:
 
 # Run cli linter
 cli-lint:
-    uv run --locked --package safari-history-export ruff check cli
+    scripts/dagger check --generated=false --check cli-lint --progress report
 
 # Run cli format check
 cli-fmt:
-    uv run --locked --package safari-history-export ruff format --check cli
+    scripts/dagger check --generated=false --check cli-format --progress report
 
 # Run cli tests
 cli-test:
-    uv run --locked --package safari-history-export pytest cli
+    scripts/dagger check --generated=false --check cli-test --progress report
 
 # Run all cli checks
-cli-check: cli-lint cli-fmt cli-test
+cli-check:
+    scripts/dagger check --generated=false --check cli-lint --check cli-format --check cli-test --check socket-cli --progress report
 
 # ── CI ─────────────────────────────────────────────────────────────────────────
 
-# Run all checks (mirrors CI)
-check: backend-check frontend-check cli-check
+# Run the portable application/build checks and validate generated clients
+# Pass selectors, e.g. `just dagger-check --check backend-test`.
+dagger-check *args:
+    scripts/dagger check -j 2 --progress report {{ args }}
+
+# Regenerate the vendored SDK and typed clients after module API changes
+dagger-generate:
+    scripts/dagger generate -y --progress report
+
+# Export Datadog findings before enforcing the analyzer's exit status
+datadog-check:
+    scripts/dagger api call datadog-report export --path "{{ justfile_directory() }}/reports/datadog" --progress report
+    cat reports/datadog/scan.log
+    exit "$(cat reports/datadog/exit-code)"
+
+# Run all portable checks, including static analysis
+check: dagger-check datadog-check

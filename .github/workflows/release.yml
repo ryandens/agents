@@ -13,6 +13,20 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Read Dagger version
+        id: dagger-version
+        run: echo "version=$(cat .dagger-version)" >> "$GITHUB_OUTPUT"
+
+      - name: Install Dagger
+        uses: dagger/dagger-for-github@b81317a976cb7f7125469707321849737cd1b3bc # v7
+        with:
+          version: ${{ steps.dagger-version.outputs.version }}
+
+      - name: Verify release
+        run: scripts/dagger check -j 2 --progress report
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6
@@ -20,24 +34,16 @@ jobs:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
 
-      - name: Login to Amazon ECR
-        uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
-
-      # Context is the repo root: the image bundles the frontend's static export
-      # alongside the API.
-      - name: Build and push
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
-        with:
-          context: .
-          file: ./backend/Dockerfile
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ vars.ECR_REGISTRY }}/${{ vars.ECR_REPOSITORY }}:${{ github.ref_name }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+      - name: Publish release image
+        env:
+          ECR_REGISTRY: ${{ vars.ECR_REGISTRY }}
+          ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
+        run: |
+          ECR_PASSWORD="$(aws ecr get-login-password)"
+          export ECR_PASSWORD
+          echo "::add-mask::$ECR_PASSWORD"
+          scripts/dagger api call publish \
+            --address "$ECR_REGISTRY/$ECR_REPOSITORY:$GITHUB_REF_NAME" \
+            --registry "$ECR_REGISTRY" --password env:ECR_PASSWORD \
+            --progress report > "$RUNNER_TEMP/published-image.txt"
+          printf 'Published image: %s\n' "$(cat "$RUNNER_TEMP/published-image.txt")" >> "$GITHUB_STEP_SUMMARY"

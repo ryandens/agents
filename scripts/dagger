@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/.."
+if ! command -v dagger >/dev/null 2>&1; then
+    echo "error: install Dagger first: https://docs.dagger.io/install/" >&2
+    exit 1
+fi
+exec python3 scripts/dagger_workspace.py "$@"

@@ -1,0 +1,5 @@
+name = "agents-ci"
+
+[entrypoint]
+  kind = "dang"
+  source = "./sdk/entrypoint"

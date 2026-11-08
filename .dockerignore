@@ -5,6 +5,11 @@
 .claude/
 .agents/
 .zed/
+.dagger/
+dagger/**/sdk/
+dagger/**/clients/
+dagger/**/tests/
+docs/
 infrastructure/
 scripts/
 README.md

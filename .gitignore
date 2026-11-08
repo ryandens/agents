@@ -17,6 +17,12 @@ backend/static/
 
 # Local settings
 .claude/settings.local.json
+.claude/worktrees/
+.aws/
+.codex/
+
+# Dagger exports and scanner inputs/reports
+/reports/
 
 # Playwright MCP output
 .playwright-mcp/
