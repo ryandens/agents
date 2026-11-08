@@ -154,6 +154,9 @@
         "dagger/dagger"
       ],
       "ignoreUnstable": false,
+      // One hour is the deliberate build-tool release window, matching uv below.
+      // nosemgrep: package_managers.renovate.renovate-missing-minimum-release-age.renovate-missing-minimum-release-age
+      "minimumReleaseAge": "1 hour",
       "automerge": false
     },
     {
@@ -162,6 +165,9 @@
         "SocketDev/sfw-free"
       ],
       "groupName": "Socket Firewall",
+      // Apply the same one-hour tool release window to Socket's binaries and digests.
+      // nosemgrep: package_managers.renovate.renovate-missing-minimum-release-age.renovate-missing-minimum-release-age
+      "minimumReleaseAge": "1 hour",
       "automerge": false
     },
     {

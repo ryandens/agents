@@ -1,3 +1,5 @@
+# This module requires Python >=3.14; pre-3.7 compatibility is not supported.
+# nosemgrep: python.lang.compatibility.python37.python37-compatibility-importlib2
 from importlib.resources import files
 from typing import Annotated
 
