@@ -18,7 +18,7 @@ main = true
 source = ".dagger"
 
 [sdks.python.scopes.".dagger"]
-clients = ["./dagger/socket-firewall", "./dagger/datadog-static-analyzer"]
+clients = ["./dagger/socket-firewall", "./dagger/datadog-static-analyzer", "./dagger/actionlint", "./dagger/opengrep", "./dagger/renovate-config"]
 is-module = true
 name = "agents-ci"
 
@@ -30,4 +30,25 @@ is-module = true
 name = "datadog-static-analyzer"
 
 [sdks.python.scopes."dagger/datadog-static-analyzer".settings]
+template = "empty"
+
+[sdks.python.scopes."dagger/actionlint"]
+is-module = true
+name = "actionlint"
+
+[sdks.python.scopes."dagger/actionlint".settings]
+template = "empty"
+
+[sdks.python.scopes."dagger/opengrep"]
+is-module = true
+name = "opengrep"
+
+[sdks.python.scopes."dagger/opengrep".settings]
+template = "empty"
+
+[sdks.python.scopes."dagger/renovate-config"]
+is-module = true
+name = "renovate-config"
+
+[sdks.python.scopes."dagger/renovate-config".settings]
 template = "empty"

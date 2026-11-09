@@ -1130,5 +1130,11 @@ datadog-check:
     cat reports/datadog/scan.log
     exit "$(cat reports/datadog/exit-code)"
 
-# Run all portable checks, including static analysis
-check: dagger-check datadog-check
+# Export OpenGrep findings before enforcing the scanner's exit status
+opengrep-check:
+    scripts/dagger api call opengrep-report export --path "{{ justfile_directory() }}/reports/opengrep" --progress report
+    cat reports/opengrep/scan.log
+    exit "$(cat reports/opengrep/exit-code)"
+
+# Application checks and security reports
+check: dagger-check datadog-check opengrep-check

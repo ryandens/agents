@@ -69,6 +69,43 @@ jobs:
           cat reports/datadog/scan.log
           exit "$(cat reports/datadog/exit-code)"
 
+      - name: Prepare OpenGrep scan source
+        id: opengrep-source
+        if: ${{ !cancelled() }}
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            source="$(python3 scripts/prepare_opengrep_scan.py "$BASE_SHA" "$HEAD_SHA")"
+          else
+            source="."
+          fi
+          echo "OPENGREP_INPUT=$source" >> "$GITHUB_ENV"
+
+      - name: Run OpenGrep and export report
+        id: opengrep-scan
+        if: ${{ !cancelled() && steps.opengrep-source.outcome == 'success' }}
+        run: |
+          if [ "$OPENGREP_INPUT" = "." ]; then
+            scripts/dagger api call opengrep-report export --path "$GITHUB_WORKSPACE/reports/opengrep" --progress report
+          else
+            scripts/dagger api call opengrep-report --source "$OPENGREP_INPUT" export --path "$GITHUB_WORKSPACE/reports/opengrep" --progress report
+          fi
+
+      - name: Upload OpenGrep findings
+        if: ${{ !cancelled() && steps.opengrep-scan.outcome == 'success' }}
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          sarif_file: reports/opengrep/results.sarif
+          category: opengrep
+
+      - name: Enforce OpenGrep policy
+        if: ${{ !cancelled() && steps.opengrep-scan.outcome == 'success' }}
+        run: |
+          cat reports/opengrep/scan.log
+          exit "$(cat reports/opengrep/exit-code)"
+
       - name: Export image for vulnerability scanning
         id: image-export
         if: ${{ !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
@@ -94,88 +131,3 @@ jobs:
         with:
           sarif_file: trivy-results.sarif
           category: trivy-container
-
-  # Lints the GitHub Actions workflow files themselves.
-  # https://github.com/rhysd/actionlint/blob/main/docs/usage.md#use-actionlint-on-github-actions
-  actionlint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-
-      # The actionlint version and the download script's pinned commit are kept
-      # in lockstep with upstream GitHub release tags by Renovate. The commit
-      # below is the v1.7.12 tag; see the customManager in renovate.json.
-      - name: Download actionlint
-        id: get_actionlint
-        env:
-          ACTIONLINT_VERSION: 1.7.12
-        run: bash <(curl https://raw.githubusercontent.com/rhysd/actionlint/914e7df21a07ef503a81201c76d2b11c789d3fca/scripts/download-actionlint.bash) "$ACTIONLINT_VERSION"
-        shell: bash
-
-      - name: Check workflow files
-        run: ${{ steps.get_actionlint.outputs.executable }} -color
-        shell: bash
-
-  # Full scans protect main; `opengrep ci` automatically uses GitHub's pull-request
-  # context for diff-aware PR scans. With no backlog, every finding is a regression and
-  # blocks CI after its SARIF report is uploaded.
-  opengrep:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      security-events: write
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          persist-credentials: false
-
-      - name: Install OpenGrep
-        env:
-          # renovate: datasource=custom.opengrep-releases depName=opengrep/opengrep
-          OPENGREP_VERSION: v1.33.1
-          OPENGREP_SHA256: sha256:46e8133cc490f9f50518061590ce2f6be5a08afaeda034471c0ceda4b3899808
-        run: |
-          install_dir="$RUNNER_TEMP/opengrep/bin"
-          mkdir -p "$install_dir"
-          curl -fsSL --retry 5 \
-            "https://github.com/opengrep/opengrep/releases/download/$OPENGREP_VERSION/opengrep_manylinux_x86" \
-            -o "$install_dir/opengrep"
-          echo "${OPENGREP_SHA256#sha256:}  $install_dir/opengrep" | sha256sum --check --strict
-          chmod +x "$install_dir/opengrep"
-          echo "$install_dir" >> "$GITHUB_PATH"
-
-      # Capture `ci`'s status instead of ending the job here so findings are uploaded
-      # before either a policy violation or a scanner error fails the job.
-      - name: Scan repository
-        id: scan
-        run: |
-          status=0
-          raw_sarif_file="$RUNNER_TEMP/opengrep-results.raw.sarif"
-          sarif_file="$RUNNER_TEMP/opengrep-results.sarif"
-
-          # OpenGrep retains ignored findings in SARIF and marks them with an inSource
-          # suppression. GitHub uploads those results as alerts, so remove only entries
-          # OpenGrep explicitly marked suppressed before publishing the report. See:
-          # https://github.com/opengrep/opengrep/issues/269
-          opengrep ci \
-            --config p/default \
-            --sarif-output="$raw_sarif_file" || status=$?
-          jq '.runs[].results |= map(select(
-            ((.suppressions // []) | length) == 0
-          ))' "$raw_sarif_file" > "$sarif_file"
-          echo "exit-code=$status" >> "$GITHUB_OUTPUT"
-
-      - name: Publish findings to GitHub code scanning
-        if: ${{ !cancelled() }}
-        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
-        with:
-          sarif_file: ${{ runner.temp }}/opengrep-results.sarif
-          category: opengrep
-
-      - name: Fail on findings or scanner errors
-        if: ${{ !cancelled() && steps.scan.outputs.exit-code != '0' && steps.scan.outputs.exit-code != '1' }}
-        env:
-          OPENGREP_EXIT_CODE: ${{ steps.scan.outputs.exit-code }}
-        run: |
-          echo "OpenGrep failed with exit code $OPENGREP_EXIT_CODE" >&2
-          exit "$OPENGREP_EXIT_CODE"

@@ -8,7 +8,13 @@ import sys
 from pathlib import Path
 
 
-def prepare(repo: Path, base: str, head: str, destination: Path) -> Path:
+def prepare(
+    repo: Path,
+    base: str,
+    head: str,
+    destination: Path,
+    config_files: tuple[str, ...] = ("code-security.datadog.yaml",),
+) -> Path:
     root = repo.resolve()
     output = destination.resolve()
     if output == root or not output.is_relative_to(root):
@@ -32,13 +38,12 @@ def prepare(repo: Path, base: str, head: str, destination: Path) -> Path:
     )
     paths = [Path(name) for name in changed if name]
     if any(
-        path.name in {"code-security.datadog.yaml", ".gitignore", ".gitattributes"}
-        for path in paths
+        path.name in {*config_files, ".gitignore", ".gitattributes"} for path in paths
     ):
         return root  # Rules and exclusion changes can affect otherwise unchanged files.
     output.mkdir(parents=True, exist_ok=False)
     inputs = {
-        Path("code-security.datadog.yaml"),
+        *(Path(name) for name in config_files),
         Path(".gitignore"),
         Path(".gitattributes"),
     }

@@ -1,0 +1,5 @@
+name = "actionlint"
+
+[entrypoint]
+  kind = "dang"
+  source = "./sdk/entrypoint"
