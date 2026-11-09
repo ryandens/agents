@@ -6,6 +6,7 @@ from dagger_clients.core import (
     Container,
     Directory,
     Platform,
+    Secret,
     Service,
     Workspace,
     core,
@@ -145,7 +146,7 @@ def _run_python(ctr: Container, package: str, args: list[str]) -> Container:
 
 @object_type
 class AgentsCi:
-    """Application checks, Datadog reports and production images."""
+    """Portable application checks, reports, images and release publishing."""
 
     source: Directory = field()
 
@@ -520,3 +521,21 @@ class AgentsCi:
         await client.with_exec(
             ["python", "scripts/smoke_test.py", "http://app:8080"]
         ).stdout()
+
+    @function(cache="never")
+    async def publish(
+        self, address: str, registry: str, password: Secret, username: str = "AWS"
+    ) -> str:
+        """Publish both release architectures and return the manifest digest address."""
+        return (
+            await core()
+            .container()
+            .with_registry_auth(registry, username, password)
+            .publish(
+                address,
+                platform_variants=[
+                    self.image("linux/amd64"),
+                    self.image("linux/arm64"),
+                ],
+            )
+        )

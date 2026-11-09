@@ -83,8 +83,12 @@ Require `dagger` in branch protection when promoting the second adoption layer,
 and remove retired backend/CLI statuses; the frontend, Datadog and Docker statuses
 retire in their respective layers. Repository rules must match the layer being merged.
 
-Tagged releases still use the existing Buildx/ECR workflow. Verification and
-Secret-based publication move in the final PR. Deployment remains `just deploy`.
+Tagged releases run the full Dagger check suite before acquiring AWS OIDC credentials.
+The explicit `publish` function receives the ECR password as a Dagger Secret and
+publishes both platforms, returning the manifest digest for the job summary. It is
+not a check and is never invoked by `just check`. No release is published by local
+validation. Deployment remains `just deploy`, including the complete Terraform plan
+and intended replacements as required by `AGENTS.md` and the deployment README.
 
 ## Updating and extracting modules
 
@@ -107,3 +111,5 @@ Design rationale and reference research are in [the adoption proposal](dagger-ad
 
 Merge order: Socket/CLI → backend → frontend → Datadog/images → releases.
 Each PR targets its predecessor; retarget the next PR to main after merging.
+After squash-merging a layer, restack/rebase descendants onto updated main before
+retargeting; merge commits preserve the existing ancestry.
