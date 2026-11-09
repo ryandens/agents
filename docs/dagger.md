@@ -2,7 +2,8 @@
 
 Dagger runs application checks, protected installs, production builds and smoke
 tests using the same code locally and in GitHub Actions. The application module is
-in `.dagger`; independent Socket, Datadog, OpenGrep and Actionlint modules live under `dagger/`.
+in `.dagger`; independent Socket, Datadog, OpenGrep, Actionlint and Renovate config modules live
+under `dagger/`.
 
 ## Running locally
 
@@ -43,6 +44,7 @@ Linux tests use synthetic Safari databases and need no privacy permissions.
 
 - Independent Ruff, format, pytest, ESLint, Vitest and frontend-build checks.
 - Actionlint, ShellCheck and pyflakes for GitHub Actions workflows.
+- Renovate repository configuration validation using its pinned official image.
 - Postgres 17 through `TEST_DATABASE_URL`; no host Docker socket is passed to tests.
 - Fresh Socket checks for backend, CLI build dependencies and frontend downloads.
 - Both production image architectures using `backend/Dockerfile` as the build source.
@@ -80,13 +82,14 @@ the production image for Trivy and uploads its findings. Scanner or upload failu
 fail the job; an earlier failed check remains a failure after reports are uploaded.
 OpenGrep uses the same report/export/policy pattern in this job. PR source selection
 is owned by `scripts/prepare_opengrep_scan.py`, while local and main scans cover all
-source. Actionlint is a discovered check in the main suite. Promptfoo and Renovate
-retain their own workflows. The first adoption layer's shadow status is temporary.
+source. Actionlint and Renovate config validation are discovered checks in the main suite.
+Promptfoo retains its own workflow. The first adoption layer's shadow status is temporary.
 
 Require `dagger` in branch protection when promoting the second adoption layer,
 and remove retired backend/CLI statuses; the frontend, Datadog and Docker statuses
 retire in their respective layers. Actionlint and OpenGrep statuses retire in the
-final module-extraction layer. Repository rules must match the layer being merged.
+final module-extraction layer; Renovate validation also moves into `dagger`.
+Repository rules must match the layer being merged.
 
 Tagged releases run the full Dagger check suite before acquiring AWS OIDC credentials.
 The explicit `publish` function receives the ECR password as a Dagger Secret and
@@ -105,7 +108,8 @@ group versions and both artifact digests; Datadog uses a version/digest image pi
 The [Socket](../dagger/socket-firewall/README.md),
 [Datadog](../dagger/datadog-static-analyzer/README.md),
 [OpenGrep](../dagger/opengrep/README.md) and
-[Actionlint](../dagger/actionlint/README.md) modules have no application dependencies. To publish later, move a complete module directory into the chosen
+[Actionlint](../dagger/actionlint/README.md) and
+[Renovate config](../dagger/renovate-config/README.md) modules have no application dependencies. To publish later, move a complete module directory into the chosen
 Daggerverse, add its fixtures to that repository's CI harness, choose a license and
 module-scoped release tags, then replace the app client's local dependency address
 with the published Git reference and regenerate. No external repository is created

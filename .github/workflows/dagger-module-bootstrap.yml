@@ -1,0 +1,43 @@
+name: Generate Dagger module clients
+
+on:
+  push:
+    branches: [codex/dagger-renovate-generation]
+
+permissions:
+  contents: write
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Read Dagger version
+        id: dagger-version
+        run: echo "version=$(cat .dagger-version)" >> "$GITHUB_OUTPUT"
+      - name: Install Dagger
+        uses: dagger/dagger-for-github@b81317a976cb7f7125469707321849737cd1b3bc # v7
+        with:
+          version: ${{ steps.dagger-version.outputs.version }}
+      - name: Pin validator image digest
+        run: |
+          image="$(python3 -c 'import ast; t=ast.parse(open("dagger/renovate-config/src/renovate_config/__init__.py").read()); print(next(ast.literal_eval(n.value) for n in t.body if isinstance(n, ast.Assign) and any(isinstance(x, ast.Name) and x.id == "IMAGE" for x in n.targets)))')"
+          digest="$(docker buildx imagetools inspect "$image" | awk '$1 == "Digest:" {print $2; exit}')"
+          [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]
+          IMAGE_REF="$image@$digest" python3 -c 'import json, os, pathlib, re; p=pathlib.Path("dagger/renovate-config/src/renovate_config/__init__.py"); p.write_text(re.sub(r"(?m)^IMAGE = .*", "IMAGE = " + json.dumps(os.environ["IMAGE_REF"]), p.read_text()))'
+      - name: Generate SDK and clients
+        run: |
+          sha256sum dagger/renovate-config/src/renovate_config/__init__.py > /tmp/validator-source.sha256
+          scripts/dagger generate -y --progress report
+          sha256sum --check /tmp/validator-source.sha256
+      - name: Commit generated files to this branch
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .dagger dagger dagger.toml dagger.lock
+          if ! git diff --cached --quiet; then
+            git commit -m 'build(dagger): 👷 Generate Renovate validator clients'
+            git push origin HEAD:codex/dagger-renovate-generation
+          fi
+      - name: Validate reusable modules
+        run: scripts/dagger check -j 2 --generated=false --check renovate-config --check actionlint --check module-contracts --check pipeline-tools --progress report

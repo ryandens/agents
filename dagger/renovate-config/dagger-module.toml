@@ -1,0 +1,5 @@
+name = "renovate-config"
+
+[entrypoint]
+  kind = "dang"
+  source = "./sdk/entrypoint"

@@ -76,6 +76,18 @@
     },
     {
       "customType": "regex",
+      "description": "Update the reusable Renovate validator image and digest.",
+      "managerFilePatterns": [
+        "/^dagger/renovate-config/src/renovate_config/__init__\\.py$/"
+      ],
+      "matchStrings": [
+        "IMAGE = \"ghcr.io/renovatebot/renovate:(?<currentValue>[^@\"]+)(?:@(?<currentDigest>sha256:[a-f0-9]+))?\""
+      ],
+      "depNameTemplate": "ghcr.io/renovatebot/renovate",
+      "datasourceTemplate": "docker"
+    },
+    {
+      "customType": "regex",
       "description": "Update the pinned Dagger beta CLI and engine.",
       "managerFilePatterns": [
         "/^\\.dagger-version$/"

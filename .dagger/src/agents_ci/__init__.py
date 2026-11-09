@@ -14,6 +14,7 @@ from dagger_clients.core import (
 )
 from dagger_clients.datadog_static_analyzer import datadog_static_analyzer
 from dagger_clients.opengrep import opengrep
+from dagger_clients.renovate_config import renovate_config
 from dagger_clients.socket_firewall import socket_firewall
 
 from dagger import ExecError, QueryError, check, field, function, object_type
@@ -194,6 +195,12 @@ class AgentsCi:
 
     @check
     @function
+    async def renovate_config(self) -> None:
+        """Validate repository Renovate configuration with the pinned validator."""
+        await renovate_config().check(_source(self.source, ["renovate.json"]))
+
+    @check
+    @function
     async def module_contracts(self) -> None:
         """Blocked installs and failed scans must preserve failure and report semantics."""
         base = core().container().from_("alpine:3.22").with_workdir("/work")
@@ -280,6 +287,26 @@ class AgentsCi:
             pass
         else:
             raise AssertionError("invalid workflow passed actionlint")
+
+        fake_validator = self.source.file(
+            "dagger/renovate-config/tests/fake-validator.sh"
+        )
+        validator = base.with_file(
+            "/usr/local/bin/renovate-config-validator",
+            fake_validator,
+            permissions=0o755,
+        )
+        config_source = core().directory().with_new_file("renovate.json", "{}")
+        await renovate_config().check(config_source, container=validator)
+        try:
+            await renovate_config().check(
+                config_source,
+                container=validator.with_env_variable("VALIDATOR_FIXTURE_EXIT", "1"),
+            )
+        except (QueryError, ExecError):
+            pass
+        else:
+            raise AssertionError("invalid Renovate configuration passed validation")
 
         fake_opengrep = self.source.file("dagger/opengrep/tests/fake-opengrep.sh")
         scanner = base.with_file(
@@ -465,6 +492,7 @@ class AgentsCi:
             "dagger/datadog-static-analyzer/src",
             "dagger/actionlint/src",
             "dagger/opengrep/src",
+            "dagger/renovate-config/src",
             "scripts",
         ]
         ctr = _run_python(ctr, "agents", ["ruff", "check", *paths])
