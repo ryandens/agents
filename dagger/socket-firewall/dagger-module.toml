@@ -1,6 +1,6 @@
 name = "socket-firewall"
+engineVersion = "v1.0.0-0"
 include = ["!**/.venv/**", "!**/node_modules/**", "!**/__pycache__/**", "!**/.direnv/**", "!**/.env", "!**/.env.*"]
 
-[entrypoint]
-  kind = "dang"
-  source = "./sdk/entrypoint"
+[runtime]
+  source = "dagger.io/sdk/python/runtime@v1"
