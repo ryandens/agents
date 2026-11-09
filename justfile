@@ -748,7 +748,7 @@ smoke image="agents:local" port="8080":
 
 # Build the production image and smoke-test it
 docker-check:
-    scripts/dagger check --generated=false --check image-amd-64 --check image-arm-64 --check smoke -j 2 --progress report
+    dagger check --generated=false --check image-amd-64 --check image-arm-64 --check smoke -j 2 --progress report
 
 # Run the production image at http://localhost:8080, against the local Postgres
 docker-run: docker-build db-up db-migrate
@@ -917,19 +917,19 @@ backend-dev: db-up db-migrate
 
 # Run backend linter (scripts/ holds the smoke test, held to the same standard)
 backend-lint:
-    scripts/dagger check --generated=false --check backend-lint --progress report
+    dagger check --generated=false --check backend-lint --progress report
 
 # Run backend format check
 backend-fmt:
-    scripts/dagger check --generated=false --check backend-format --progress report
+    dagger check --generated=false --check backend-format --progress report
 
 # Run backend tests with a disposable Dagger Postgres service
 backend-test:
-    scripts/dagger check --generated=false --check backend-test --progress report
+    dagger check --generated=false --check backend-test --progress report
 
 # Run all backend checks and a fresh Socket policy check
 backend-check:
-    scripts/dagger check --generated=false --check backend-lint --check backend-format --check backend-test --check socket-python --progress report
+    dagger check --generated=false --check backend-lint --check backend-format --check backend-test --check socket-python --progress report
 
 # ── Frontend ───────────────────────────────────────────────────────────────────
 
@@ -943,19 +943,19 @@ frontend-dev:
 
 # Run frontend linter
 frontend-lint:
-    scripts/dagger check --generated=false --check frontend-lint --progress report
+    dagger check --generated=false --check frontend-lint --progress report
 
 # Build frontend (type check + compile)
 frontend-build:
-    scripts/dagger api call frontend-dist export --path "{{ justfile_directory() }}/frontend/out" --wipe --progress report
+    dagger api call frontend-dist export --path "{{ justfile_directory() }}/frontend/out" --wipe --progress report
 
 # Run frontend tests
 frontend-test:
-    scripts/dagger check --generated=false --check frontend-test --progress report
+    dagger check --generated=false --check frontend-test --progress report
 
 # Run all frontend checks
 frontend-check:
-    scripts/dagger check --generated=false --check frontend-lint --check frontend-build --check frontend-test --check socket-frontend --progress report
+    dagger check --generated=false --check frontend-lint --check frontend-build --check frontend-test --check socket-frontend --progress report
 
 # ── CLI (Safari history export) ────────────────────────────────────────────────
 
@@ -1099,40 +1099,40 @@ cli-dev-install:
 
 # Run cli linter
 cli-lint:
-    scripts/dagger check --generated=false --check cli-lint --progress report
+    dagger check --generated=false --check cli-lint --progress report
 
 # Run cli format check
 cli-fmt:
-    scripts/dagger check --generated=false --check cli-format --progress report
+    dagger check --generated=false --check cli-format --progress report
 
 # Run cli tests
 cli-test:
-    scripts/dagger check --generated=false --check cli-test --progress report
+    dagger check --generated=false --check cli-test --progress report
 
 # Run all cli checks
 cli-check:
-    scripts/dagger check --generated=false --check cli-lint --check cli-format --check cli-test --check socket-cli --progress report
+    dagger check --generated=false --check cli-lint --check cli-format --check cli-test --check socket-cli --progress report
 
 # ── CI ─────────────────────────────────────────────────────────────────────────
 
 # Run the portable application/build checks and validate generated clients
 # Pass selectors, e.g. `just dagger-check --check backend-test`.
 dagger-check *args:
-    scripts/dagger check -j 2 --progress report {{ args }}
+    dagger check -j 2 --progress report {{ args }}
 
 # Regenerate the vendored SDK and typed clients after module API changes
 dagger-generate:
-    scripts/dagger generate -y --progress report
+    dagger generate -y --progress report
 
 # Export Datadog findings before enforcing the analyzer's exit status
 datadog-check:
-    scripts/dagger api call datadog-report export --path "{{ justfile_directory() }}/reports/datadog" --progress report
+    dagger api call datadog-report export --path "{{ justfile_directory() }}/reports/datadog" --progress report
     cat reports/datadog/scan.log
     exit "$(cat reports/datadog/exit-code)"
 
 # Export OpenGrep findings before enforcing the scanner's exit status
 opengrep-check:
-    scripts/dagger api call opengrep-report export --path "{{ justfile_directory() }}/reports/opengrep" --progress report
+    dagger api call opengrep-report export --path "{{ justfile_directory() }}/reports/opengrep" --progress report
     cat reports/opengrep/scan.log
     exit "$(cat reports/opengrep/exit-code)"
 

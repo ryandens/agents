@@ -26,3 +26,8 @@ backend/static/
 
 # Playwright MCP output
 .playwright-mcp/
+
+# Nix development environment
+.direnv/
+/result
+/result-*

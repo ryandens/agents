@@ -39,5 +39,4 @@ use its account-dependent diff-aware mode.
 and scanner failure without a report using `tests/fake-analyzer.sh`.
 
 This directory includes its generated SDK and client and can be extracted into a
-Daggerverse repository. Tested with Dagger beta.25 and Python SDK v1.7.0, generating
-the beta.24 API. Choose a license and an independent release tag before publishing.
+Daggerverse repository. Tested with Dagger beta.25 and Python SDK v1.7.0 using the native Python runtime. Choose a license and an independent release tag before publishing.

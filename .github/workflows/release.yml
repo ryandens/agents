@@ -11,22 +11,18 @@ jobs:
     permissions:
       id-token: write
       contents: read
+    env:
+      DAGGER_CLOUD_TOKEN: ${{ secrets.DAGGER_CLOUD_TOKEN }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
 
-      - name: Read Dagger version
-        id: dagger-version
-        run: echo "version=$(cat .dagger-version)" >> "$GITHUB_OUTPUT"
-
-      - name: Install Dagger
-        uses: dagger/dagger-for-github@b81317a976cb7f7125469707321849737cd1b3bc # v7
-        with:
-          version: ${{ steps.dagger-version.outputs.version }}
+      - name: Install Nix
+        uses: DeterminateSystems/determinate-nix-action@d96678350ffd6a456235832eb11e1c491589b7bb # v3.21.8
 
       - name: Verify release
-        run: scripts/dagger check -j 2 --progress report
+        run: nix develop --no-write-lock-file --command dagger check -j 2 --progress report
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6
@@ -42,7 +38,7 @@ jobs:
           ECR_PASSWORD="$(aws ecr get-login-password)"
           export ECR_PASSWORD
           echo "::add-mask::$ECR_PASSWORD"
-          scripts/dagger api call publish \
+          nix develop --no-write-lock-file --command dagger api call publish \
             --address "$ECR_REGISTRY/$ECR_REPOSITORY:$GITHUB_REF_NAME" \
             --registry "$ECR_REGISTRY" --password env:ECR_PASSWORD \
             --progress report > "$RUNNER_TEMP/published-image.txt"
