@@ -23,7 +23,11 @@ jobs:
 
         '
     - name: Generate through the standard CLI
-      run: nix develop --no-write-lock-file --command dagger generate -y --progress report
+      run: 'nix develop --no-write-lock-file --command dagger generate -y --progress report
+
+        nix develop --no-write-lock-file --command dagger generate -y --progress report
+
+        '
     - name: Commit lockfile and generated configuration
       run: "git config user.name 'github-actions[bot]'\ngit config user.email '41898282+github-actions[bot]@users.noreply.github.com'\ngit add flake.lock .dagger dagger dagger.toml dagger.lock\nif ! git diff --cached --quiet; then\n  git commit -m 'build(nix): \U0001F512 Lock Dagger development inputs'\n  git push origin HEAD:codex/dagger-nix-validation\nfi\n"
     - name: Verify ignored development inputs

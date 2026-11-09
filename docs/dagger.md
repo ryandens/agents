@@ -9,7 +9,7 @@ under `dagger/`.
 
 Install [Nix](https://nixos.org/download/) and start Docker. Enter the locked
 shell with `nix develop`, or enable direnv with `direnv allow`. The shell provides
-Dagger, just, uv, Python, Git and the Docker client on Linux (amd64/arm64) and
+Dagger, just, Python, Git and the Docker client on Linux (amd64/arm64) and
 Apple Silicon macOS. Docker's
 daemon is provided by Docker Desktop or your normal host setup.
 

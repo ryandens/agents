@@ -21,7 +21,7 @@
       default = assert nixpkgs.lib.assertMsg (daggerCli.version == version)
         "Dagger's Nix input must match .dagger-version; update flake.lock and the CLI pin together.";
         pkgs.mkShell {
-          packages = [daggerCli pkgs.just pkgs.uv pkgs.python3 pkgs.git pkgs.docker-client];
+          packages = [daggerCli pkgs.just pkgs.python3 pkgs.git pkgs.docker-client];
         };
     });
   };
