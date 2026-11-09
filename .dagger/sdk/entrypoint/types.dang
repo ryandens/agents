@@ -3,7 +3,7 @@
 type ModuleTypes {
   pub all: [TypeDef!]! {
     [
-      typeDef.withObject("AgentsCi", description: "Backend and CLI checks over explicit source inputs.")
+      typeDef.withObject("AgentsCi", description: "Portable application checks over explicit source inputs.")
         .withField("source", typeDef.withObject("Directory"), description: "A directory.")
         .withFunction(
           function("backend_format", typeDef.withOptional(true).withKind(TypeDefKind.VOID_KIND))
@@ -30,6 +30,22 @@ type ModuleTypes {
             .withCheck
         )
         .withFunction(
+          function("frontend_build", typeDef.withOptional(true).withKind(TypeDefKind.VOID_KIND))
+            .withCheck
+        )
+        .withFunction(
+          function("frontend_dist", typeDef.withObject("Directory"))
+            .withDescription("The static export consumed by the production image.")
+        )
+        .withFunction(
+          function("frontend_lint", typeDef.withOptional(true).withKind(TypeDefKind.VOID_KIND))
+            .withCheck
+        )
+        .withFunction(
+          function("frontend_test", typeDef.withOptional(true).withKind(TypeDefKind.VOID_KIND))
+            .withCheck
+        )
+        .withFunction(
           function("module_contracts", typeDef.withOptional(true).withKind(TypeDefKind.VOID_KIND))
             .withDescription("Blocked installs must fail while preserving caller arguments and environment.")
             .withCheck
@@ -47,6 +63,12 @@ type ModuleTypes {
         .withFunction(
           function("socket_cli", typeDef.withOptional(true).withKind(TypeDefKind.VOID_KIND))
             .withDescription("Also exercise the CLI's package and isolated build dependencies.")
+            .withCachePolicy(FunctionCachePolicy.Never)
+            .withCheck
+        )
+        .withFunction(
+          function("socket_frontend", typeDef.withOptional(true).withKind(TypeDefKind.VOID_KIND))
+            .withDescription("Recheck Node downloads without a package-store cache mount.")
             .withCachePolicy(FunctionCachePolicy.Never)
             .withCheck
         )

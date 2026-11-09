@@ -942,18 +942,19 @@ frontend-dev:
 
 # Run frontend linter
 frontend-lint:
-    pnpm --dir frontend run lint
+    scripts/dagger check --generated=false --check frontend-lint --progress report
 
 # Build frontend (type check + compile)
 frontend-build:
-    pnpm --dir frontend run build
+    scripts/dagger api call frontend-dist export --path "{{ justfile_directory() }}/frontend/out" --wipe --progress report
 
 # Run frontend tests
 frontend-test:
-    pnpm --dir frontend run test
+    scripts/dagger check --generated=false --check frontend-test --progress report
 
 # Run all frontend checks
-frontend-check: frontend-lint frontend-build frontend-test
+frontend-check:
+    scripts/dagger check --generated=false --check frontend-lint --check frontend-build --check frontend-test --check socket-frontend --progress report
 
 # ── CLI (Safari history export) ────────────────────────────────────────────────
 
