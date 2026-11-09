@@ -47,13 +47,10 @@ def fingerprint(path: Path) -> str | None:
 def main(args: list[str]) -> int:
     version = (ROOT / ".dagger-version").read_text().strip()
     installed = subprocess.check_output(["dagger", "version"], text=True)
-    # The version is a repository pin; subprocess receives argv with shell=False.
-    # no-dd-sa:python-flask/command-injection
-    command = (
-        ["dagger"]
-        if f"version:     {version}\n" in installed
-        else ["dagger", "--x-release", version]
-    )
+    command = ["dagger"]
+    if f"version:     {version}\n" not in installed:
+        command.append("--x-release")
+        command.append(version)
     if (
         os.environ.get("CI") == "true"
         or os.environ.get("DAGGER_USE_HOST_WORKSPACE") == "1"
