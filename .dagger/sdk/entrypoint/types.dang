@@ -99,6 +99,11 @@ type ModuleTypes {
             .withArg("username", typeDef.withKind(TypeDefKind.STRING_KIND), defaultValue: ("\"AWS\"" :: Dagger.JSON!))
         )
         .withFunction(
+          function("renovate_config", typeDef.withOptional(true).withKind(TypeDefKind.VOID_KIND))
+            .withDescription("Validate repository Renovate configuration with the pinned validator.")
+            .withCheck
+        )
+        .withFunction(
           function("smoke", typeDef.withOptional(true).withKind(TypeDefKind.VOID_KIND))
             .withDescription("Run migrations and all frontend/API/CLI seams against the release image.")
             .withCheck
