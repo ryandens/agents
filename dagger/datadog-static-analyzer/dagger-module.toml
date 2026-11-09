@@ -1,0 +1,5 @@
+name = "datadog-static-analyzer"
+
+[entrypoint]
+  kind = "dang"
+  source = "./sdk/entrypoint"

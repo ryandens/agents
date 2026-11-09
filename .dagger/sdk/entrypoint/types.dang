@@ -3,7 +3,7 @@
 type ModuleTypes {
   pub all: [TypeDef!]! {
     [
-      typeDef.withObject("AgentsCi", description: "Portable application checks over explicit source inputs.")
+      typeDef.withObject("AgentsCi", description: "Application checks, Datadog reports and production images.")
         .withField("source", typeDef.withObject("Directory"), description: "A directory.")
         .withFunction(
           function("backend_format", typeDef.withOptional(true).withKind(TypeDefKind.VOID_KIND))
@@ -30,6 +30,11 @@ type ModuleTypes {
             .withCheck
         )
         .withFunction(
+          function("datadog_report", typeDef.withObject("Directory"))
+            .withDescription("Export SARIF and exit-code together, including when findings fail policy.")
+            .withArg("source", typeDef.withOptional(true).withObject("Directory").withOptional(true), defaultValue: ("null" :: Dagger.JSON!))
+        )
+        .withFunction(
           function("frontend_build", typeDef.withOptional(true).withKind(TypeDefKind.VOID_KIND))
             .withCheck
         )
@@ -46,19 +51,37 @@ type ModuleTypes {
             .withCheck
         )
         .withFunction(
+          function("image", typeDef.withObject("Container"))
+            .withDescription("Build the authoritative production Dockerfile with protected installs.")
+            .withArg("platform", typeDef.withKind(TypeDefKind.STRING_KIND), defaultValue: ("\"linux/amd64\"" :: Dagger.JSON!))
+        )
+        .withFunction(
+          function("image_amd64", typeDef.withOptional(true).withKind(TypeDefKind.VOID_KIND))
+            .withCheck
+        )
+        .withFunction(
+          function("image_arm64", typeDef.withOptional(true).withKind(TypeDefKind.VOID_KIND))
+            .withCheck
+        )
+        .withFunction(
           function("module_contracts", typeDef.withOptional(true).withKind(TypeDefKind.VOID_KIND))
-            .withDescription("Blocked installs must fail while preserving caller arguments and environment.")
+            .withDescription("Blocked installs and failed scans must preserve failure and report semantics.")
             .withCheck
         )
         .withFunction(
           function("pipeline_tools", typeDef.withOptional(true).withKind(TypeDefKind.VOID_KIND))
-            .withDescription("Lint the handwritten pipeline and reusable Socket module.")
+            .withDescription("Check pipeline source and the PR scan selection tests.")
             .withCheck
         )
         .withFunction(
           function("postgres", typeDef.withObject("Service"))
             .withDescription("A disposable database matching the application's PostgreSQL major.")
             .withArg("database", typeDef.withKind(TypeDefKind.STRING_KIND), defaultValue: ("\"agents\"" :: Dagger.JSON!))
+        )
+        .withFunction(
+          function("smoke", typeDef.withOptional(true).withKind(TypeDefKind.VOID_KIND))
+            .withDescription("Run migrations and all frontend/API/CLI seams against the release image.")
+            .withCheck
         )
         .withFunction(
           function("socket_cli", typeDef.withOptional(true).withKind(TypeDefKind.VOID_KIND))
@@ -70,6 +93,11 @@ type ModuleTypes {
           function("socket_frontend", typeDef.withOptional(true).withKind(TypeDefKind.VOID_KIND))
             .withDescription("Recheck Node downloads without a package-store cache mount.")
             .withCachePolicy(FunctionCachePolicy.Never)
+            .withCheck
+        )
+        .withFunction(
+          function("socket_pins", typeDef.withOptional(true).withKind(TypeDefKind.VOID_KIND))
+            .withDescription("Production Dockerfile and reusable module must use identical verified tools.")
             .withCheck
         )
         .withFunction(

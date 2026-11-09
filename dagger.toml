@@ -18,9 +18,16 @@ main = true
 source = ".dagger"
 
 [sdks.python.scopes.".dagger"]
-clients = ["./dagger/socket-firewall"]
+clients = ["./dagger/socket-firewall", "./dagger/datadog-static-analyzer"]
 is-module = true
 name = "agents-ci"
 
 [sdks.python.scopes.".dagger".settings]
+template = "empty"
+
+[sdks.python.scopes."dagger/datadog-static-analyzer"]
+is-module = true
+name = "datadog-static-analyzer"
+
+[sdks.python.scopes."dagger/datadog-static-analyzer".settings]
 template = "empty"

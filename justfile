@@ -747,7 +747,8 @@ smoke image="agents:local" port="8080":
     python3 scripts/smoke_test.py "http://127.0.0.1:{{ port }}"
 
 # Build the production image and smoke-test it
-docker-check: docker-build smoke
+docker-check:
+    scripts/dagger check --generated=false --check image-amd-64 --check image-arm-64 --check smoke -j 2 --progress report
 
 # Run the production image at http://localhost:8080, against the local Postgres
 docker-run: docker-build db-up db-migrate
@@ -922,11 +923,11 @@ backend-lint:
 backend-fmt:
     scripts/dagger check --generated=false --check backend-format --progress report
 
-# Run backend tests
+# Run backend tests with a disposable Dagger Postgres service
 backend-test:
     scripts/dagger check --generated=false --check backend-test --progress report
 
-# Run all backend checks
+# Run all backend checks and a fresh Socket policy check
 backend-check:
     scripts/dagger check --generated=false --check backend-lint --check backend-format --check backend-test --check socket-python --progress report
 
@@ -1114,13 +1115,20 @@ cli-check:
 
 # ── CI ─────────────────────────────────────────────────────────────────────────
 
-# Run all checks (mirrors CI)
-check: backend-check frontend-check cli-check
-
-# Optional Dagger CLI checks; existing check recipes remain authoritative.
+# Run the portable application/build checks and validate generated clients
+# Pass selectors, e.g. `just dagger-check --check backend-test`.
 dagger-check *args:
     scripts/dagger check -j 2 --progress report {{ args }}
 
-# Regenerate the vendored SDK and typed clients
+# Regenerate the vendored SDK and typed clients after module API changes
 dagger-generate:
     scripts/dagger generate -y --progress report
+
+# Export Datadog findings before enforcing the analyzer's exit status
+datadog-check:
+    scripts/dagger api call datadog-report export --path "{{ justfile_directory() }}/reports/datadog" --progress report
+    cat reports/datadog/scan.log
+    exit "$(cat reports/datadog/exit-code)"
+
+# Run all portable checks, including static analysis
+check: dagger-check datadog-check

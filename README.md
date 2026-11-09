@@ -20,6 +20,9 @@ An AI-powered meal planning and kitchen management app. Chat with the agent to p
 | Package managers | `uv` (backend, cli), `pnpm` (frontend) |
 | Task runner | `just` |
 
+Checks, production builds and CI run through [the Dagger pipeline](docs/dagger.md).
+Start with `just check`; `just dagger-generate` refreshes module clients after API changes.
+
 ## Prerequisites
 
 - [just](https://github.com/casey/just)
@@ -28,6 +31,7 @@ An AI-powered meal planning and kitchen management app. Chat with the agent to p
 - pnpm (the exact standalone version is pinned in `frontend/package.json`)
 - [Socket Firewall](https://socket.dev/docs/socket-firewall) (`sfw`)
 - Docker — runs the local Postgres, and the one the tests start
+- [Dagger](https://docs.dagger.io/install/) — the repository wrapper selects the pinned CLI/engine
 - An Anthropic API key
 
 ## Python workspace
@@ -56,11 +60,11 @@ package manager policies. A release can still wait longer if one of its
 dependencies is too new.
 
 Use `just frontend-install`, `just backend-install`, and `just cli-dev-install`
-for installs through Socket Firewall. CI runs the same recipes after enabling
-Socket. Renovate's hosted runner generates candidate lockfiles; CI then checks
+for local installs through Socket Firewall. CI runs protected installs inside
+Dagger containers. Renovate's hosted runner generates candidate lockfiles; CI then checks
 their installs through Socket before merge. Socket's malicious-package checks
-complement the package managers' cooldowns. Docker builds use the reviewed
-lockfiles with frozen/locked installs; they do not run the local Socket proxy.
+complement the package managers' cooldowns. Docker builds verify a pinned Socket
+binary and run their frozen/locked installs through it as well.
 
 CI reads pnpm's version from `frontend/package.json`; Renovate groups that pin
 with the standalone Docker image. The uv minimum and Docker image are grouped
@@ -703,8 +707,3 @@ CI runs it without installing anything. Point it at any deployment:
 ```sh
 python3 scripts/smoke_test.py "$(terraform -chdir=infrastructure output -raw app_url)"
 ```
-
-## Optional Dagger checks
-
-Dagger CLI checks run alongside existing CI during the first adoption step.
-See [the incremental rollout](docs/dagger.md). Use `just dagger-check` to try them.

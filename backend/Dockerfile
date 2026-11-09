@@ -2,6 +2,17 @@
 # baked in and served by the same process as the API:
 #   docker build -f backend/Dockerfile .
 
+# Match dagger/socket-firewall's verified release artifacts. The native frontend
+# stage and target Python stage need different binaries during cross-platform builds.
+FROM scratch AS socket-amd64
+ADD https://github.com/SocketDev/sfw-free/releases/download/v1.16.0/sfw-free-linux-x86_64 /sfw
+
+FROM scratch AS socket-arm64
+ADD https://github.com/SocketDev/sfw-free/releases/download/v1.16.0/sfw-free-linux-arm64 /sfw
+
+FROM socket-${BUILDARCH} AS socket-build
+FROM socket-${TARGETARCH} AS socket-target
+
 # Static output is platform-independent, so pin to BUILDPLATFORM and build it once
 # rather than emulating the whole Node toolchain for each target architecture.
 FROM --platform=$BUILDPLATFORM ghcr.io/pnpm/pnpm:12.18.0@sha256:41c39d1c734b0a810669c07587888aa7dbe9ef9b4c8e98b346b3654f7b269b6d AS pnpm
@@ -11,6 +22,8 @@ FROM --platform=$BUILDPLATFORM node:26.13.0-slim@sha256:5adad64f9a1fca2d51972caa
 WORKDIR /src
 
 COPY --from=pnpm /opt/pnpm /opt/pnpm
+COPY --from=socket-build --chmod=0755 /sfw /usr/local/bin/sfw
+COPY dagger/socket-firewall/src/socket_firewall/checksums.sha256 /tmp/sfw-checksums
 
 ENV PNPM_HOME="/pnpm" \
     PATH="/opt/pnpm:/pnpm:$PATH"
@@ -18,7 +31,9 @@ ENV PNPM_HOME="/pnpm" \
 COPY frontend/package.json frontend/pnpm-lock.yaml frontend/pnpm-workspace.yaml ./
 
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
-    pnpm install --frozen-lockfile
+    checksum="$(sha256sum /usr/local/bin/sfw | cut -d ' ' -f1)" && \
+    awk '{print $1}' /tmp/sfw-checksums | grep -Fx "$checksum" && \
+    sfw pnpm install --frozen-lockfile
 
 COPY frontend/ /src
 
@@ -32,6 +47,8 @@ FROM cgr.dev/chainguard/python:latest-dev@sha256:6b7c43c25f9446e8b1cf850797826a3
 
 USER root
 COPY --from=ghcr.io/astral-sh/uv:0.13.7@sha256:96f40d3904aad8d0bd010539001d36c8e2188b981e1334471a90c4a1d93bb490 /uv /usr/local/bin/uv
+COPY --from=socket-target --chmod=0755 /sfw /usr/local/bin/sfw
+COPY dagger/socket-firewall/src/socket_firewall/checksums.sha256 /tmp/sfw-checksums
 
 WORKDIR /app
 
@@ -45,7 +62,9 @@ COPY backend/pyproject.toml backend/pyproject.toml
 COPY cli/pyproject.toml cli/pyproject.toml
 
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --locked --package agents --no-dev --no-install-workspace
+    checksum="$(sha256sum /usr/local/bin/sfw | cut -d ' ' -f1)" && \
+    awk '{print $1}' /tmp/sfw-checksums | grep -Fx "$checksum" && \
+    sfw uv sync --locked --package agents --no-dev --no-install-workspace
 
 FROM cgr.dev/chainguard/python:latest@sha256:a57ac9d33d8ca6eb2946d1d7e93a5600153d02e0c7c1fa3a322fc343f89451f5
 
