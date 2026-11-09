@@ -5,6 +5,7 @@ from typing import Self
 from dagger_clients.core import (
     Container,
     Directory,
+    Service,
     Workspace,
     core,
 )
@@ -95,7 +96,7 @@ def _run_python(ctr: Container, package: str, args: list[str]) -> Container:
 
 @object_type
 class AgentsCi:
-    """Additive CLI checks and reusable Socket tooling."""
+    """Backend and CLI checks over explicit source inputs."""
 
     source: Directory = field()
 
@@ -105,14 +106,22 @@ class AgentsCi:
             ws.directory(
                 "/",
                 include=[
-                    *_MANIFESTS,
-                    "backend/Dockerfile",
+                    "backend/**",
                     "cli/**",
+                    "frontend/**",
+                    "scripts/**",
+                    ".github/**",
+                    "infrastructure/*.tf",
                     ".dagger/src/**",
-                    "dagger/socket-firewall/src/**",
-                    "dagger/socket-firewall/tests/**",
-                    "scripts/dagger",
-                    "scripts/dagger_workspace.py",
+                    "dagger/*/src/**",
+                    "dagger/*/tests/**",
+                    "pyproject.toml",
+                    "uv.lock",
+                    ".python-version",
+                    ".dockerignore",
+                    "code-security.datadog.yaml",
+                    "renovate.json",
+                    "ruff.toml",
                     "**/.gitignore",
                     "**/.gitattributes",
                 ],
@@ -157,6 +166,51 @@ class AgentsCi:
         else:
             raise AssertionError("blocked package installation succeeded")
 
+    @function
+    def postgres(self, database: str = "agents") -> Service:
+        """A disposable database matching the application's PostgreSQL major."""
+        return (
+            core()
+            .container()
+            .from_("postgres:17-alpine")
+            .with_env_variable("POSTGRES_USER", "agents")
+            .with_env_variable("POSTGRES_PASSWORD", "agents")
+            .with_env_variable("POSTGRES_DB", database)
+            .with_exposed_port(5432)
+            .as_service(use_entrypoint=True)
+        )
+
+    @check
+    @function
+    async def backend_lint(self) -> None:
+        await _run_python(
+            await _python(self.source, "agents"),
+            "agents",
+            ["ruff", "check", "backend", "scripts"],
+        ).stdout()
+
+    @check
+    @function
+    async def backend_format(self) -> None:
+        await _run_python(
+            await _python(self.source, "agents"),
+            "agents",
+            ["ruff", "format", "--check", "backend", "scripts"],
+        ).stdout()
+
+    @check
+    @function
+    async def backend_test(self) -> None:
+        ctr = (
+            (await _python(self.source, "agents"))
+            .with_service_binding("postgres", self.postgres())
+            .with_env_variable(
+                "TEST_DATABASE_URL",
+                "postgresql://agents:agents@postgres:5432/agents",
+            )
+        )
+        await _run_python(ctr, "agents", ["pytest", "backend"]).stdout()
+
     @check
     @function
     async def cli_lint(self) -> None:
@@ -185,10 +239,16 @@ class AgentsCi:
         ).stdout()
 
     @check
+    @function(cache="never")
+    async def socket_python(self) -> None:
+        """Recheck Python downloads with an empty cache and a unique execution key."""
+        await (await _python(self.source, "agents", fresh=True)).stdout()
+
+    @check
     @function
     async def pipeline_tools(self) -> None:
         """Lint the handwritten pipeline and reusable Socket module."""
-        ctr = (await _python(self.source, "safari-history-export")).with_directory(
+        ctr = (await _python(self.source, "agents")).with_directory(
             "/src",
             _source(
                 self.source,
@@ -204,10 +264,8 @@ class AgentsCi:
             "dagger/socket-firewall/src",
             "scripts/dagger_workspace.py",
         ]
-        ctr = _run_python(ctr, "safari-history-export", ["ruff", "check", *paths])
-        await _run_python(
-            ctr, "safari-history-export", ["ruff", "format", "--check", *paths]
-        ).stdout()
+        ctr = _run_python(ctr, "agents", ["ruff", "check", *paths])
+        await _run_python(ctr, "agents", ["ruff", "format", "--check", *paths]).stdout()
 
     @check
     @function(cache="never")

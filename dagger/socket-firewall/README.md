@@ -46,8 +46,8 @@ just dagger-check --generated=false --check socket-cli
 ```
 
 The contract fixture verifies argument/environment preservation and that a blocked
-install fails. The fresh CLI check exercises the real Socket binary with uv. pnpm integration
-follows in the application-check layer.
+install fails. Fresh CLI/backend checks exercise the real Socket binaries with uv. pnpm follows
+in the frontend layer.
 They do not download a known-malicious package as a test.
 
 Tested with Dagger beta.25 and Python SDK v1.7.0, generating the beta.24 API.

@@ -916,37 +916,19 @@ backend-dev: db-up db-migrate
 
 # Run backend linter (scripts/ holds the smoke test, held to the same standard)
 backend-lint:
-    uv run --locked --package agents ruff check backend scripts
+    scripts/dagger check --generated=false --check backend-lint --progress report
 
 # Run backend format check
 backend-fmt:
-    uv run --locked --package agents ruff format --check backend scripts
-
-# Check Docker before starting checks that need the test database.
-[private]
-_backend-test-preflight:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    # The fixtures can use an explicitly supplied database instead of Docker.
-    if [ -n "${TEST_DATABASE_URL:-}" ]; then
-        exit 0
-    fi
-    if ! command -v docker >/dev/null 2>&1; then
-        echo "error: backend tests require Docker. Install Docker and start its daemon, then retry." >&2
-        exit 1
-    fi
-    if ! docker_status=$(docker info 2>&1 >/dev/null); then
-        echo "error: Docker is unavailable. Start Docker Desktop or your Docker daemon and retry. If it is already running, check your Docker context and socket permissions." >&2
-        echo "$docker_status" >&2
-        exit 1
-    fi
+    scripts/dagger check --generated=false --check backend-format --progress report
 
 # Run backend tests
-backend-test: _backend-test-preflight
-    uv run --locked --package agents pytest backend
+backend-test:
+    scripts/dagger check --generated=false --check backend-test --progress report
 
 # Run all backend checks
-backend-check: _backend-test-preflight backend-lint backend-fmt backend-test
+backend-check:
+    scripts/dagger check --generated=false --check backend-lint --check backend-format --check backend-test --check socket-python --progress report
 
 # ── Frontend ───────────────────────────────────────────────────────────────────
 
@@ -1115,18 +1097,19 @@ cli-dev-install:
 
 # Run cli linter
 cli-lint:
-    uv run --locked --package safari-history-export ruff check cli
+    scripts/dagger check --generated=false --check cli-lint --progress report
 
 # Run cli format check
 cli-fmt:
-    uv run --locked --package safari-history-export ruff format --check cli
+    scripts/dagger check --generated=false --check cli-format --progress report
 
 # Run cli tests
 cli-test:
-    uv run --locked --package safari-history-export pytest cli
+    scripts/dagger check --generated=false --check cli-test --progress report
 
 # Run all cli checks
-cli-check: cli-lint cli-fmt cli-test
+cli-check:
+    scripts/dagger check --generated=false --check cli-lint --check cli-format --check cli-test --check socket-cli --progress report
 
 # ── CI ─────────────────────────────────────────────────────────────────────────
 

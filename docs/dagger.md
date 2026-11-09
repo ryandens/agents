@@ -1,26 +1,29 @@
-# Incremental Dagger adoption
+# Dagger backend and CLI checks
 
-This first step adds a reusable Socket Firewall module and CLI lint, format and
-test checks alongside existing CI. Existing `just check`, application checks,
-Datadog, Docker builds and release publishing retain their current behavior.
-The separate Dagger CLI workflow is observational; it is not added to branch protection.
+The second adoption layer promotes backend and CLI checks to one Dagger CI job.
+The separate CLI shadow workflow is removed.
+The job runs `scripts/dagger check -j 2 --progress report`, which discovers all
+checks in this layer, including generated-client staleness, and reports each result.
 
-Install Docker, Dagger and Python 3, then run `just dagger-check`. The repo wrapper
-selects the pinned CLI/engine. `just dagger-generate` refreshes module clients.
-The pipeline captures explicit source inputs and isolates local ignored state.
-The SDK/client copies are generated, checked for staleness and excluded from source scans.
+Backend tests bind a disposable Postgres service through TEST_DATABASE_URL; fresh Socket
+checks cover Python downloads. Development installs and hot reload remain native.
 
-The checks exercise CLI tests with synthetic Safari data, a fresh Socket-protected
-uv install, blocked-install contracts and pipeline linting. No macOS privacy grant
-or production credentials are required. Existing native CI is the comparison baseline.
+Use `just backend-check`, `just cli-check`, `just check`.
+`just dagger-check` also checks handwritten pipeline code and generated-client
+staleness. `just dagger-generate` updates the vendored clients after API changes.
+The repo wrapper selects the pinned CLI/engine and isolates ignored local state.
+The app constructor captures explicit content-addressed source inputs for caching.
+
+Frontend, Datadog, Docker image builds, smoke tests and releases still use their original
+workflows and recipes in this layer. No deployment behavior changes.
 
 ## Merge order
 
-1. Add Socket and optional CLI checks (this step).
-2. Promote application checks: backend with Postgres, CLI and frontend.
-3. Add Datadog report handling and production image/smoke checks.
-4. Move tagged-release verification and publication to Dagger.
+1. Socket module and optional CLI checks.
+2. Backend and CLI checks (this layer).
+3. Frontend checks.
+4. Datadog reporting and image/smoke checks.
+5. Release verification and publishing.
 
-Each later PR targets the preceding branch. Merge in order, retargeting the next
-PR to main after its dependency lands. Deployment continues to use `just deploy`.
-The full migration is preserved on `codex/dagger-full-backup` while this stack is reviewed.
+Each PR targets its predecessor. Merge from the bottom and retarget the next PR
+to main after its dependency lands. Deployment remains `just deploy`.
