@@ -2,6 +2,7 @@ import re
 import uuid
 from typing import Self
 
+from dagger_clients.actionlint import actionlint
 from dagger_clients.core import (
     Container,
     Directory,
@@ -12,6 +13,7 @@ from dagger_clients.core import (
     core,
 )
 from dagger_clients.datadog_static_analyzer import datadog_static_analyzer
+from dagger_clients.opengrep import opengrep
 from dagger_clients.socket_firewall import socket_firewall
 
 from dagger import ExecError, QueryError, check, field, function, object_type
@@ -169,6 +171,7 @@ class AgentsCi:
                     "uv.lock",
                     ".python-version",
                     ".dockerignore",
+                    ".semgrepignore",
                     "code-security.datadog.yaml",
                     "renovate.json",
                     "ruff.toml",
@@ -182,6 +185,12 @@ class AgentsCi:
             .directory("/")
         )
         return cls(source=source)
+
+    @check
+    @function
+    async def actionlint(self) -> None:
+        """Validate all GitHub Actions workflows and their embedded scripts."""
+        await actionlint().check(_source(self.source, [".github/**"]))
 
     @check
     @function
@@ -249,6 +258,70 @@ class AgentsCi:
             assert "results.sarif" in str(error)
         else:
             raise AssertionError("scanner crash fabricated a report")
+
+        lint_source = (
+            core()
+            .directory()
+            .with_new_file(
+                ".github/workflows/check.yml", "name: fixture\non: push\njobs: {}\n"
+            )
+        )
+        fake_linter = self.source.file("dagger/actionlint/tests/fake-actionlint.sh")
+        linter = base.with_file(
+            "/usr/local/bin/actionlint", fake_linter, permissions=0o755
+        )
+        await actionlint().check(lint_source, container=linter)
+        try:
+            await actionlint().check(
+                lint_source,
+                container=linter.with_env_variable("LINT_FIXTURE_EXIT", "1"),
+            )
+        except (QueryError, ExecError):
+            pass
+        else:
+            raise AssertionError("invalid workflow passed actionlint")
+
+        fake_opengrep = self.source.file("dagger/opengrep/tests/fake-opengrep.sh")
+        scanner = base.with_file(
+            "/usr/local/bin/opengrep", fake_opengrep, permissions=0o755
+        )
+        await opengrep().scan(source, container=scanner).assert_passed()
+        suppressed_scan = opengrep().scan(
+            source, container=scanner.with_env_variable("SCAN_FIXTURE_SUPPRESSED", "1")
+        )
+        assert await suppressed_scan.exit_code() == 1
+        assert await suppressed_scan.policy_exit_code() == 0
+        await suppressed_scan.assert_passed()
+        suppressed_error = opengrep().scan(
+            source,
+            container=scanner.with_env_variable(
+                "SCAN_FIXTURE_SUPPRESSED", "1"
+            ).with_env_variable("SCAN_FIXTURE_EXIT", "2"),
+        )
+        assert await suppressed_error.policy_exit_code() == 2
+        for status in (1, 2):
+            failed_scan = opengrep().scan(
+                source,
+                container=scanner.with_env_variable("SCAN_FIXTURE_EXIT", str(status)),
+            )
+            assert await failed_scan.exit_code() == status
+            assert '"version":"2.1.0"' in await failed_scan.sarif().contents()
+            try:
+                await failed_scan.assert_passed()
+            except (QueryError, ExecError):
+                pass
+            else:
+                raise AssertionError(f"OpenGrep exit {status} was swallowed")
+        crashed_scan = opengrep().scan(
+            source, container=scanner.with_env_variable("SCAN_FIXTURE_CRASH", "1")
+        )
+        assert await crashed_scan.exit_code() == 2
+        try:
+            await crashed_scan.sarif().contents()
+        except QueryError:
+            pass
+        else:
+            raise AssertionError("OpenGrep crash fabricated a report")
 
     @check
     @function
@@ -390,6 +463,8 @@ class AgentsCi:
             ".dagger/src",
             "dagger/socket-firewall/src",
             "dagger/datadog-static-analyzer/src",
+            "dagger/actionlint/src",
+            "dagger/opengrep/src",
             "scripts",
         ]
         ctr = _run_python(ctr, "agents", ["ruff", "check", *paths])
@@ -450,6 +525,31 @@ class AgentsCi:
             .directory()
             .with_new_file("results.sarif", json.dumps(parsed))
             .with_new_file("exit-code", str(await result.exit_code()))
+            .with_new_file("scan.log", await result.logs())
+        )
+
+    @function(cache="session")
+    async def opengrep_report(self, source: Directory | None = None) -> Directory:
+        """Export portable OpenGrep findings before enforcing scan policy."""
+        import json
+
+        result = opengrep().scan(source if source is not None else self.source)
+        parsed = json.loads(await result.sarif().contents())
+        if parsed.get("version") != "2.1.0" or not isinstance(parsed.get("runs"), list):
+            raise ValueError("OpenGrep did not produce valid SARIF")
+        # GitHub's SARIF ingestion surfaces suppressed results as alerts.
+        for run in parsed["runs"]:
+            run["results"] = [
+                result
+                for result in run.get("results", [])
+                if not result.get("suppressions")
+            ]
+        return (
+            core()
+            .directory()
+            .with_new_file("results.sarif", json.dumps(parsed))
+            .with_new_file("exit-code", str(await result.policy_exit_code()))
+            .with_new_file("raw-exit-code", str(await result.exit_code()))
             .with_new_file("scan.log", await result.logs())
         )
 

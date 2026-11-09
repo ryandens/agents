@@ -40,14 +40,39 @@
     },
     {
       "customType": "regex",
-      "description": "Keep actionlint's version and its pinned download-script commit in lockstep with upstream GitHub release tags",
-      "managerFilePatterns": ["/^\\.github/workflows/.+\\.ya?ml$/"],
+      "description": "Update the pinned Actionlint image and digest.",
+      "managerFilePatterns": [
+        "/^dagger/actionlint/src/actionlint/__init__\\.py$/"
+      ],
       "matchStrings": [
-        "ACTIONLINT_VERSION:\\s*(?<currentValue>\\S+)[\\s\\S]*?raw\\.githubusercontent\\.com/rhysd/actionlint/(?<currentDigest>[0-9a-f]{40})/"
+        "IMAGE = \"rhysd/actionlint:(?<currentValue>[^@\"]+)(?:@(?<currentDigest>sha256:[a-f0-9]+))?\""
       ],
       "depNameTemplate": "rhysd/actionlint",
-      "datasourceTemplate": "github-tags",
-      "extractVersionTemplate": "^v?(?<version>.+)$"
+      "datasourceTemplate": "docker"
+    },
+    {
+      "customType": "regex",
+      "description": "Update the pinned OpenGrep runtime base image.",
+      "managerFilePatterns": [
+        "/^dagger/opengrep/src/opengrep/__init__\\.py$/"
+      ],
+      "matchStrings": [
+        "BASE_IMAGE = \"debian:(?<currentValue>[^@\"]+)@(?<currentDigest>sha256:[a-f0-9]+)\""
+      ],
+      "depNameTemplate": "debian",
+      "datasourceTemplate": "docker"
+    },
+    {
+      "customType": "regex",
+      "description": "Update the reusable OpenGrep release and verified Linux binary digest together.",
+      "managerFilePatterns": [
+        "/^dagger/opengrep/src/opengrep/__init__\\.py$/"
+      ],
+      "matchStrings": [
+        "VERSION = \"(?<currentValue>v[^\"\\s]+)\"\\nSHA256 = \"(?<currentDigest>sha256:[a-f0-9]+)\""
+      ],
+      "depNameTemplate": "opengrep/opengrep",
+      "datasourceTemplate": "custom.opengrep-releases"
     },
     {
       "customType": "regex",

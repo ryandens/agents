@@ -6,6 +6,11 @@ type ModuleTypes {
       typeDef.withObject("AgentsCi", description: "Portable application checks, reports, images and release publishing.")
         .withField("source", typeDef.withObject("Directory"), description: "A directory.")
         .withFunction(
+          function("actionlint", typeDef.withOptional(true).withKind(TypeDefKind.VOID_KIND))
+            .withDescription("Validate all GitHub Actions workflows and their embedded scripts.")
+            .withCheck
+        )
+        .withFunction(
           function("backend_format", typeDef.withOptional(true).withKind(TypeDefKind.VOID_KIND))
             .withCheck
         )
@@ -67,6 +72,12 @@ type ModuleTypes {
           function("module_contracts", typeDef.withOptional(true).withKind(TypeDefKind.VOID_KIND))
             .withDescription("Blocked installs and failed scans must preserve failure and report semantics.")
             .withCheck
+        )
+        .withFunction(
+          function("opengrep_report", typeDef.withObject("Directory"))
+            .withDescription("Export portable OpenGrep findings before enforcing scan policy.")
+            .withCachePolicy(FunctionCachePolicy.PerSession)
+            .withArg("source", typeDef.withOptional(true).withObject("Directory").withOptional(true), defaultValue: ("null" :: Dagger.JSON!))
         )
         .withFunction(
           function("pipeline_tools", typeDef.withOptional(true).withKind(TypeDefKind.VOID_KIND))

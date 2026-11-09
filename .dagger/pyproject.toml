@@ -2,17 +2,19 @@
 name = "agents-ci"
 version = "0.1.0"
 requires-python = ">=3.14"
-dependencies = ["dagger-io", "dagger-clients-core", "dagger-clients-socket-firewall", "dagger-clients-datadog-static-analyzer"]
+dependencies = ["dagger-io", "dagger-clients-core", "dagger-clients-socket-firewall", "dagger-clients-datadog-static-analyzer", "dagger-clients-actionlint", "dagger-clients-opengrep"]
 
 [build-system]
 requires = ["uv_build>=0.8.4,<0.14.0"]
 build-backend = "uv_build"
 
 [tool.uv.workspace]
-members = ["sdk", "clients/core", "clients/socket-firewall", "clients/datadog-static-analyzer"]
+members = ["sdk", "clients/core", "clients/socket-firewall", "clients/datadog-static-analyzer", "clients/actionlint", "clients/opengrep"]
 
 [tool.uv.sources]
 dagger-io = { workspace = true }
 dagger-clients-core = { workspace = true }
 dagger-clients-socket-firewall = { workspace = true }
 dagger-clients-datadog-static-analyzer = { workspace = true }
+dagger-clients-actionlint = { workspace = true }
+dagger-clients-opengrep = { workspace = true }

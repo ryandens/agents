@@ -1,6 +1,7 @@
 import subprocess
 
 from prepare_datadog_scan import prepare
+from prepare_opengrep_scan import CONFIG_FILES
 
 
 def git(root, *args):
@@ -22,6 +23,28 @@ def commit(root):
         "fixture",
     )
     return git(root, "rev-parse", "HEAD")
+
+
+def test_opengrep_diff_keeps_root_exclusions(tmp_path):
+    git(tmp_path, "init", "-q")
+    (tmp_path / ".semgrepignore").write_text("vendor/\n")
+    (tmp_path / "source.py").write_text("print('before')\n")
+    base = commit(tmp_path)
+    (tmp_path / "source.py").write_text("print('after')\n")
+    head = commit(tmp_path)
+    output = prepare(tmp_path, base, head, tmp_path / "scan", CONFIG_FILES)
+    assert (output / ".semgrepignore").read_text() == "vendor/\n"
+    assert (output / "source.py").read_text() == "print('after')\n"
+    assert not (output / "code-security.datadog.yaml").exists()
+
+
+def test_opengrep_ignore_deletion_scans_all_source(tmp_path):
+    git(tmp_path, "init", "-q")
+    (tmp_path / ".semgrepignore").write_text("vendor/\n")
+    base = commit(tmp_path)
+    (tmp_path / ".semgrepignore").unlink()
+    head = commit(tmp_path)
+    assert prepare(tmp_path, base, head, tmp_path / "scan", CONFIG_FILES) == tmp_path
 
 
 def test_diff_preserves_paths_ignores_and_renames(tmp_path):
