@@ -1,6 +1,7 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": ["config:recommended", "helpers:pinGitHubActionDigests"],
+  "ignorePaths": [".dagger/sdk/**", ".dagger/clients/**", "dagger/*/sdk/**", "dagger/*/clients/**"],
   "lockFileMaintenance": {
     "description": "Re-resolve the lockfiles weekly so transitive deps stay current. The pep621 rule below only bumps packages declared in the workspace member pyproject.toml files; lock-only deps pulled in through extras (requests via google-auth[requests], certifi, charset-normalizer) are invisible to that manager and otherwise sit at whatever version was resolved the last time something forced a full resolve.",
     "enabled": true,
@@ -50,15 +51,89 @@
     },
     {
       "customType": "regex",
+      "description": "Update the pinned Dagger beta CLI and engine.",
+      "managerFilePatterns": [
+        "/^\\.dagger-version$/"
+      ],
+      "matchStrings": [
+        "(?<currentValue>v1\\.0\\.0-beta\\.[0-9]+)"
+      ],
+      "depNameTemplate": "dagger/dagger",
+      "datasourceTemplate": "github-tags"
+    },
+    {
+      "customType": "regex",
+      "description": "Update the Python SDK; regenerate clients when reviewing its PR.",
+      "managerFilePatterns": [
+        "/^dagger\\.toml$/"
+      ],
+      "matchStrings": [
+        "source = \"github.com/dagger/python-sdk@(?<currentValue>[^\"\\s]+)\""
+      ],
+      "depNameTemplate": "dagger/python-sdk",
+      "datasourceTemplate": "github-tags"
+    },
+    {
+      "customType": "regex",
       "description": "Keep the pinned datadog-static-analyzer release in the CI workflow in lockstep with upstream GitHub release tags",
       "managerFilePatterns": ["/^\\.github/workflows/.+\\.ya?ml$/"],
       "matchStrings": ["DDSA_VERSION:\\s*(?<currentValue>\\S+)"],
       "depNameTemplate": "DataDog/datadog-static-analyzer",
       "datasourceTemplate": "github-releases",
       "extractVersionTemplate": "^v?(?<version>.+)$"
+    },
+    {
+      "customType": "regex",
+      "description": "Update the Socket module release.",
+      "managerFilePatterns": [
+        "/^dagger/socket-firewall/src/socket_firewall/__init__\\.py$/"
+      ],
+      "matchStrings": [
+        "VERSION = \"(?<currentValue>v[^\"]+)\""
+      ],
+      "depNameTemplate": "SocketDev/sfw-free",
+      "datasourceTemplate": "github-releases"
+    },
+    {
+      "customType": "regex",
+      "description": "Update Socket x86_64 checksums from release metadata.",
+      "managerFilePatterns": [
+        "/^dagger/socket-firewall/src/socket_firewall/checksums\\.sha256$/"
+      ],
+      "matchStrings": [
+        "# version=(?<currentValue>\\S+) asset=sfw-free-linux-x86_64\\n(?<currentDigest>[0-9a-f]{64})"
+      ],
+      "depNameTemplate": "SocketDev/sfw-free",
+      "datasourceTemplate": "custom.socket-linux-x86_64"
+    },
+    {
+      "customType": "regex",
+      "description": "Update Socket arm64 checksums from release metadata.",
+      "managerFilePatterns": [
+        "/^dagger/socket-firewall/src/socket_firewall/checksums\\.sha256$/"
+      ],
+      "matchStrings": [
+        "# version=(?<currentValue>\\S+) asset=sfw-free-linux-arm64\\n(?<currentDigest>[0-9a-f]{64})"
+      ],
+      "depNameTemplate": "SocketDev/sfw-free",
+      "datasourceTemplate": "custom.socket-linux-arm64"
     }
   ],
   "customDatasources": {
+    "socket-linux-x86_64": {
+      "defaultRegistryUrlTemplate": "https://api.github.com/repos/SocketDev/sfw-free/releases?per_page=100",
+      "format": "json",
+      "transformTemplates": [
+        "{\"releases\": $map($[tag_name and assets[name = \"sfw-free-linux-x86_64\"].digest], function($release) { {\"version\": $release.tag_name, \"releaseTimestamp\": $release.published_at, \"digest\": $substringAfter($release.assets[name = \"sfw-free-linux-x86_64\"][0].digest, \":\")} }), \"sourceUrl\": \"https://github.com/SocketDev/sfw-free\"}"
+      ]
+    },
+    "socket-linux-arm64": {
+      "defaultRegistryUrlTemplate": "https://api.github.com/repos/SocketDev/sfw-free/releases?per_page=100",
+      "format": "json",
+      "transformTemplates": [
+        "{\"releases\": $map($[tag_name and assets[name = \"sfw-free-linux-arm64\"].digest], function($release) { {\"version\": $release.tag_name, \"releaseTimestamp\": $release.published_at, \"digest\": $substringAfter($release.assets[name = \"sfw-free-linux-arm64\"][0].digest, \":\")} }), \"sourceUrl\": \"https://github.com/SocketDev/sfw-free\"}"
+      ]
+    },
     "opengrep-releases": {
       "defaultRegistryUrlTemplate": "https://api.github.com/repos/opengrep/opengrep/releases?per_page=100",
       "format": "json",
@@ -68,6 +143,28 @@
     }
   },
   "packageRules": [
+    {
+      "description": "Review tested Dagger beta engine upgrades explicitly.",
+      "matchPackageNames": [
+        "dagger/dagger"
+      ],
+      "ignoreUnstable": false,
+      // One hour is the deliberate build-tool release window, matching uv below.
+      // nosemgrep: package_managers.renovate.renovate-missing-minimum-release-age.renovate-missing-minimum-release-age
+      "minimumReleaseAge": "1 hour",
+      "automerge": false
+    },
+    {
+      "description": "Keep the Socket module and verified artifact checksums on one release.",
+      "matchPackageNames": [
+        "SocketDev/sfw-free"
+      ],
+      "groupName": "Socket Firewall",
+      // Apply the same one-hour tool release window to Socket's binaries and digests.
+      // nosemgrep: package_managers.renovate.renovate-missing-minimum-release-age.renovate-missing-minimum-release-age
+      "minimumReleaseAge": "1 hour",
+      "automerge": false
+    },
     {
       "description": "Match Renovate's npm manager (used for this pnpm workspace) to pnpm's eight-hour quarantine so direct dependency PRs are not opened before pnpm will accept them.",
       "matchManagers": ["npm"],

@@ -1132,3 +1132,11 @@ cli-check: cli-lint cli-fmt cli-test
 
 # Run all checks (mirrors CI)
 check: backend-check frontend-check cli-check
+
+# Optional Dagger CLI checks; existing check recipes remain authoritative.
+dagger-check *args:
+    scripts/dagger check -j 2 --progress report {{ args }}
+
+# Regenerate the vendored SDK and typed clients
+dagger-generate:
+    scripts/dagger generate -y --progress report

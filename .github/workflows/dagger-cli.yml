@@ -1,0 +1,27 @@
+name: Dagger CLI (shadow)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dagger-cli:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Read Dagger version
+        id: dagger-version
+        run: echo "version=$(cat .dagger-version)" >> "$GITHUB_OUTPUT"
+      - name: Install Dagger
+        uses: dagger/dagger-for-github@b81317a976cb7f7125469707321849737cd1b3bc # v7
+        with:
+          version: ${{ steps.dagger-version.outputs.version }}
+      - name: Run additive CLI and Socket checks
+        run: scripts/dagger check -j 2 --progress report
