@@ -1,4 +1,5 @@
 name = "agents-ci"
+include = ["!**/.venv/**", "!**/node_modules/**", "!**/__pycache__/**", "!**/.direnv/**", "!**/.env", "!**/.env.*"]
 
 [entrypoint]
   kind = "dang"

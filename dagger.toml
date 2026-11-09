@@ -1,4 +1,4 @@
-ignore = [".git", ".claude", ".agents", ".codex", ".aws", "**/.venv", "**/node_modules", "**/__pycache__", "**/.pytest_cache", "frontend/.next", "frontend/out", "frontend/coverage", "backend/static", "backend/data", "**/.env", "**/.env.*", "**/*.tfstate*", "**/*.tfvars", "**/.terraform"]
+ignore = ["**/.direnv", "result", "result-*", ".git", ".claude", ".agents", ".codex", ".aws", "**/.venv", "**/node_modules", "**/__pycache__", "**/.pytest_cache", "frontend/.next", "frontend/out", "frontend/coverage", "backend/static", "backend/data", "**/.env", "**/.env.*", "**/*.tfstate*", "**/*.tfvars", "**/.terraform"]
 
 [modules.python-sdk]
 source = "github.com/dagger/python-sdk@v1.7.0"

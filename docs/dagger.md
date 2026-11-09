@@ -7,10 +7,17 @@ under `dagger/`.
 
 ## Running locally
 
-Install Docker, a Dagger CLI supporting `--x-release`, Python 3 and just. Start
-Docker before running checks. `scripts/dagger` selects `.dagger-version` without
-replacing an existing CLI. The SDK is separately pinned in `dagger.toml`, and
-`dagger.lock` records resolved sources and images. Dagger Cloud is optional.
+Install [Nix](https://nixos.org/download/) and start Docker. Enter the locked
+shell with `nix develop`, or enable direnv with `direnv allow`. The shell provides
+Dagger, just, uv, Python, Git and the Docker client on Linux and macOS. Docker's
+daemon is provided by Docker Desktop or your normal host setup.
+
+`flake.lock` pins the official Dagger Nix package and nixpkgs. The shell asserts
+that Dagger matches `.dagger-version`; review CLI-pin and lockfile updates together.
+The Python SDK is separately pinned in `dagger.toml`, and `dagger.lock` records
+resolved module sources and images.
+
+From the shell:
 
 ```sh
 just check                         # Application, image, workflow and security checks
@@ -24,17 +31,14 @@ just opengrep-check                 # SARIF and status under reports/opengrep
 just dagger-generate               # After changing a module's exposed API
 ```
 
-Use `scripts/dagger check -l --generated=false` to list exact names. In particular,
+Use `dagger check -l --generated=false` to list exact names. In particular,
 the generated architecture check names are `image-amd-64` and `image-arm-64`.
 
-The local wrapper snapshots Git-tracked files and nonignored new files into a
-temporary workspace. It includes current edits and deletions; `.env`, ignored
-environments, Terraform state/providers, and agent worktrees stay outside the
-engine. This bounds the enclosing context read by the beta Python runtime.
-Generated SDK/client/config changes are copied back only after success, and a
-concurrent host edit prevents overwrite. Explicit artifact exports should use
-absolute host paths, as the just recipes do. CI uses its clean checkout directly.
-`DAGGER_USE_HOST_WORKSPACE=1` opts into direct execution for diagnosis.
+Dagger runs directly against the checkout. Workspace ignores in `dagger.toml`
+and module-manifest input filters exclude environments, caches, credentials,
+Terraform state and agent worktrees. No temporary checkout or generated-file
+copy-back is involved. CI exercises this with unreadable sentinels in ignored
+local-state directories before running the normal suite.
 
 Local `uv`/pnpm installs remain available for hot reload and editing. Safari's
 dedicated virtualenv, Full Disk Access and launchd operations remain host tasks.
@@ -71,8 +75,8 @@ inputs. Fresh Socket checks and publishing explicitly disable function caching.
 
 ## CI and releases
 
-One `dagger` CI job runs `scripts/dagger check -j 2 --progress report`, the same
-suite used locally. Dagger discovers application, image, pipeline and generated-code
+One `dagger` CI job runs `nix develop --no-write-lock-file --command dagger check
+-j 2 --progress report`, the same suite used locally. Dagger discovers application, image, pipeline and generated-code
 checks, shares their dependency graph, and reports individual results. Adding a
 check does not require another GitHub job or another filter list in YAML.
 
@@ -84,7 +88,9 @@ OpenGrep uses the same report/export/policy pattern in this job. PR source selec
 is owned by `scripts/prepare_opengrep_scan.py`, while local and main scans cover all
 source. Actionlint and Renovate config validation are discovered checks in the main
 suite. Promptfoo retains its own workflow. The first adoption layer's shadow status
-is temporary.
+is temporary. CI and release jobs pass the repository's `DAGGER_CLOUD_TOKEN` secret
+to every Dagger invocation for Cloud connectivity. Fork PRs without the secret
+can still run on the local engine.
 
 Require `dagger` in branch protection when promoting the second adoption layer,
 and remove retired backend/CLI statuses; the frontend, Datadog and Docker statuses
@@ -121,7 +127,7 @@ Design rationale and reference research are in [the adoption proposal](dagger-ad
 ## Stack
 
 Merge order: Socket/CLI → backend → frontend → Datadog/images → releases →
-OpenGrep/Actionlint/Renovate module extraction.
+OpenGrep/Actionlint/Renovate module extraction → Nix environment and direct execution.
 Each PR targets its predecessor; retarget the next PR to main after merging.
 After squash-merging a layer, restack/rebase descendants onto updated main before
 retargeting; merge commits preserve the existing ancestry.
