@@ -8,6 +8,10 @@ sast:
       - "**/.venv/**"
       - "frontend/out/**"
       - "frontend/next-env.d.ts"
+      - ".dagger/sdk/**"
+      - ".dagger/clients/**"
+      - "dagger/*/sdk/**"
+      - "dagger/*/clients/**"
     use-gitignore: true
     ignore-generated-files: true
     max-file-size-kb: 200

@@ -703,3 +703,8 @@ CI runs it without installing anything. Point it at any deployment:
 ```sh
 python3 scripts/smoke_test.py "$(terraform -chdir=infrastructure output -raw app_url)"
 ```
+
+## Optional Dagger checks
+
+Dagger CLI checks run alongside existing CI during the first adoption step.
+See [the incremental rollout](docs/dagger.md). Use `just dagger-check` to try them.

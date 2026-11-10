@@ -1,0 +1,6 @@
+# Exact upstream SDK/client output is validated by Dagger's generation-staleness
+# check. Keep scanning the handwritten pipeline and reusable module source.
+.dagger/sdk/
+.dagger/clients/
+dagger/*/sdk/
+dagger/*/clients/
