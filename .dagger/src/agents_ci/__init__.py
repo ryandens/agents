@@ -89,9 +89,9 @@ async def _python(
 ) -> Container:
     ctr = await _python_base(source)
     if policy_run is not None:
-        ctr = ctr.with_env_variable(
-            "SOCKET_CHECK_RUN", policy_run
-        ).with_env_variable("UV_NO_CACHE", "1")
+        ctr = ctr.with_env_variable("SOCKET_CHECK_RUN", policy_run).with_env_variable(
+            "UV_NO_CACHE", "1"
+        )
     else:
         ctr = ctr.with_mounted_cache(
             "/root/.cache/uv", core().cache_volume("agents-uv")
@@ -108,9 +108,7 @@ async def _python(
     return socket_firewall().run(ctr, args)
 
 
-async def _frontend(
-    source: Directory, *, policy_run: str | None = None
-) -> Container:
+async def _frontend(source: Directory, *, policy_run: str | None = None) -> Container:
     ctr = (
         core()
         .container()
@@ -369,6 +367,7 @@ class AgentsCi:
 
     async def _assert_policy_gates(self) -> None:
         """A newly blocked policy must stop even an otherwise cached workload."""
+
         class PolicyBlockedError(Exception):
             pass
 
@@ -497,13 +496,19 @@ class AgentsCi:
     @function(cache="never")
     async def socket_python(self) -> None:
         """Recheck Python downloads with an empty cache and a unique execution key."""
-        await (await _python(self.source, "agents", policy_run=self.policy_run)).stdout()
+        await (
+            await _python(self.source, "agents", policy_run=self.policy_run)
+        ).stdout()
 
     @check
     @function(cache="never")
     async def socket_cli(self) -> None:
         """Also exercise the CLI's package and isolated build dependencies."""
-        await (await _python(self.source, "safari-history-export", policy_run=self.policy_run)).stdout()
+        await (
+            await _python(
+                self.source, "safari-history-export", policy_run=self.policy_run
+            )
+        ).stdout()
 
     @check
     @function(cache="never")
