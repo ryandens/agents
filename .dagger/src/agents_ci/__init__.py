@@ -444,9 +444,7 @@ class AgentsCi:
     @function
     async def pipeline_tools(self) -> None:
         """Test the optional PR scan selection tools."""
-        ctr = (await _python(self.source, "agents")).with_directory(
-            "/src", _source(self.source, [".dagger/src/**", "dagger/*/src/**"])
-        )
+        ctr = await _python(self.source, "agents")
         ctr = ctr.with_exec(["apt-get", "update"]).with_exec(
             ["apt-get", "install", "-y", "--no-install-recommends", "git"]
         )

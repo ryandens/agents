@@ -132,6 +132,9 @@ into host `.env` and `terraform.tfvars`, preserving local settings and restricti
 permissions. Its host-file merge is distinct from passing a secret into a container;
 1Password support itself is not a reason to keep a pipeline task in Just.
 `just frontend-build` materializes the static export for `just serve`.
+`just docker-build` builds through Dagger and loads the archive into the host Docker
+daemon as `agents:local`; `just docker-run` uses that image with the local database.
+Use the Dagger `smoke` check for disposable integration tests.
 
 ## Updating and extracting modules
 
@@ -149,6 +152,17 @@ Daggerverse, add its fixtures to that repository's CI harness, choose a license 
 module-scoped release tags, then replace the app client's local dependency address
 with the published Git reference and regenerate. No external repository is created
 or publication performed by this adoption.
+
+The Ruff dependency is the reviewed typesafe-ai Dagger 1.0 implementation, pinned
+to a commit because the latest module release still uses the older client API.
+See its [generator implementation](https://github.com/typesafe-ai/daggerverse/blob/d536bce38cd73b4e66a757c5687bbbd51ac8ab5b/ruff/src/ruff/main.py).
+We follow its native configuration discovery and changeset-based fixes, while
+retaining Socket-protected Python installs in our app builder. Reusing a builder
+must preserve that install policy, not just produce the same virtualenv.
+Paper Compute's [Tapes module](https://github.com/papercomputeco/tapes/blob/main/.dagger/main.go)
+also illustrates shared container foundations, explicit source exclusions and
+Postgres service bindings. Its [PR workflow](https://github.com/papercomputeco/tapes/blob/main/.github/workflows/pr.yaml)
+uses direct Dagger execution through Nix; our CI also cancels superseded PR runs.
 
 Design rationale and reference research are in [the adoption proposal](dagger-adoption.md).
 

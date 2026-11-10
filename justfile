@@ -673,78 +673,19 @@ build: frontend-build
 serve: build db-up db-migrate
     uv run --locked --package agents uvicorn main:app --app-dir backend --port 8000
 
-# Build the production image (frontend export + API in one container)
-docker-build:
-    docker build -f backend/Dockerfile -t agents:local .
-
-# Smoke-test an already-built image against a throwaway Postgres (CI passes the tag it just built)
-smoke image="agents:local" port="8080":
+# Build with Dagger and load the artifact into the host Docker daemon
+# Apple Silicon callers can pass linux/arm64.
+docker-build platform="linux/amd64":
     #!/usr/bin/env bash
     set -euo pipefail
-    name="agents-smoke-{{ port }}"
-    db="$name-db"
-    network="$name-net"
-
-    # A Postgres of its own rather than the `just db-up` one: this has to pass on a
-    # machine that has never run the dev database, it must not touch real data, and
-    # every run has to start from an empty schema so the app's own migration is what
-    # creates it. Named per-port so two smoke runs can overlap.
-    docker rm -f "$name" "$db" >/dev/null 2>&1 || true
-    docker network rm "$network" >/dev/null 2>&1 || true
-
-    cleanup() {
-        rc=$?
-        if [ "$rc" -ne 0 ]; then
-            echo "--- app logs ---" >&2
-            docker logs "$name" 2>&1 | tail -40 >&2 || true
-            echo "--- postgres logs ---" >&2
-            docker logs "$db" 2>&1 | tail -20 >&2 || true
-        fi
-        docker rm -f "$name" "$db" >/dev/null 2>&1 || true
-        docker network rm "$network" >/dev/null 2>&1 || true
-        exit "$rc"
-    }
-    trap cleanup EXIT
-
-    # A user-defined network gives the containers DNS, so the app can reach the database
-    # by container name. Postgres itself is not published to the host — nothing outside
-    # this network needs it.
-    docker network create "$network" >/dev/null
-    docker run -d --name "$db" --network "$network" \
-        -e POSTGRES_USER=agents \
-        -e POSTGRES_PASSWORD=agents \
-        -e POSTGRES_DB=agents \
-        {{ postgres_image }} >/dev/null
-
-    # -h 127.0.0.1 to check over TCP rather than the socket. The entrypoint's temporary
-    # init server listens on the socket only, so a socket check reports ready during
-    # initdb and then the server shuts down to restart for real — which is exactly the
-    # race that failed in CI, where the image was pulled cold. See `db-up` above.
-    for _ in $(seq 1 120); do
-        docker exec "$db" pg_isready -h 127.0.0.1 -U agents -d agents >/dev/null 2>&1 && break
-        sleep 0.5
-    done
-    docker exec "$db" pg_isready -h 127.0.0.1 -U agents -d agents >/dev/null 2>&1 || {
-        echo "error: smoke-test postgres did not become ready" >&2
-        exit 1
-    }
-
-    # Migrate from the image before starting it, which is what agents-migrate.service
-    # does on the box. This is the only place the image's migration path is exercised:
-    # the app no longer creates its own schema, so without this the container would come
-    # up against an empty database and every pantry query would fail.
-    docker run --rm --network "$network" \
-        -e DATABASE_URL="postgresql://agents:agents@$db:5432/agents" \
-        --entrypoint /app/.venv/bin/alembic \
-        {{ image }} -c /app/alembic.ini upgrade head
-
-    docker run -d --name "$name" --network "$network" -p {{ port }}:8080 \
-        -e GOOGLE_CLIENT_ID=smoke-test \
-        -e GOOGLE_CLIENT_SECRET=smoke-test \
-        -e ALLOWED_EMAILS=smoke@example.com \
-        -e DATABASE_URL="postgresql://agents:agents@$db:5432/agents" \
-        {{ image }} >/dev/null
-    python3 scripts/smoke_test.py "http://127.0.0.1:{{ port }}"
+    archive="$(mktemp -t agents-image.XXXXXX)"
+    trap 'rm -f "$archive"' EXIT
+    dagger api call image --platform "{{ platform }}" export --path "$archive" --progress report
+    loaded="$(docker load --input "$archive")"
+    printf '%s\n' "$loaded"
+    image_id="$(printf '%s\n' "$loaded" | sed -n 's/^Loaded image ID: //p')"
+    test -n "$image_id"
+    docker tag "$image_id" agents:local
 
 # Run the production image at http://localhost:8080, against the local Postgres
 docker-run: docker-build db-up db-migrate

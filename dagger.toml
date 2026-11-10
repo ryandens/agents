@@ -58,4 +58,5 @@ template = "empty"
 source = "github.com/typesafe-ai/daggerverse/ruff@d536bce38cd73b4e66a757c5687bbbd51ac8ab5b"
 
 [modules.ruff.settings]
+# Keep exclusions explicit: this beta does not apply root ignore to all Workspace reads.
 exclude = ["**/.direnv", "result", "result-*", ".git", ".claude", ".agents", ".codex", ".aws", "**/.venv", "**/node_modules", "**/__pycache__", "**/.pytest_cache", "frontend/.next", "frontend/out", "frontend/coverage", "backend/static", "backend/data", "**/.env", "**/.env.*", "**/*.tfstate*", "**/*.tfvars", "**/.terraform", "**/.git", "**/sdk/**", "**/clients/**"]

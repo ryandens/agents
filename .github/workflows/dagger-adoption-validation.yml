@@ -31,3 +31,19 @@ jobs:
           fi
       - name: Check
         run: nix develop --no-write-lock-file --command dagger check -j 2 --progress report
+      - name: Verify Ruff drift enforcement
+        run: |
+          probe=.dagger/src/agents_ci/_format_probe.py
+          trap 'rm -f "$probe"' EXIT
+          printf 'value= 1\n' > "$probe"
+          if nix develop --no-write-lock-file --command dagger check --ruff --progress report; then
+            echo "::error::Ruff accepted an unformatted source file"
+            exit 1
+          fi
+          nix develop --no-write-lock-file --command dagger generate --ruff -y --progress report
+          grep -Fx 'value = 1' "$probe"
+          nix develop --no-write-lock-file --command dagger check --ruff --progress report
+      - name: Verify host image loading
+        run: |
+          nix develop --no-write-lock-file --command just docker-build
+          docker image inspect agents:local --format '{{.Id}}'
