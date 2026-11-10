@@ -57,7 +57,7 @@ syntax. The beta version is an explicit compatibility choice to validate.
 | CLI Ruff, formatting, pytest | Independent checks using synthetic Safari fixtures | macOS installation, Full Disk Access and launchd |
 | Frontend lint, build, Vitest | Shared frozen install; independent checks; static output as a Directory | Developer hot reload can keep current recipes |
 | Datadog analysis | Pinned tool, report object and policy check | SARIF upload permissions and GitHub upload action |
-| Actionlint and OpenGrep | Portable checks and report generation in a later increment | GitHub event context and report upload |
+| Actionlint and OpenGrep | Reusable portable checks and report generation | GitHub event context and report upload |
 | Production image and smoke | Return a Container, migrate disposable DB, start app service, run smoke client | Release trigger and AWS OIDC credential acquisition |
 | Trivy | Scan the built artifact with explicit advisory refresh policy | SARIF publication and scheduled release-scan triggers |
 | Multiarch release | Build amd64/arm64 variants and publish exact digest | AWS authorization; Terraform deployment through `just deploy` |

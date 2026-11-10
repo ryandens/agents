@@ -2,7 +2,8 @@
 
 Dagger runs application checks, protected installs, production builds and smoke
 tests using the same code locally and in GitHub Actions. The application module is
-in `.dagger`; independent Socket and Datadog modules live under `dagger/`.
+in `.dagger`; independent Socket, Datadog, OpenGrep, Actionlint and Renovate config modules live
+under `dagger/`.
 
 ## Running locally
 
@@ -12,13 +13,14 @@ replacing an existing CLI. The SDK is separately pinned in `dagger.toml`, and
 `dagger.lock` records resolved sources and images. Dagger Cloud is optional.
 
 ```sh
-just check                         # Application, image, pipeline and Datadog checks
+just check                         # Application, image, workflow and security checks
 just backend-check                 # Ruff, format, pytest, fresh Python Socket check
 just cli-check
 just frontend-check
 just docker-check                  # Both architectures and native smoke test
 just dagger-check --check backend-test
 just datadog-check                  # SARIF and status under reports/datadog
+just opengrep-check                 # SARIF and status under reports/opengrep
 just dagger-generate               # After changing a module's exposed API
 ```
 
@@ -41,6 +43,8 @@ Linux tests use synthetic Safari databases and need no privacy permissions.
 ## What the pipeline checks
 
 - Independent Ruff, format, pytest, ESLint, Vitest and frontend-build checks.
+- Actionlint, ShellCheck and pyflakes for GitHub Actions workflows.
+- Renovate repository configuration validation using its pinned official image.
 - Postgres 17 through `TEST_DATABASE_URL`; no host Docker socket is passed to tests.
 - Fresh Socket checks for backend, CLI build dependencies and frontend downloads.
 - Both production image architectures using `backend/Dockerfile` as the build source.
@@ -76,12 +80,17 @@ The same job exports Datadog results, uploads SARIF and enforces scan policy.
 These steps still run after an application check fails. On main, it also exports
 the production image for Trivy and uploads its findings. Scanner or upload failures
 fail the job; an earlier failed check remains a failure after reports are uploaded.
-Actionlint and OpenGrep retain their existing jobs; Promptfoo and Renovate retain
-their own workflows. The first adoption layer's shadow status is temporary.
+OpenGrep uses the same report/export/policy pattern in this job. PR source selection
+is owned by `scripts/prepare_opengrep_scan.py`, while local and main scans cover all
+source. Actionlint and Renovate config validation are discovered checks in the main
+suite. Promptfoo retains its own workflow. The first adoption layer's shadow status
+is temporary.
 
 Require `dagger` in branch protection when promoting the second adoption layer,
 and remove retired backend/CLI statuses; the frontend, Datadog and Docker statuses
-retire in their respective layers. Repository rules must match the layer being merged.
+retire in their respective layers. Actionlint and OpenGrep statuses retire in the
+final module-extraction layer; Renovate validation also moves into `dagger`.
+Repository rules must match the layer being merged.
 
 Tagged releases run the full Dagger check suite before acquiring AWS OIDC credentials.
 The explicit `publish` function receives the ECR password as a Dagger Secret and
@@ -97,9 +106,11 @@ module API, run `just dagger-generate`, inspect the generated diff, and run the 
 Renovate excludes vendored SDK/client code from dependency extraction. Socket updates
 group versions and both artifact digests; Datadog uses a version/digest image pin.
 
-The [Socket module](../dagger/socket-firewall/README.md) and
-[Datadog module](../dagger/datadog-static-analyzer/README.md) have no application
-dependencies. To publish later, move a complete module directory into the chosen
+The [Socket](../dagger/socket-firewall/README.md),
+[Datadog](../dagger/datadog-static-analyzer/README.md),
+[OpenGrep](../dagger/opengrep/README.md) and
+[Actionlint](../dagger/actionlint/README.md) and
+[Renovate config](../dagger/renovate-config/README.md) modules have no application dependencies. To publish later, move a complete module directory into the chosen
 Daggerverse, add its fixtures to that repository's CI harness, choose a license and
 module-scoped release tags, then replace the app client's local dependency address
 with the published Git reference and regenerate. No external repository is created
@@ -109,7 +120,8 @@ Design rationale and reference research are in [the adoption proposal](dagger-ad
 
 ## Stack
 
-Merge order: Socket/CLI → backend → frontend → Datadog/images → releases.
+Merge order: Socket/CLI → backend → frontend → Datadog/images → releases →
+OpenGrep/Actionlint/Renovate module extraction.
 Each PR targets its predecessor; retarget the next PR to main after merging.
 After squash-merging a layer, restack/rebase descendants onto updated main before
 retargeting; merge commits preserve the existing ancestry.
