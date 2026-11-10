@@ -182,7 +182,7 @@ creds = service_account.IDTokenCredentials.from_service_account_file(
     "key.json", target_audience="https://agents.<your-tailnet>.ts.net"
 )
 creds.refresh(Request())
-print(creds.token)   # send as: Authorization: Bearer <token>
+print(creds.token)  # send as: Authorization: Bearer <token>
 ```
 
 The two lists are kept separate on purpose. `ALLOWED_EMAILS` decides who may *sign in*;
