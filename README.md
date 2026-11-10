@@ -31,7 +31,7 @@ Start with `just check`; `just dagger-generate` refreshes module clients after A
 - pnpm (the exact standalone version is pinned in `frontend/package.json`)
 - [Socket Firewall](https://socket.dev/docs/socket-firewall) (`sfw`)
 - Docker — runs the local Postgres, and the one the tests start
-- [Dagger](https://docs.dagger.io/install/) — the repository wrapper selects the pinned CLI/engine
+- [Nix](https://nixos.org/download/) — `nix develop` supplies the pinned Dagger CLI and pipeline tools
 - An Anthropic API key
 
 ## Python workspace

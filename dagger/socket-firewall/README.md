@@ -50,6 +50,6 @@ The contract fixture verifies argument/environment preservation and that a block
 install fails. Fresh checks exercise the real Socket binaries with uv and pnpm.
 They do not download a known-malicious package as a test.
 
-Tested with Dagger beta.25 and Python SDK v1.7.0, generating the beta.24 API.
+Tested with Dagger beta.25 and Python SDK v1.7.0 using the native Python runtime.
 Before publishing, choose the module's license, move its tests into the publishing
 repository's harness, and create an independent module release tag.
