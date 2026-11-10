@@ -49,6 +49,22 @@ def _source(source: Directory, include: list[str]) -> Directory:
     )
 
 
+def _production_source(source: Directory) -> Directory:
+    """Share the Dockerfile context between frontend exports and release images."""
+    return _source(
+        source,
+        [
+            "backend/**",
+            "frontend/**",
+            "pyproject.toml",
+            "uv.lock",
+            "cli/pyproject.toml",
+            ".dockerignore",
+            "dagger/socket-firewall/src/socket_firewall/checksums.sha256",
+        ],
+    )
+
+
 async def _image(source: Directory, stage: str) -> str:
     dockerfile = await source.file("backend/Dockerfile").contents()
     match = re.search(
@@ -481,10 +497,11 @@ class AgentsCi:
     @function
     async def frontend_dist(self) -> Directory:
         """The static export consumed by the production image."""
+        await self.socket_frontend()
         return (
-            (await self._frontend())
-            .with_exec(["pnpm", "run", "build"])
-            .directory("/src/frontend/out")
+            _production_source(self.source)
+            .docker_build(dockerfile="backend/Dockerfile", target="frontend")
+            .directory("/src/out")
         )
 
     @check
@@ -609,18 +626,9 @@ class AgentsCi:
             raise ValueError(f"unsupported release platform: {platform}")
         await self.socket_python()
         await self.socket_frontend()
-        return _source(
-            self.source,
-            [
-                "backend/**",
-                "frontend/**",
-                "pyproject.toml",
-                "uv.lock",
-                "cli/pyproject.toml",
-                ".dockerignore",
-                "dagger/socket-firewall/src/socket_firewall/checksums.sha256",
-            ],
-        ).docker_build(dockerfile="backend/Dockerfile", platform=Platform(platform))
+        return _production_source(self.source).docker_build(
+            dockerfile="backend/Dockerfile", platform=Platform(platform)
+        )
 
     @check
     @function

@@ -76,6 +76,11 @@ the fresh installs within the invocation. A newly blocked policy therefore stops
 cached workloads before they execute. The same gates apply to image export and
 publishing. Failure contracts exercise these dependency edges.
 
+`frontend-dist` exports the production Dockerfile's `frontend` stage. The frontend
+build check and both release images use the same filtered Docker build context,
+allowing the engine to reuse that stage instead of compiling a separate Dagger
+frontend build. Frontend lint and tests retain their shared native test container.
+
 Every uv/pnpm install also runs through Socket, including production Dockerfile
 installs. These gates cover application registry dependencies; base images, OS
 packages and third-party module runtimes have their own supply chains. Socket is
