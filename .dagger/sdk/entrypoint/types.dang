@@ -3,7 +3,7 @@
 type ModuleTypes {
   pub all: [TypeDef!]! {
     [
-      typeDef.withObject("AgentsCi", description: "Application checks, Datadog reports and production images.")
+      typeDef.withObject("AgentsCi", description: "Portable application checks, reports, images and release publishing.")
         .withField("source", typeDef.withObject("Directory"), description: "A directory.")
         .withFunction(
           function("backend_format", typeDef.withOptional(true).withKind(TypeDefKind.VOID_KIND))
@@ -77,6 +77,15 @@ type ModuleTypes {
           function("postgres", typeDef.withObject("Service"))
             .withDescription("A disposable database matching the application's PostgreSQL major.")
             .withArg("database", typeDef.withKind(TypeDefKind.STRING_KIND), defaultValue: ("\"agents\"" :: Dagger.JSON!))
+        )
+        .withFunction(
+          function("publish", typeDef.withKind(TypeDefKind.STRING_KIND))
+            .withDescription("Publish both release architectures and return the manifest digest address.")
+            .withCachePolicy(FunctionCachePolicy.Never)
+            .withArg("address", typeDef.withKind(TypeDefKind.STRING_KIND))
+            .withArg("registry", typeDef.withKind(TypeDefKind.STRING_KIND))
+            .withArg("password", typeDef.withObject("Secret"), description: "A reference to a secret value, which can be handled more safely\nthan the value itself.")
+            .withArg("username", typeDef.withKind(TypeDefKind.STRING_KIND), defaultValue: ("\"AWS\"" :: Dagger.JSON!))
         )
         .withFunction(
           function("smoke", typeDef.withOptional(true).withKind(TypeDefKind.VOID_KIND))
