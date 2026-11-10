@@ -43,6 +43,16 @@ def _source(source: Directory, include: list[str]) -> Directory:
     )
 
 
+async def _image(source: Directory, stage: str) -> str:
+    dockerfile = await source.file("backend/Dockerfile").contents()
+    match = re.search(
+        rf"^FROM (?:--platform=\S+ )?(\S+) AS {stage}$", dockerfile, re.MULTILINE
+    )
+    if match is None:
+        raise ValueError(f"missing Dockerfile stage: {stage}")
+    return match[1]
+
+
 async def _uv_image(source: Directory) -> str:
     dockerfile = await source.file("backend/Dockerfile").contents()
     match = re.search(r"COPY --from=(ghcr.io/astral-sh/uv:\S+) /uv ", dockerfile)
@@ -90,13 +100,50 @@ async def _python(source: Directory, package: str, *, fresh: bool = False) -> Co
     return socket_firewall().run(ctr, args)
 
 
+async def _frontend(source: Directory, *, fresh: bool = False) -> Container:
+    ctr = (
+        core()
+        .container()
+        .from_(await _image(source, "frontend"))
+        .with_directory(
+            "/opt/pnpm",
+            core()
+            .container()
+            .from_(await _image(source, "pnpm"))
+            .directory("/opt/pnpm"),
+        )
+        .with_env_variable("PATH", "/opt/pnpm:$PATH", expand=True)
+        .with_env_variable("CI", "true")
+        .with_workdir("/src/frontend")
+        .with_directory(
+            "/src",
+            _source(
+                source,
+                [
+                    "frontend/package.json",
+                    "frontend/pnpm-lock.yaml",
+                    "frontend/pnpm-workspace.yaml",
+                ],
+            ),
+        )
+    )
+    if fresh:
+        ctr = ctr.with_env_variable("SOCKET_CHECK_RUN", uuid.uuid4().hex)
+    else:
+        ctr = ctr.with_mounted_cache("/pnpm/store", core().cache_volume("agents-pnpm"))
+    ctr = socket_firewall().run(
+        ctr, ["pnpm", "install", "--frozen-lockfile", "--store-dir", "/pnpm/store"]
+    )
+    return ctr.with_directory("/src", _source(source, ["frontend/**"]))
+
+
 def _run_python(ctr: Container, package: str, args: list[str]) -> Container:
     return ctr.with_exec(["uv", "run", "--no-sync", "--package", package, *args])
 
 
 @object_type
 class AgentsCi:
-    """Backend and CLI checks over explicit source inputs."""
+    """Portable application checks over explicit source inputs."""
 
     source: Directory = field()
 
@@ -239,6 +286,30 @@ class AgentsCi:
         ).stdout()
 
     @check
+    @function
+    async def frontend_lint(self) -> None:
+        await (await _frontend(self.source)).with_exec(["pnpm", "run", "lint"]).stdout()
+
+    @check
+    @function
+    async def frontend_test(self) -> None:
+        await (await _frontend(self.source)).with_exec(["pnpm", "run", "test"]).stdout()
+
+    @function
+    async def frontend_dist(self) -> Directory:
+        """The static export consumed by the production image."""
+        return (
+            (await _frontend(self.source))
+            .with_exec(["pnpm", "run", "build"])
+            .directory("/src/frontend/out")
+        )
+
+    @check
+    @function
+    async def frontend_build(self) -> None:
+        await (await self.frontend_dist()).sync()
+
+    @check
     @function(cache="never")
     async def socket_python(self) -> None:
         """Recheck Python downloads with an empty cache and a unique execution key."""
@@ -272,3 +343,9 @@ class AgentsCi:
     async def socket_cli(self) -> None:
         """Also exercise the CLI's package and isolated build dependencies."""
         await (await _python(self.source, "safari-history-export", fresh=True)).stdout()
+
+    @check
+    @function(cache="never")
+    async def socket_frontend(self) -> None:
+        """Recheck Node downloads without a package-store cache mount."""
+        await (await _frontend(self.source, fresh=True)).stdout()

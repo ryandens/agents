@@ -29,38 +29,6 @@ jobs:
         id: checks
         run: scripts/dagger check -j 2 --progress report
 
-  frontend:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-
-      - name: Setup Just
-        uses: taiki-e/install-action@66f567e72f7d264686a8d5f09f38f0829b4feb80 # just
-
-      - name: Setup Node
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
-        with:
-          node-version: 26
-
-      # Socket Firewall: routes package downloads through a local proxy that
-      # blocks known-malicious packages at install time. No API key needed.
-      - uses: socketdev/action@ba6de6cc0565af1f42295590380973573297e31f # v1.3.2
-        with:
-          mode: firewall-free
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6
-        with:
-          package_json_file: frontend/package.json
-          cache: true
-          cache_dependency_path: frontend/pnpm-lock.yaml
-
-      - name: Install dependencies
-        run: just frontend-install
-
-      - name: Check
-        run: just frontend-check
-
   # Lints the GitHub Actions workflow files themselves.
   # https://github.com/rhysd/actionlint/blob/main/docs/usage.md#use-actionlint-on-github-actions
   actionlint:
