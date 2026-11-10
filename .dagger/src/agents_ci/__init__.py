@@ -84,11 +84,13 @@ async def _python_base(source: Directory) -> Container:
     )
 
 
-async def _python(source: Directory, package: str, *, fresh: bool = False) -> Container:
+async def _python(
+    source: Directory, package: str, *, policy_run: str | None = None
+) -> Container:
     ctr = await _python_base(source)
-    if fresh:
+    if policy_run is not None:
         ctr = ctr.with_env_variable(
-            "SOCKET_CHECK_RUN", uuid.uuid4().hex
+            "SOCKET_CHECK_RUN", policy_run
         ).with_env_variable("UV_NO_CACHE", "1")
     else:
         ctr = ctr.with_mounted_cache(
@@ -106,7 +108,9 @@ async def _python(source: Directory, package: str, *, fresh: bool = False) -> Co
     return socket_firewall().run(ctr, args)
 
 
-async def _frontend(source: Directory, *, fresh: bool = False) -> Container:
+async def _frontend(
+    source: Directory, *, policy_run: str | None = None
+) -> Container:
     ctr = (
         core()
         .container()
@@ -133,8 +137,8 @@ async def _frontend(source: Directory, *, fresh: bool = False) -> Container:
             ),
         )
     )
-    if fresh:
-        ctr = ctr.with_env_variable("SOCKET_CHECK_RUN", uuid.uuid4().hex)
+    if policy_run is not None:
+        ctr = ctr.with_env_variable("SOCKET_CHECK_RUN", policy_run)
     else:
         ctr = ctr.with_mounted_cache("/pnpm/store", core().cache_volume("agents-pnpm"))
     ctr = socket_firewall().run(
@@ -152,6 +156,7 @@ class AgentsCi:
     """Portable application checks, reports, images and release publishing."""
 
     source: Directory = field()
+    policy_run: str = field()
 
     @classmethod
     async def create(cls, ws: Workspace) -> Self:
@@ -185,7 +190,18 @@ class AgentsCi:
             .as_workspace()
             .directory("/")
         )
-        return cls(source=source)
+        return cls(source=source, policy_run=uuid.uuid4().hex)
+
+    async def _python(self, package: str) -> Container:
+        if package == "agents":
+            await self.socket_python()
+        else:
+            await self.socket_cli()
+        return await _python(self.source, package)
+
+    async def _frontend(self) -> Container:
+        await self.socket_frontend()
+        return await _frontend(self.source)
 
     @check
     @function
@@ -203,6 +219,7 @@ class AgentsCi:
     @function
     async def module_contracts(self) -> None:
         """Blocked installs and failed scans must preserve failure and report semantics."""
+        await self._assert_policy_gates()
         base = core().container().from_("alpine:3.22").with_workdir("/work")
         fake_socket = _source(self.source, ["dagger/socket-firewall/tests/**"]).file(
             "dagger/socket-firewall/tests/fake-sfw.sh"
@@ -350,6 +367,48 @@ class AgentsCi:
         else:
             raise AssertionError("OpenGrep crash fabricated a report")
 
+    async def _assert_policy_gates(self) -> None:
+        """A newly blocked policy must stop even an otherwise cached workload."""
+        class PolicyBlockedError(Exception):
+            pass
+
+        class Blocked(AgentsCi):
+            async def socket_python(self) -> None:
+                raise PolicyBlockedError("python")
+
+            async def socket_cli(self) -> None:
+                raise PolicyBlockedError("cli")
+
+            async def socket_frontend(self) -> None:
+                raise PolicyBlockedError("frontend")
+
+        class FrontendBlocked(Blocked):
+            async def socket_python(self) -> None:
+                pass
+
+        # Empty source makes any attempt to construct an application workload fail
+        # differently, so a missing dependency gate cannot silently pass this test.
+        blocked = Blocked(source=core().directory(), policy_run="fixture")
+        frontend_blocked = FrontendBlocked(
+            source=core().directory(), policy_run="fixture"
+        )
+        for operation, expected in [
+            (blocked.backend_test, "python"),
+            (blocked.cli_test, "cli"),
+            (blocked.frontend_lint, "frontend"),
+            (blocked.frontend_test, "frontend"),
+            (blocked.frontend_dist, "frontend"),
+            (blocked.image, "python"),
+            (frontend_blocked.image, "frontend"),
+            (blocked.smoke, "python"),
+        ]:
+            try:
+                await operation()
+            except PolicyBlockedError as error:
+                assert str(error) == expected
+            else:
+                raise AssertionError("workload bypassed its Socket policy gate")
+
     @check
     @function
     async def socket_pins(self) -> None:
@@ -392,7 +451,7 @@ class AgentsCi:
     @function
     async def backend_test(self) -> None:
         ctr = (
-            (await _python(self.source, "agents"))
+            (await self._python("agents"))
             .with_service_binding("postgres", self.postgres())
             .with_env_variable(
                 "TEST_DATABASE_URL",
@@ -405,7 +464,7 @@ class AgentsCi:
     @function
     async def cli_test(self) -> None:
         await _run_python(
-            await _python(self.source, "safari-history-export"),
+            await self._python("safari-history-export"),
             "safari-history-export",
             ["pytest", "cli"],
         ).stdout()
@@ -413,18 +472,18 @@ class AgentsCi:
     @check
     @function
     async def frontend_lint(self) -> None:
-        await (await _frontend(self.source)).with_exec(["pnpm", "run", "lint"]).stdout()
+        await (await self._frontend()).with_exec(["pnpm", "run", "lint"]).stdout()
 
     @check
     @function
     async def frontend_test(self) -> None:
-        await (await _frontend(self.source)).with_exec(["pnpm", "run", "test"]).stdout()
+        await (await self._frontend()).with_exec(["pnpm", "run", "test"]).stdout()
 
     @function
     async def frontend_dist(self) -> Directory:
         """The static export consumed by the production image."""
         return (
-            (await _frontend(self.source))
+            (await self._frontend())
             .with_exec(["pnpm", "run", "build"])
             .directory("/src/frontend/out")
         )
@@ -438,29 +497,19 @@ class AgentsCi:
     @function(cache="never")
     async def socket_python(self) -> None:
         """Recheck Python downloads with an empty cache and a unique execution key."""
-        await (await _python(self.source, "agents", fresh=True)).stdout()
-
-    @check
-    @function
-    async def pipeline_tools(self) -> None:
-        """Test the optional PR scan selection tools."""
-        ctr = await _python(self.source, "agents")
-        ctr = ctr.with_exec(["apt-get", "update"]).with_exec(
-            ["apt-get", "install", "-y", "--no-install-recommends", "git"]
-        )
-        await _run_python(ctr, "agents", ["pytest", "scripts"]).stdout()
+        await (await _python(self.source, "agents", policy_run=self.policy_run)).stdout()
 
     @check
     @function(cache="never")
     async def socket_cli(self) -> None:
         """Also exercise the CLI's package and isolated build dependencies."""
-        await (await _python(self.source, "safari-history-export", fresh=True)).stdout()
+        await (await _python(self.source, "safari-history-export", policy_run=self.policy_run)).stdout()
 
     @check
     @function(cache="never")
     async def socket_frontend(self) -> None:
         """Recheck Node downloads without a package-store cache mount."""
-        await (await _frontend(self.source, fresh=True)).stdout()
+        await (await _frontend(self.source, policy_run=self.policy_run)).stdout()
 
     @check
     @function
@@ -549,10 +598,12 @@ class AgentsCi:
         )
 
     @function
-    def image(self, platform: str = "linux/amd64") -> Container:
+    async def image(self, platform: str = "linux/amd64") -> Container:
         """Build the authoritative production Dockerfile with protected installs."""
         if platform not in ("linux/amd64", "linux/arm64"):
             raise ValueError(f"unsupported release platform: {platform}")
+        await self.socket_python()
+        await self.socket_frontend()
         return _source(
             self.source,
             [
@@ -569,12 +620,12 @@ class AgentsCi:
     @check
     @function
     async def image_amd64(self) -> None:
-        await self.image("linux/amd64").sync()
+        await (await self.image("linux/amd64")).sync()
 
     @check
     @function
     async def image_arm64(self) -> None:
-        await self.image("linux/arm64").sync()
+        await (await self.image("linux/arm64")).sync()
 
     @check
     @function
@@ -582,7 +633,7 @@ class AgentsCi:
         """Run migrations and all frontend/API/CLI seams against the release image."""
         # A distinct service definition keeps destructive pytest fixtures isolated.
         db = self.postgres(database="smoke")
-        image = self.image(
+        image = await self.image(
             "linux/arm64"
             if str(await core().default_platform()).startswith("linux/arm64")
             else "linux/amd64"
@@ -607,7 +658,7 @@ class AgentsCi:
         ).sync()
         app = configured.with_exposed_port(8080).as_service(use_entrypoint=True)
         client = (
-            (await _python(self.source, "safari-history-export"))
+            (await self._python("safari-history-export"))
             .with_directory("/src", _source(self.source, ["scripts/**"]))
             .with_env_variable("UV_NO_SYNC", "1")
             .with_env_variable("SMOKE_REQUIRE_ALL", "1")
@@ -629,8 +680,8 @@ class AgentsCi:
             .publish(
                 address,
                 platform_variants=[
-                    self.image("linux/amd64"),
-                    self.image("linux/arm64"),
+                    await self.image("linux/amd64"),
+                    await self.image("linux/arm64"),
                 ],
             )
         )

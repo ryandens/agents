@@ -58,26 +58,33 @@ Linux tests use synthetic Safari databases and need no privacy permissions.
 - Both production image architectures using `backend/Dockerfile` as the build source.
 - Alembic migration and frontend/API/CLI smoke checks with a separate disposable
   database. Any smoke skip fails this check.
-- Reusable-module failure contracts, Socket pin consistency, pipeline lint/tests,
+- Reusable-module failure contracts, Socket pin consistency,
   and generated-code staleness.
 
 Datadog and OpenGrep also expose report-producing commands so CI can upload
 findings even when policy fails. `dagger api call datadog-report export --path
 reports/datadog` (or `opengrep-report`) exports SARIF, logs and policy status. A
 successful export does not mean policy passed: read `exit-code` or run the check.
-The analyzer image needs no Datadog API/application keys. Optional source-selection
-scripts remain available for ad hoc diff scans; the standard suite scans all source.
+The analyzer image needs no Datadog API/application keys. The standard suite and report exports scan all source; there is no separate PR-diff
+selection layer.
 
-Normal builds cache dependencies before copying source. Fresh Socket checks use
-unique execution keys and empty package caches; cached builds alone do not recheck
-current Socket policy. The Dockerfile also verifies and invokes Socket for production
-installs. Socket is excluded from the final runtime image.
+Normal builds cache dependencies before copying source. Every application test,
+frontend build and image operation first awaits the relevant fresh Socket policy
+check. A random key captured when the app module is created and empty package
+caches force a policy refresh; all callers share that key and Dagger deduplicates
+the fresh installs within the invocation. A newly blocked policy therefore stops
+cached workloads before they execute. The same gates apply to image export and
+publishing. Failure contracts exercise these dependency edges.
 
-The app constructor receives the caller's Workspace and captures a scoped,
-content-addressed source Directory. That Directory is an explicit receiver field,
-so changes outside the module invalidate affected functions without relying on an
-ambient workspace lookup. Functions and container operations still reuse unchanged
-inputs. Fresh Socket checks and publishing explicitly disable function caching.
+Every uv/pnpm install also runs through Socket, including production Dockerfile
+installs. These gates cover application registry dependencies; base images, OS
+packages and third-party module runtimes have their own supply chains. Socket is
+excluded from the final runtime image.
+
+The app constructor captures a scoped, content-addressed source Directory and a
+fresh policy key as explicit receiver fields. The policy key refreshes the gates
+for each invocation, while unchanged workload container operations remain cached.
+Publishing explicitly disables function caching.
 
 ## CI and releases
 
