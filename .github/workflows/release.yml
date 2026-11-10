@@ -40,6 +40,6 @@ jobs:
           echo "::add-mask::$ECR_PASSWORD"
           nix develop --no-write-lock-file --command dagger api call publish \
             --address "$ECR_REGISTRY/$ECR_REPOSITORY:$GITHUB_REF_NAME" \
-            --registry "$ECR_REGISTRY" --password env:ECR_PASSWORD \
+            --registry "$ECR_REGISTRY" --password env://ECR_PASSWORD \
             --progress report > "$RUNNER_TEMP/published-image.txt"
           printf 'Published image: %s\n' "$(cat "$RUNNER_TEMP/published-image.txt")" >> "$GITHUB_STEP_SUMMARY"
