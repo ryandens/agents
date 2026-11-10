@@ -4,7 +4,7 @@ The store is almost entirely SQL, so a fake would test the fake. These tests run
 a Postgres container started once per session — the same engine Aurora runs in
 production, and close enough in version that behaviour differences are not a concern.
 
-Docker is therefore a prerequisite for `just backend-test`. Set TEST_DATABASE_URL to
+Docker is therefore a prerequisite for host pytest runs. Set TEST_DATABASE_URL to
 point at a server you already have instead; note that the fixtures TRUNCATE between
 tests, so do not point it at a database holding anything you want to keep.
 """

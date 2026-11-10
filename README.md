@@ -18,10 +18,10 @@ An AI-powered meal planning and kitchen management app. Chat with the agent to p
 | Database auth | RDS IAM tokens in production (no stored password); password locally |
 | Migrations | Alembic, hand-written SQL, applied as a separate deploy step |
 | Package managers | `uv` (backend, cli), `pnpm` (frontend) |
-| Task runner | `just` |
+| Automation | Dagger; `just` for host operations |
 
 Checks, production builds and CI run through [the Dagger pipeline](docs/dagger.md).
-Start with `just check`; `just dagger-generate` refreshes module clients after API changes.
+Start with `dagger check`; `dagger generate -y` applies Ruff fixes and refreshes module clients.
 
 ## Prerequisites
 
@@ -182,7 +182,7 @@ creds = service_account.IDTokenCredentials.from_service_account_file(
     "key.json", target_audience="https://agents.<your-tailnet>.ts.net"
 )
 creds.refresh(Request())
-print(creds.token)   # send as: Authorization: Bearer <token>
+print(creds.token)  # send as: Authorization: Bearer <token>
 ```
 
 The two lists are kept separate on purpose. `ALLOWED_EMAILS` decides who may *sign in*;
@@ -655,12 +655,9 @@ versions pinned to commits and maintained by Renovate.
 just dev            # start both servers with hot-reload
 just serve          # build the frontend and serve everything from :8000, like production
 just docker-run     # build and run the production image on :8080
-just docker-check   # build the production image and smoke-test it (mirrors the CI docker job)
-just check          # run all checks (mirrors CI)
-
-just backend-test   # pytest (starts a throwaway Postgres container)
-just backend-lint   # ruff check
-just backend-fmt    # ruff format --check
+dagger check -j 2 --progress report # all checks, including scanners, lint and formatting
+dagger generate -y                # apply Ruff fixes/formatting and SDK updates
+dagger check --generated=false --check backend-test
 
 just db-up          # local Postgres on :5432
 just db-reset       # wipe it and start clean
@@ -669,35 +666,25 @@ just db-psql        # psql shell on it
 just db-tunnel      # forward a local port to Aurora through the instance (SSM)
 just db-bootstrap   # one-time: create the IAM-authenticated role in Aurora
 
-just frontend-test  # vitest
-just frontend-lint  # eslint
-just frontend-build # next build (type-check + compile)
-
-just cli-test       # pytest
-just cli-lint       # ruff check
-just cli-fmt        # ruff format --check
+dagger check --generated=false --check frontend-test --check frontend-lint
+just frontend-build # materialize the static export for host serving
+dagger check --generated=false --check cli-test
 ```
 
 ### How the tests use Postgres
 
-`just check`, `just backend-check`, and `just backend-test` verify that Docker is
-available before running their checks. If Docker is stopped or inaccessible, they
-exit with startup guidance and Docker's error. This preflight is skipped when
-`TEST_DATABASE_URL` is set to use an existing test database.
+Dagger provisions disposable Postgres 17 services for backend tests and image smoke
+tests. No host database or Docker socket is passed into the test containers. Start
+Docker before running Dagger. The store is almost entirely SQL, so tests use the
+same PostgreSQL major version as Aurora.
 
-The store is almost entirely SQL, so testing it against a fake would test the fake.
-`backend/conftest.py` starts a `postgres:17-alpine` container once per session with
-[testcontainers](https://testcontainers.com/) and truncates between tests — the same
-major version Aurora runs. That makes Docker a prerequisite for `just backend-test`. Set
-`TEST_DATABASE_URL` to use a server you already have instead, bearing in mind the
-fixtures truncate, so do not point it at anything you want to keep.
+When running pytest directly on the host, `backend/conftest.py` starts Postgres
+through [testcontainers](https://testcontainers.com/). Set `TEST_DATABASE_URL` to use
+an existing test database; fixtures truncate it, so use a disposable database.
 
-`just smoke` starts a Postgres container of its own — separate from the `just db-up` one,
-on a private Docker network, empty every run — and points the image at it. That is the
-seam neither unit test can see: whether the built image can really connect and apply its
-migrations, rather than whether the SQL is right. It runs `alembic upgrade head` from the
-image first, exactly as `agents-migrate.service` does on the instance. `just docker-check` builds the
-image and runs it, which is what the CI `docker` job does.
+`dagger check --generated=false --check smoke` builds the production image, runs
+`alembic upgrade head`, and checks the frontend/API/CLI seams against a separate
+Postgres service. This is the same smoke check CI runs.
 
 `scripts/smoke_test.py` checks a running container end to end: that `/health` reports a
 database it actually reached, `/` serves the React app, `/api/*` still reaches FastAPI

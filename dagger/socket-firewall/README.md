@@ -42,8 +42,8 @@ the release and both GitHub-provided digests together.
 From this repository:
 
 ```sh
-just dagger-check --generated=false --check module-contracts --check socket-pins
-just dagger-check --generated=false --check socket-python --check socket-cli --check socket-frontend
+dagger check --generated=false --check module-contracts --check socket-pins
+dagger check --generated=false --check socket-python --check socket-cli --check socket-frontend
 ```
 
 The contract fixture verifies argument/environment preservation and that a blocked

@@ -351,10 +351,5 @@ message; if there is no run logged, check `launchctl print` and the error log.
 
 ## Development
 
-```sh
-just cli-check      # lint, format check, tests
-just cli-test
-```
-
-The tests build a synthetic database with Safari's schema and timestamp convention, so
-they need neither Safari nor Full Disk Access and run in CI.
+See the [development guide](../docs/dagger.md) for setup and checks. CLI tests use
+synthetic Safari data and do not require access to your browsing history.
