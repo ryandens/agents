@@ -3,8 +3,20 @@
 type ModuleTypes {
   pub all: [TypeDef!]! {
     [
-      typeDef.withObject("AgentsCi", description: "Additive CLI checks and reusable Socket tooling.")
+      typeDef.withObject("AgentsCi", description: "Backend and CLI checks over explicit source inputs.")
         .withField("source", typeDef.withObject("Directory"), description: "A directory.")
+        .withFunction(
+          function("backend_format", typeDef.withOptional(true).withKind(TypeDefKind.VOID_KIND))
+            .withCheck
+        )
+        .withFunction(
+          function("backend_lint", typeDef.withOptional(true).withKind(TypeDefKind.VOID_KIND))
+            .withCheck
+        )
+        .withFunction(
+          function("backend_test", typeDef.withOptional(true).withKind(TypeDefKind.VOID_KIND))
+            .withCheck
+        )
         .withFunction(
           function("cli_format", typeDef.withOptional(true).withKind(TypeDefKind.VOID_KIND))
             .withCheck
@@ -28,8 +40,19 @@ type ModuleTypes {
             .withCheck
         )
         .withFunction(
+          function("postgres", typeDef.withObject("Service"))
+            .withDescription("A disposable database matching the application's PostgreSQL major.")
+            .withArg("database", typeDef.withKind(TypeDefKind.STRING_KIND), defaultValue: ("\"agents\"" :: Dagger.JSON!))
+        )
+        .withFunction(
           function("socket_cli", typeDef.withOptional(true).withKind(TypeDefKind.VOID_KIND))
             .withDescription("Also exercise the CLI's package and isolated build dependencies.")
+            .withCachePolicy(FunctionCachePolicy.Never)
+            .withCheck
+        )
+        .withFunction(
+          function("socket_python", typeDef.withOptional(true).withKind(TypeDefKind.VOID_KIND))
+            .withDescription("Recheck Python downloads with an empty cache and a unique execution key.")
             .withCachePolicy(FunctionCachePolicy.Never)
             .withCheck
         )

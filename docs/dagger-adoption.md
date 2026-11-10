@@ -53,7 +53,7 @@ syntax. The beta version is an explicit compatibility choice to validate.
 
 | Existing behavior | Proposed Dagger responsibility | Integration that stays outside |
 | --- | --- | --- |
-| Backend Ruff, formatting, pytest | Named checks; disposable Postgres 17 bound through `TEST_DATABASE_URL` | GitHub triggers and required check names |
+| Backend Ruff, formatting, pytest | Named checks; disposable Postgres 17 bound through `TEST_DATABASE_URL` | GitHub triggers and aggregate check policy |
 | CLI Ruff, formatting, pytest | Independent checks using synthetic Safari fixtures | macOS installation, Full Disk Access and launchd |
 | Frontend lint, build, Vitest | Shared frozen install; independent checks; static output as a Directory | Developer hot reload can keep current recipes |
 | Datadog analysis | Pinned tool, report object and policy check | SARIF upload permissions and GitHub upload action |
@@ -66,7 +66,9 @@ syntax. The beta version is an explicit compatibility choice to validate.
 Keep `just` as the convenient entry point. As checks migrate, recipes become thin
 Dagger invocations. Avoid maintaining the same build logic in just, YAML and Python.
 GitHub Actions should eventually orchestrate checkout, Dagger, credentials, artifacts
-and status publication. Preserve current branch protection requirements during rollout.
+and status publication. Use one Dagger job for migrated checks and let Dagger own
+check discovery, concurrency and detailed results. Promote its aggregate status in
+branch protection as native jobs retire; individual GitHub statuses are optional.
 
 ## Proposed reusable APIs
 

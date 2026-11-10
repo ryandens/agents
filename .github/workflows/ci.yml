@@ -6,70 +6,28 @@ on:
   pull_request:
 
 jobs:
-  # Needs a Docker daemon, which ubuntu-latest provides: the store tests run against a
-  # real Postgres that backend/conftest.py starts with testcontainers. A runner without
-  # Docker would fail collection rather than skip those tests.
-  backend:
+  dagger:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-
-      - name: Setup Just
-        uses: taiki-e/install-action@66f567e72f7d264686a8d5f09f38f0829b4feb80 # just
-
-      # Python version comes from .python-version, which uv reads itself.
-      - name: Install uv
-        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
-          version-file: pyproject.toml
-          resolution-strategy: lowest
+          persist-credentials: false
 
-      # Install the interpreter before enabling the package proxy. uv fetches Python
-      # runtimes from GitHub releases rather than a supported package registry.
-      - name: Install Python
-        run: uv python install "$(cat .python-version)"
+      - name: Read Dagger version
+        id: dagger-version
+        run: echo "version=$(cat .dagger-version)" >> "$GITHUB_OUTPUT"
 
-      - uses: socketdev/action@ba6de6cc0565af1f42295590380973573297e31f # v1.3.2
+      - name: Install Dagger
+        uses: dagger/dagger-for-github@b81317a976cb7f7125469707321849737cd1b3bc # v7
         with:
-          mode: firewall-free
+          version: ${{ steps.dagger-version.outputs.version }}
 
-      - name: Install dependencies
-        run: just backend-install
-
+      # Dagger discovers checks, shares dependencies and reports each result.
       - name: Check
-        run: just backend-check
-
-  # The Safari exporter. Its tests build a synthetic history database rather than
-  # reading a real one, so they need neither macOS nor Full Disk Access and run here.
-  cli:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-
-      - name: Setup Just
-        uses: taiki-e/install-action@66f567e72f7d264686a8d5f09f38f0829b4feb80 # just
-
-      # Python version comes from .python-version, which uv reads itself.
-      - name: Install uv
-        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
-        with:
-          version-file: pyproject.toml
-          resolution-strategy: lowest
-
-      # As in the backend job, keep uv's GitHub-hosted interpreter download outside
-      # the registry firewall and route the dependency sync itself through sfw.
-      - name: Install Python
-        run: uv python install "$(cat .python-version)"
-
-      - uses: socketdev/action@ba6de6cc0565af1f42295590380973573297e31f # v1.3.2
-        with:
-          mode: firewall-free
-
-      - name: Install dependencies
-        run: just cli-dev-install
-
-      - name: Check
-        run: just cli-check
+        id: checks
+        run: scripts/dagger check -j 2 --progress report
 
   frontend:
     runs-on: ubuntu-latest
