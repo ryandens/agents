@@ -10,10 +10,12 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      security-events: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
+          fetch-depth: 0
 
       - name: Read Dagger version
         id: dagger-version
@@ -28,6 +30,70 @@ jobs:
       - name: Check
         id: checks
         run: scripts/dagger check -j 2 --progress report
+
+      # Publish security results even when an application check failed.
+      - name: Prepare scan source
+        id: scan-source
+        if: ${{ !cancelled() }}
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            source="$(python3 scripts/prepare_datadog_scan.py "$BASE_SHA" "$HEAD_SHA")"
+          else
+            source="."
+          fi
+          echo "DDSA_INPUT=$source" >> "$GITHUB_ENV"
+
+      - name: Run static analysis and export report
+        id: datadog-scan
+        if: ${{ !cancelled() && steps.scan-source.outcome == 'success' }}
+        run: |
+          if [ "$DDSA_INPUT" = "." ]; then
+            scripts/dagger api call datadog-report export --path "$GITHUB_WORKSPACE/reports/datadog" --progress report
+          else
+            scripts/dagger api call datadog-report --source "$DDSA_INPUT" export --path "$GITHUB_WORKSPACE/reports/datadog" --progress report
+          fi
+
+      - name: Upload results to GitHub code scanning
+        if: ${{ !cancelled() && steps.datadog-scan.outcome == 'success' }}
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          sarif_file: reports/datadog/results.sarif
+          category: datadog-static-analyzer
+
+      - name: Enforce scan policy
+        if: ${{ !cancelled() && steps.datadog-scan.outcome == 'success' }}
+        run: |
+          cat reports/datadog/scan.log
+          exit "$(cat reports/datadog/exit-code)"
+
+      - name: Export image for vulnerability scanning
+        id: image-export
+        if: ${{ !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        run: scripts/dagger api call image --platform linux/amd64 export --path "$RUNNER_TEMP/agents.tar" --progress report
+
+      - name: Scan image for vulnerabilities
+        id: trivy
+        if: ${{ !cancelled() && steps.image-export.outcome == 'success' }}
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          # renovate: datasource=github-releases depName=aquasecurity/trivy
+          version: v0.76.2
+          scan-type: image
+          input: ${{ runner.temp }}/agents.tar
+          scanners: vuln
+          format: sarif
+          output: trivy-results.sarif
+          exit-code: '0'
+
+      - name: Upload Trivy results to GitHub code scanning
+        if: ${{ !cancelled() && steps.trivy.outcome == 'success' }}
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          sarif_file: trivy-results.sarif
+          category: trivy-container
 
   # Lints the GitHub Actions workflow files themselves.
   # https://github.com/rhysd/actionlint/blob/main/docs/usage.md#use-actionlint-on-github-actions
@@ -49,99 +115,6 @@ jobs:
       - name: Check workflow files
         run: ${{ steps.get_actionlint.outputs.executable }} -color
         shell: bash
-
-  # Datadog's static analyzer, run straight from its release archive rather than through
-  # DataDog/datadog-static-analyzer-github-action. The action also installs datadog-ci and
-  # uploads results, which needs DD_API_KEY/DD_APP_KEY org credentials this repo does not
-  # have. The analyzer binary ships its own rulesets and needs no credentials to scan, so
-  # the install logic below is lifted from that action's `Set up environment` and
-  # `Install datadog-static-analyzer` steps. Results go to GitHub code scanning instead.
-  datadog:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      security-events: write
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          # PR scans need both sides of the diff. Pushes to main still scan the full tree.
-          fetch-depth: 0
-
-      # Pinned rather than the action's `releases/latest`, which silently changes the
-      # analyzer and its bundled rulesets underneath us — a new ruleset could turn CI
-      # red on an unrelated PR. Renovate keeps the version in lockstep with upstream
-      # release tags; see the customManager in renovate.json.
-      - name: Install datadog-static-analyzer
-        env:
-          DDSA_VERSION: 0.9.11
-        run: |
-          case "${{ runner.arch }}" in
-            X64)   DDSA_ARCH="x86_64" ;;
-            ARM64) DDSA_ARCH="aarch64" ;;
-            *)
-              echo "::error title=Unsupported architecture::${{ runner.arch }}"
-              exit 1
-              ;;
-          esac
-
-          if [ "${{ runner.os }}" = "Linux" ]; then
-            DDSA_OS="unknown-linux-gnu"
-          elif [ "${{ runner.os }}" = "macOS" ]; then
-            DDSA_OS="apple-darwin"
-          else
-            echo "::error title=Unsupported platform::${{ runner.os }}/${{ runner.arch }}"
-            exit 1
-          fi
-
-          mkdir -p "$HOME/.local/bin"
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-
-          filename="datadog-static-analyzer-$DDSA_ARCH-$DDSA_OS.zip"
-          tmpdir="$(mktemp -d)"
-          curl -fsSL --retry 5 "https://github.com/DataDog/datadog-static-analyzer/releases/download/$DDSA_VERSION/$filename" -o "$tmpdir/$filename"
-          unzip -q "$tmpdir/$filename" -d "$HOME/.local/bin"
-          chmod +x "$HOME/.local/bin/datadog-static-analyzer"
-
-      # Datadog's native --diff-aware mode requires Datadog credentials and previously
-      # uploaded Datadog results. This repo publishes to GitHub instead, so build a scan
-      # tree containing only added or modified PR files while preserving their paths.
-      - name: Prepare pull request diff
-        if: github.event_name == 'pull_request'
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          scan_dir="$RUNNER_TEMP/datadog-scan"
-          mkdir -p "$scan_dir"
-          cp code-security.datadog.yaml "$scan_dir/"
-
-          while IFS= read -r -d '' changed_file; do
-            if [ -f "$changed_file" ]; then
-              cp --parents -- "$changed_file" "$scan_dir/"
-            fi
-          done < <(git diff --name-only --diff-filter=ACMRTUXB -z "$BASE_SHA" "$HEAD_SHA")
-
-          echo "DDSA_INPUT=$scan_dir" >> "$GITHUB_ENV"
-
-      # Rules and path exclusions come from code-security.datadog.yaml at the repo root,
-      # so this run matches what the same binary reports locally.
-      - name: Run static analysis
-        run: |
-          datadog-static-analyzer \
-            -i "${DDSA_INPUT:-$GITHUB_WORKSPACE}" \
-            -o "$RUNNER_TEMP/results.sarif" \
-            -f sarif \
-            --print-violations \
-            --fail-on-any-violation error,warning
-
-      # Run even when the analyzer reports violations (and therefore exits nonzero) so
-      # those findings are still available in pull requests and the Security tab.
-      - name: Upload results to GitHub code scanning
-        if: ${{ !cancelled() }}
-        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
-        with:
-          sarif_file: ${{ runner.temp }}/results.sarif
-          category: datadog-static-analyzer
 
   # Full scans protect main; `opengrep ci` automatically uses GitHub's pull-request
   # context for diff-aware PR scans. With no backlog, every finding is a regression and
@@ -206,71 +179,3 @@ jobs:
         run: |
           echo "OpenGrep failed with exit code $OPENGREP_EXIT_CODE" >&2
           exit "$OPENGREP_EXIT_CODE"
-
-  # Builds the same image the release workflow ships and checks that one container
-  # really does serve the frontend at / and the API under /api, backed by a Postgres
-  # container `just smoke` starts alongside it. Neither the backend nor the frontend job
-  # can see those seams on its own.
-  docker:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      security-events: write
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-
-      - name: Setup Just
-        uses: taiki-e/install-action@66f567e72f7d264686a8d5f09f38f0829b4feb80 # just
-
-      # The smoke test runs the Safari exporter against the container to check that what
-      # the CLI posts is what the API accepts. Without uv those checks skip rather than
-      # fail, which would quietly leave that seam untested here.
-      - name: Install uv
-        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
-        with:
-          version-file: pyproject.toml
-          resolution-strategy: lowest
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
-
-      # Single-platform and loaded into the local daemon so the smoke test can run it;
-      # the release workflow is what builds multi-arch.
-      - name: Build image
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
-        with:
-          context: .
-          file: ./backend/Dockerfile
-          load: true
-          push: false
-          tags: agents:ci
-          cache-from: type=gha
-          # PRs reuse main's cache without paying the export cost. Populate it
-          # after merges; repeated PR builds won't retain their own new layers.
-          cache-to: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && 'type=gha,mode=max' || '' }}
-
-      # Scan the image only after it lands on main. SARIF feeds vulnerability findings
-      # to code scanning; deliberately omit Trivy's `format: github` and `github-pat`
-      # inputs, which are the separate path that submits an SBOM to Dependency Graph.
-      - name: Scan image for vulnerabilities
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-        with:
-          # renovate: datasource=github-releases depName=aquasecurity/trivy
-          version: v0.76.2
-          scan-type: image
-          image-ref: agents:ci
-          scanners: vuln
-          format: sarif
-          output: trivy-results.sarif
-          exit-code: '0'
-
-      - name: Upload Trivy results to GitHub code scanning
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
-        with:
-          sarif_file: trivy-results.sarif
-          category: trivy-container
-
-      - name: Smoke test
-        run: just smoke agents:ci

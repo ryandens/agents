@@ -34,19 +34,20 @@ builds reuse dependency layers. There is no retry without Socket.
 
 ## Updates and tests
 
-`checksums.sha256` pins the release artifacts. Renovate groups the module version
-and checksum metadata. Review the release and both GitHub-provided digests together.
-Production Dockerfile integration is deferred to the image-build step.
+`checksums.sha256` is shared with `backend/Dockerfile`, which verifies the downloaded
+binary before running it. Renovate groups the release, checksum metadata and
+Dockerfile URLs. `socket-pins` rejects version drift between them. Review changes to
+the release and both GitHub-provided digests together.
 
 From this repository:
 
 ```sh
-just dagger-check --generated=false --check module-contracts
-just dagger-check --generated=false --check socket-cli
+just dagger-check --generated=false --check module-contracts --check socket-pins
+just dagger-check --generated=false --check socket-python --check socket-cli --check socket-frontend
 ```
 
 The contract fixture verifies argument/environment preservation and that a blocked
-install fails. Fresh application checks exercise the real Socket binaries with uv and pnpm.
+install fails. Fresh checks exercise the real Socket binaries with uv and pnpm.
 They do not download a known-malicious package as a test.
 
 Tested with Dagger beta.25 and Python SDK v1.7.0, generating the beta.24 API.

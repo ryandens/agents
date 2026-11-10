@@ -15,6 +15,7 @@ Deliberately stdlib-only so CI can run it without installing anything.
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import sqlite3
@@ -491,6 +492,8 @@ def main(argv):
             fn(base_url)
         except SkipCheck as exc:
             print(f"  skip  {label} ({exc})")
+            if os.environ.get("SMOKE_REQUIRE_ALL") == "1":
+                failures.append((fn.__name__, exc))
         except (AssertionError, OSError) as exc:
             print(f"  FAIL  {label}\n          {exc}")
             failures.append((fn.__name__, exc))

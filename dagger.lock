@@ -12,3 +12,4 @@
 ["","oci-sha",["docker.io/library/postgres:17-alpine"],"sha256:3540c0362c809df084ffac0ae69fe794515f9de92692f02178bcdce0ef0302ac"]
 ["","oci-sha",["docker.io/library/python:3.15-slim"],"sha256:e97b88e416c3c01eb427b21fd8cd3ebf006e6ee38afcfcc3cae1c54ee2ab0a75"]
 ["","oci-sha",["ghcr.io/astral-sh/uv:python3.14-alpine"],"sha256:df6ea28f3caf5eb77ebae34d38e9b177b41a4e58ee963b1cbc5c8c1c92710238"]
+["","oci-sha",["ghcr.io/datadog/datadog-static-analyzer:0.9.11"],"sha256:ca189be035a26e0f51969f5cf9ec7c7b64a293efa1281968fb1e30cdfdab9eeb"]
