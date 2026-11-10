@@ -655,7 +655,7 @@ versions pinned to commits and maintained by Renovate.
 just dev            # start both servers with hot-reload
 just serve          # build the frontend and serve everything from :8000, like production
 just docker-run     # build and run the production image on :8080
-dagger check -j 2 --progress report # all checks, including scanners and Ruff drift
+dagger check -j 2 --progress report # all checks, including scanners, lint and formatting
 dagger generate -y                # apply Ruff fixes/formatting and SDK updates
 dagger check --generated=false --check backend-test
 

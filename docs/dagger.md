@@ -47,7 +47,7 @@ Linux tests use synthetic Safari databases and need no privacy permissions.
 ## What the pipeline checks
 
 - Ruff lint fixes and formatting through the pinned typesafe-ai module.
-  `dagger generate` applies changes; `dagger check` includes generated-file drift checks.
+  `dagger generate` applies changes; `dagger check` fails when lint fixes or formatting changes are unapplied.
   The module detects Ruff from `uv.lock` and excludes vendored SDK/client code.
 - Independent pytest, ESLint, Vitest and frontend-build checks.
 - Datadog and OpenGrep policy checks covering the same full source locally and in CI.
