@@ -1,0 +1,33 @@
+name: Dagger adoption validation
+on:
+  push:
+    branches: [codex/dagger-adoption-validation]
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      DAGGER_CLOUD_TOKEN: ${{ secrets.DAGGER_CLOUD_TOKEN }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: DeterminateSystems/determinate-nix-action@d96678350ffd6a456235832eb11e1c491589b7bb
+      - name: Generate
+        run: nix develop --no-write-lock-file --command dagger generate -y --progress report
+      - name: Save generated output
+        if: ${{ !cancelled() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add .
+          if ! git diff --cached --quiet; then
+            git commit -m 'build(dagger): 👷 Refresh generators and dependency locks'
+            gh auth setup-git
+            git push origin HEAD:codex/dagger-adoption-validation
+          fi
+      - name: Check
+        run: nix develop --no-write-lock-file --command dagger check -j 2 --progress report

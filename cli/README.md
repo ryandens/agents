@@ -352,8 +352,8 @@ message; if there is no run logged, check `launchctl print` and the error log.
 ## Development
 
 ```sh
-just cli-check      # lint, format check, tests
-just cli-test
+dagger check        # all checks, including Ruff drift
+dagger check --generated=false --check cli-test
 ```
 
 The tests build a synthetic database with Safari's schema and timestamp convention, so

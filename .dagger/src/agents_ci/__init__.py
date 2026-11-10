@@ -390,24 +390,6 @@ class AgentsCi:
 
     @check
     @function
-    async def backend_lint(self) -> None:
-        await _run_python(
-            await _python(self.source, "agents"),
-            "agents",
-            ["ruff", "check", "backend", "scripts"],
-        ).stdout()
-
-    @check
-    @function
-    async def backend_format(self) -> None:
-        await _run_python(
-            await _python(self.source, "agents"),
-            "agents",
-            ["ruff", "format", "--check", "backend", "scripts"],
-        ).stdout()
-
-    @check
-    @function
     async def backend_test(self) -> None:
         ctr = (
             (await _python(self.source, "agents"))
@@ -418,24 +400,6 @@ class AgentsCi:
             )
         )
         await _run_python(ctr, "agents", ["pytest", "backend"]).stdout()
-
-    @check
-    @function
-    async def cli_lint(self) -> None:
-        await _run_python(
-            await _python(self.source, "safari-history-export"),
-            "safari-history-export",
-            ["ruff", "check", "cli"],
-        ).stdout()
-
-    @check
-    @function
-    async def cli_format(self) -> None:
-        await _run_python(
-            await _python(self.source, "safari-history-export"),
-            "safari-history-export",
-            ["ruff", "format", "--check", "cli"],
-        ).stdout()
 
     @check
     @function
@@ -479,24 +443,13 @@ class AgentsCi:
     @check
     @function
     async def pipeline_tools(self) -> None:
-        """Check pipeline source and the PR scan selection tests."""
+        """Test the optional PR scan selection tools."""
         ctr = (await _python(self.source, "agents")).with_directory(
             "/src", _source(self.source, [".dagger/src/**", "dagger/*/src/**"])
         )
         ctr = ctr.with_exec(["apt-get", "update"]).with_exec(
             ["apt-get", "install", "-y", "--no-install-recommends", "git"]
         )
-        paths = [
-            ".dagger/src",
-            "dagger/socket-firewall/src",
-            "dagger/datadog-static-analyzer/src",
-            "dagger/actionlint/src",
-            "dagger/opengrep/src",
-            "dagger/renovate-config/src",
-            "scripts",
-        ]
-        ctr = _run_python(ctr, "agents", ["ruff", "check", *paths])
-        ctr = _run_python(ctr, "agents", ["ruff", "format", "--check", *paths])
         await _run_python(ctr, "agents", ["pytest", "scripts"]).stdout()
 
     @check
@@ -510,6 +463,22 @@ class AgentsCi:
     async def socket_frontend(self) -> None:
         """Recheck Node downloads without a package-store cache mount."""
         await (await _frontend(self.source, fresh=True)).stdout()
+
+    @check
+    @function
+    async def datadog(self) -> None:
+        """Apply the same Datadog policy locally and in CI."""
+        report = await self.datadog_report()
+        if int(await report.file("exit-code").contents()):
+            raise RuntimeError(await report.file("scan.log").contents())
+
+    @check
+    @function(cache="session")
+    async def opengrep(self) -> None:
+        """Fail on active findings or scanner errors, honoring explicit suppressions."""
+        report = await self.opengrep_report()
+        if int(await report.file("exit-code").contents()):
+            raise RuntimeError(await report.file("scan.log").contents())
 
     @function
     async def datadog_report(self, source: Directory | None = None) -> Directory:

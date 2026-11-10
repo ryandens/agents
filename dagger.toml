@@ -52,3 +52,10 @@ name = "renovate-config"
 
 [sdks.python.scopes."dagger/renovate-config".settings]
 template = "empty"
+
+# Reuse the upstream generator; the commit pins its Dagger 1.0 workspace API.
+[modules.ruff]
+source = "github.com/typesafe-ai/daggerverse/ruff@d536bce38cd73b4e66a757c5687bbbd51ac8ab5b"
+
+[modules.ruff.settings]
+exclude = ["**/.direnv", "result", "result-*", ".git", ".claude", ".agents", ".codex", ".aws", "**/.venv", "**/node_modules", "**/__pycache__", "**/.pytest_cache", "frontend/.next", "frontend/out", "frontend/coverage", "backend/static", "backend/data", "**/.env", "**/.env.*", "**/*.tfstate*", "**/*.tfvars", "**/.terraform", "**/.git", "**/sdk/**", "**/clients/**"]

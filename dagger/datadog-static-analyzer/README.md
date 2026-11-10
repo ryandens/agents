@@ -29,7 +29,8 @@ await result.assert_passed()
 
 ## Repository integration
 
-`just datadog-check` exports to `reports/datadog`, prints logs, then enforces status.
+`dagger check --generated=false --check datadog` enforces the same policy locally.
+Export reports separately with `dagger api call datadog-report export --path reports/datadog`.
 CI uploads the SARIF before enforcing that status. It prepares added/modified PR
 files with their original paths; rules or ignore changes force a full scan. Main
 always gets a full scan. This integration does not require Datadog credentials or

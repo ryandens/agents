@@ -746,10 +746,6 @@ smoke image="agents:local" port="8080":
         {{ image }} >/dev/null
     python3 scripts/smoke_test.py "http://127.0.0.1:{{ port }}"
 
-# Build the production image and smoke-test it
-docker-check:
-    dagger check --generated=false --check image-amd-64 --check image-arm-64 --check smoke -j 2 --progress report
-
 # Run the production image at http://localhost:8080, against the local Postgres
 docker-run: docker-build db-up db-migrate
     # DATABASE_URL is set here rather than passed through from .env, whose value points
@@ -915,22 +911,6 @@ backend-install:
 backend-dev: db-up db-migrate
     uv run --locked --package agents uvicorn main:app --app-dir backend --reload --port 8000
 
-# Run backend linter (scripts/ holds the smoke test, held to the same standard)
-backend-lint:
-    dagger check --generated=false --check backend-lint --progress report
-
-# Run backend format check
-backend-fmt:
-    dagger check --generated=false --check backend-format --progress report
-
-# Run backend tests with a disposable Dagger Postgres service
-backend-test:
-    dagger check --generated=false --check backend-test --progress report
-
-# Run all backend checks and a fresh Socket policy check
-backend-check:
-    dagger check --generated=false --check backend-lint --check backend-format --check backend-test --check socket-python --progress report
-
 # ── Frontend ───────────────────────────────────────────────────────────────────
 
 # Install frontend dependencies
@@ -941,21 +921,9 @@ frontend-install:
 frontend-dev:
     pnpm --dir frontend run dev
 
-# Run frontend linter
-frontend-lint:
-    dagger check --generated=false --check frontend-lint --progress report
-
 # Build frontend (type check + compile)
 frontend-build:
     dagger api call frontend-dist export --path "{{ justfile_directory() }}/frontend/out" --wipe --progress report
-
-# Run frontend tests
-frontend-test:
-    dagger check --generated=false --check frontend-test --progress report
-
-# Run all frontend checks
-frontend-check:
-    dagger check --generated=false --check frontend-lint --check frontend-build --check frontend-test --check socket-frontend --progress report
 
 # ── CLI (Safari history export) ────────────────────────────────────────────────
 
@@ -1096,45 +1064,3 @@ cli-uninstall: cli-uninstall-agent
 # Install cli development dependencies
 cli-dev-install:
     sfw uv sync --dev --locked --package safari-history-export
-
-# Run cli linter
-cli-lint:
-    dagger check --generated=false --check cli-lint --progress report
-
-# Run cli format check
-cli-fmt:
-    dagger check --generated=false --check cli-format --progress report
-
-# Run cli tests
-cli-test:
-    dagger check --generated=false --check cli-test --progress report
-
-# Run all cli checks
-cli-check:
-    dagger check --generated=false --check cli-lint --check cli-format --check cli-test --check socket-cli --progress report
-
-# ── CI ─────────────────────────────────────────────────────────────────────────
-
-# Run the portable application/build checks and validate generated clients
-# Pass selectors, e.g. `just dagger-check --check backend-test`.
-dagger-check *args:
-    dagger check -j 2 --progress report {{ args }}
-
-# Regenerate the vendored SDK and typed clients after module API changes
-dagger-generate:
-    dagger generate -y --progress report
-
-# Export Datadog findings before enforcing the analyzer's exit status
-datadog-check:
-    dagger api call datadog-report export --path "{{ justfile_directory() }}/reports/datadog" --progress report
-    cat reports/datadog/scan.log
-    exit "$(cat reports/datadog/exit-code)"
-
-# Export OpenGrep findings before enforcing the scanner's exit status
-opengrep-check:
-    dagger api call opengrep-report export --path "{{ justfile_directory() }}/reports/opengrep" --progress report
-    cat reports/opengrep/scan.log
-    exit "$(cat reports/opengrep/exit-code)"
-
-# Application checks and security reports
-check: dagger-check datadog-check opengrep-check
