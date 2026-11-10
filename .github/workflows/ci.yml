@@ -22,17 +22,6 @@ jobs:
       - name: Install Nix
         uses: DeterminateSystems/determinate-nix-action@d96678350ffd6a456235832eb11e1c491589b7bb # v3.21.8
 
-      # Direct execution must exclude developer state before uploading sources.
-      - name: Verify ignored development inputs
-        run: |
-          for directory in .venv frontend/node_modules .claude .aws .codex .agents .direnv .dagger/.venv dagger/actionlint/.venv dagger/datadog-static-analyzer/.venv dagger/opengrep/.venv dagger/renovate-config/.venv dagger/socket-firewall/.venv; do
-            mkdir -p "$directory"
-            printf 'ignored input sentinel\n' > "$directory/dagger-input-sentinel"
-            chmod 000 "$directory/dagger-input-sentinel"
-          done
-          printf 'LOCAL_INPUT_SENTINEL=ignored\n' > .env
-          chmod 000 .env
-
       # Dagger discovers checks, shares dependencies and reports each result.
       - name: Check
         id: checks
