@@ -33,7 +33,7 @@ Git selection and publication belong to the caller. This repository uses
 changes and main pushes receive a full scan. The app removes explicitly suppressed
 results only from the GitHub upload, exports raw status as `raw-exit-code`, and
 exports the policy status as `exit-code`. Logs retain the scanner diagnostics.
-`just opengrep-check` runs the same module locally. Fixtures cover findings, scanner
+`dagger check --generated=false --check opengrep` runs the same module locally. Fixtures cover findings, scanner
 errors, clean results and crashes without a report.
 
 The generated SDK and core client are included for later Daggerverse extraction.

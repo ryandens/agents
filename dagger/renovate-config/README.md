@@ -18,6 +18,6 @@ await renovate_config().check(source)
 ```
 
 The app exposes this as the `renovate-config` check in `dagger check` and
-`just check`, including changes outside Renovate's own configuration. The generated
+`dagger check`, including changes outside Renovate's own configuration. The generated
 SDK and core client are included for later Daggerverse extraction. Add its Python
 scope to the destination workspace, choose a license and tag releases independently.
