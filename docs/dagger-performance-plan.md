@@ -3,6 +3,95 @@
 Started November 9, 2026. Preserve fresh Socket policy enforcement, full-source
 security analysis, generated-code checks and both production architectures.
 
+## Handoff: direct Dagger entry points required
+
+**User decision:** invoke `dagger check` and other Dagger commands directly.
+Do not delegate Dagger to Just and do not introduce a separate Python/GraphQL
+runner for discovery, concurrency, authentication, check execution or reports.
+Just remains appropriate for existing persistent host operations such as deploy,
+local database administration and Safari permissions.
+
+### Current code and PR state
+
+- [PR #569](https://github.com/ryandens/agents/pull/569) is merged. Main commit
+  `10979eda97de2200ac8ddeda502ce2b6217bdc1f` shares the Dockerfile frontend stage.
+- [PR #570](https://github.com/ryandens/agents/pull/570) is a draft handoff. The
+  custom-runner implementation was rejected for duplicating Dagger orchestration.
+  It has been removed from the branch tip, including its Just recipe, runner tests,
+  extra Dagger test check and workflow changes. The tip keeps direct native CLI
+  invocation and the baseline 20 discovered checks. This PR now changes only this
+  plan; it does not ship the next performance fix.
+- Prototype commit `d95fbc0077cd6885ebf327c6446ccb3282fe6647` remains in Git history
+  for experimental evidence. Do not restore its architecture as the solution.
+- Branch: `codex/dagger-filtered-check-session`; worktree:
+  `/private/tmp/agents-dagger-session-pr`. Fetch the branch from GitHub if the
+  temporary worktree is missing. A temporary-directory cleanup already removed it
+  once; its staged index was used to recover the prototype before it was pushed.
+- The shared checkout `/Users/ryandens/git/ryandens/agents` is detached at
+  `381459e`, with uncommitted leftovers from the already-merged #569 and a local
+  copy of this plan. Preserve those files; continue from current main in a worktree.
+- Commits use the repository's conventional-gitmoji skill. Git enables SSH signing
+  through 1Password; signing previously waited for its approval prompt. Do not
+  disable signing to bypass it. `op` shell login is a separate issue.
+
+### Next agent: outstanding work
+
+1. Keep the native CLI architecture. Investigate a small Dagger-native or upstream
+   fix for nested local module loading; more workspace ignore patterns alone do
+   not fix the identified engine path. Verify a newer engine actually fixes it
+   before changing pins. Do not hand-edit generated clients or clear user caches.
+2. Complete iteration 2 with native Dagger capabilities: share an OpenGrep scan
+   between check and SARIF export while retaining fresh rules per invocation and
+   report export after application/policy failures. Core `Check.report` exists,
+   but producing/exporting it through the pinned SDK/CLI has not been investigated.
+   This is an investigation lead, not a validated implementation. A shell wrapper
+   invoking multiple Dagger commands does not establish a shared session.
+3. Preserve the full baseline check set: application tests, both image architectures,
+   smoke, module contracts, Socket gates, Ruff and SDK generated-code staleness.
+   Verify native discovery with `dagger check --list --format link`. Baseline links
+   use the `dag+check://` prefix; artifact API links used `dag://` in the prototype.
+4. Then tackle iterations 3 and 4 independently: isolate the random policy key from
+   unrelated deterministic function state, and benchmark Next.js compilation
+   caching. Prove newly blocked policy still stops otherwise cached workloads.
+5. Finish unchanged/source-edit frontend reuse measurements and cross-job engine
+   cache verification. A Cloud token alone is not evidence of persistent caching.
+6. Open incremental PRs as work becomes reviewable, run appropriate checks, and
+   leave merging and deployment to the user. No release or Terraform changes are
+   needed for this performance work.
+
+### Evidence and validation limits
+
+- Pinned CLI/engine: `v1.0.0-beta.25`; engine source commit `a45241b2`. The host
+  PATH CLI was beta.11, so use `nix develop --no-write-lock-file --command dagger`.
+  Python SDK/runtime pins are v1.7.0; reviewing v1.8.0 showed generator import fixes,
+  not an established fix for the engine's nested host import. Recheck upstream.
+- `core/schema/module_tree.go:hostTreeModuleSource` imports the entire local
+  context with only `.git` excluded. Trace evidence showed 3m32s traversing an
+  ignored 12 GB `.claude` directory before reaching `.venv`. The same problem was
+  reproduced on a fresh engine; the shared engine/cache was never reset.
+- A Directory-backed, explicitly filtered Workspace avoided that import. The
+  prototype discovered the original 20 checks in 7.6s with a roughly 10 MB upload,
+  and real module contracts completed from the original checkout in 57.7s.
+  This validates the engine-path diagnosis, not the rejected runner architecture.
+- Prototype native/API discovery matched 21 checks only because it added its own
+  runner test. The accepted baseline remains 20 after removing that prototype.
+- Prototype scanner/workflow/runner checks and both SARIF exports passed in 43.7s.
+  Trace [3091a3fab088caa88ac14e633c7f2760](https://dagger.cloud/ryandens/traces/3091a3fab088caa88ac14e633c7f2760)
+  had exactly one real OpenGrep process for check plus export. Both policy codes
+  were zero. A real failed scan also failed the run while both reports exported.
+- Its 11 unit tests and Ruff passed, but those tests belonged to the rejected
+  runner and were removed with it. They are not validation of a future native fix.
+- Prototype [CI run 42941655616](https://github.com/ryandens/agents/actions/runs/42941655616)
+  was still running at the last observation; Promptfoo passed. Check the run for
+  any useful diagnostics. A later documentation/revert push may supersede it.
+- `/tmp` logs and diagnostic scripts were cleared between sessions. Durable
+  evidence is in this plan, Git history, linked CI runs, engine source and Cloud
+  traces. Do not assume the old local log paths below still exist.
+- No whole-suite performance improvement is established by these experiments.
+
+Historical investigation follows. The iteration 2 prototype below is superseded
+by this handoff and must not be interpreted as completed production work.
+
 ## Baseline
 
 Three successful GitHub Actions runs showed check-step durations of 4m15s–5m49s.
@@ -49,11 +138,11 @@ Dockerfile's native BUILDPLATFORM frontend behavior or making image checks optio
 
 ### 2. Scan OpenGrep once per CI run
 
-- [x] Find a supported way to run discovered checks and export their reports in
+- [ ] Find an acceptable Dagger-native way to run checks and export their reports in
       one Dagger session, retaining the same scanner result and fresh remote rules.
-- [x] Preserve SARIF export after findings and unrelated application failures,
+- [ ] Preserve SARIF export after findings and unrelated application failures,
       scanner-error failures, and GitHub upload failure behavior.
-- [x] Verify one real scanner execution, valid SARIF, and failure cases.
+- [ ] Verify one real scanner execution, valid SARIF, and failure cases in the native replacement.
 
 Do not remove the per-session scan key or cache mutable registry rules indefinitely
 to avoid duplicate work. A shell wrapper alone may still create separate sessions;
@@ -171,7 +260,7 @@ contracts and image construction. It was stopped after the complete CI suite
 passed, avoiding more local cross-architecture emulation; it is not a completed
 local suite. The original checkout's local files and caches were preserved.
 
-### Iteration 2: filtered check session and shared reports
+### Rejected iteration 2 prototype: filtered check session and shared reports
 
 Implemented `scripts/dagger_check.py` using Dagger's supported raw GraphQL API
 under `dagger api with-session`. It applies the configured excludes explicitly,
@@ -211,6 +300,6 @@ Validation so far:
   policy exit codes were zero.
 - Ruff lint/format checks and `git diff --check` passed.
 
-Next validation: run the complete CI suite on a separate PR. Keep subsequent cache
-invalidation and compilation-cache changes separate. No merge or deployment is
-part of this work.
+This prototype is superseded by the handoff above. Iteration 2 remains open for
+a native Dagger implementation. Keep subsequent cache invalidation and compilation
+cache changes separate. No merge or deployment is part of this work.

@@ -26,34 +26,44 @@ jobs:
       - name: Install Nix
         uses: DeterminateSystems/determinate-nix-action@d96678350ffd6a456235832eb11e1c491589b7bb # v3.21.8
 
-      # Discover all checks on a filtered workspace and export reports in one
-      # session. Failed checks still export reports and fail this step.
+      # Dagger discovers checks, shares dependencies and reports each result.
       - name: Check
         id: checks
-        run: nix develop --no-write-lock-file --command dagger api with-session --progress report python scripts/dagger_check.py -j 2 --reports "$GITHUB_WORKSPACE/reports"
+        run: nix develop --no-write-lock-file --command dagger check -j 2 --progress report
+
+      # Publish security results even when an application check failed.
+      - name: Run static analysis and export report
+        id: datadog-scan
+        if: ${{ !cancelled() }}
+        run: nix develop --no-write-lock-file --command dagger api call datadog-report export --path "$GITHUB_WORKSPACE/reports/datadog" --progress report
 
       - name: Upload results to GitHub code scanning
-        if: ${{ !cancelled() && steps.checks.outputs.datadog_exported == 'true' }}
+        if: ${{ !cancelled() && steps.datadog-scan.outcome == 'success' }}
         uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
         with:
           sarif_file: reports/datadog/results.sarif
           category: datadog-static-analyzer
 
       - name: Enforce scan policy
-        if: ${{ !cancelled() && steps.checks.outputs.datadog_exported == 'true' }}
+        if: ${{ !cancelled() && steps.datadog-scan.outcome == 'success' }}
         run: |
           cat reports/datadog/scan.log
           exit "$(cat reports/datadog/exit-code)"
 
+      - name: Run OpenGrep and export report
+        id: opengrep-scan
+        if: ${{ !cancelled() }}
+        run: nix develop --no-write-lock-file --command dagger api call opengrep-report export --path "$GITHUB_WORKSPACE/reports/opengrep" --progress report
+
       - name: Upload OpenGrep findings
-        if: ${{ !cancelled() && steps.checks.outputs.opengrep_exported == 'true' }}
+        if: ${{ !cancelled() && steps.opengrep-scan.outcome == 'success' }}
         uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
         with:
           sarif_file: reports/opengrep/results.sarif
           category: opengrep
 
       - name: Enforce OpenGrep policy
-        if: ${{ !cancelled() && steps.checks.outputs.opengrep_exported == 'true' }}
+        if: ${{ !cancelled() && steps.opengrep-scan.outcome == 'success' }}
         run: |
           cat reports/opengrep/scan.log
           exit "$(cat reports/opengrep/exit-code)"

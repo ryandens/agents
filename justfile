@@ -12,10 +12,6 @@ db_url := "postgresql://agents:agents@127.0.0.1:" + db_port + "/agents"
 default:
     @just --list
 
-# Run discovered Dagger checks on a filtered workspace (pass --check NAME or --list)
-check *args:
-    dagger api with-session --progress report python scripts/dagger_check.py {{ args }}
-
 # ── Dev ────────────────────────────────────────────────────────────────────────
 
 # Write .env and infrastructure/terraform.tfvars from 1Password (needs the `op` CLI, signed in)

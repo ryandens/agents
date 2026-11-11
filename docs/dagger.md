@@ -23,31 +23,22 @@ Python runtime; the legacy generated Dang entrypoints have been removed.
 From the shell:
 
 ```sh
-just check                         # Application, image, workflow and security checks
-just check --check backend-test
-just check --check cli-test
-just check --check frontend-test
-just check --check smoke
-just check --check datadog --check opengrep
-dagger generate -y                  # Ruff fixes/formatting and SDK/client updates
+dagger check -j 2 --progress report  # Application, image, workflow and security checks
+dagger check --generated=false --check backend-test
+dagger check --generated=false --check cli-test
+dagger check --generated=false --check frontend-test
+dagger check --generated=false --check smoke
+dagger check --generated=false --check datadog --check opengrep
+dagger generate -y                 # Ruff fixes/formatting and SDK/client updates
 ```
 
-Use `just check --list` to list exact names. In particular,
+Use `dagger check -l --generated=false` to list exact names. In particular,
 the generated architecture check names are `image-amd-64` and `image-arm-64`.
 
-Dagger checks use a filtered in-memory snapshot of the checkout, including current
-source edits. `scripts/dagger_check.py` applies the explicit `dagger.toml` ignores
-and Git ignores before constructing a Directory-backed Workspace and discovering
-its checks. This avoids the pinned engine's nested local-module loader importing
-the entire host context with only `.git` excluded. Environments, caches,
-credentials, Terraform state and agent worktrees stay outside that snapshot.
-No temporary checkout or generated-file copy-back is involved.
-
-The runner uses Python's standard library and Dagger's documented GraphQL session
-API. It discovers checks dynamically, including generated-code staleness checks;
-`--check NAME` selects exact discovered names and unknown names fail. It runs two
-checks concurrently by default (`-j N`). Direct Dagger CLI calls remain available,
-but nested module calls on a local workspace can still hit the engine limitation.
+Dagger runs directly against the checkout. Workspace ignores in `dagger.toml`
+and module-manifest input filters exclude environments, caches, credentials,
+Terraform state and agent worktrees. No temporary checkout or generated-file
+copy-back is involved.
 
 Local `uv`/pnpm installs remain available for hot reload and editing. Safari's
 dedicated virtualenv, Full Disk Access and launchd operations remain host tasks.
@@ -69,16 +60,9 @@ Linux tests use synthetic Safari databases and need no privacy permissions.
   database. Any smoke skip fails this check.
 - Reusable-module failure contracts, Socket pin consistency,
   and generated-code staleness.
-- Check-runner failure aggregation and report-export contracts.
 
-Use `just check --reports reports` to export Datadog and OpenGrep results in the
-same session as their checks, including after failed checks. Both exports are
-attempted independently; a check or export failure keeps the command unsuccessful.
-OpenGrep's session-cached scan is reused for its report export, while each new
-invocation still refreshes registry rules and scan policy.
-
-Datadog and OpenGrep also expose individual report commands.
-`dagger api call datadog-report export --path
+Datadog and OpenGrep also expose report-producing commands so CI can upload
+findings even when policy fails. `dagger api call datadog-report export --path
 reports/datadog` (or `opengrep-report`) exports SARIF, logs and policy status. A
 successful export does not mean policy passed: read `exit-code` or run the check.
 The analyzer image needs no Datadog API/application keys. The standard suite and report exports scan all source; there is no separate PR-diff
@@ -112,17 +96,15 @@ Publishing explicitly disables function caching.
 One `dagger` CI job runs the same suite used locally:
 
 ```sh
-nix develop --no-write-lock-file --command dagger api with-session --progress report \
-  python scripts/dagger_check.py -j 2 --reports "$PWD/reports"
+nix develop --no-write-lock-file --command dagger check -j 2 --progress report
 ```
 
 Dagger discovers application, image, pipeline and generated-code checks, shares
 their dependency graph, and reports individual results. Adding a
 check does not require another GitHub job or another filter list in YAML.
 
-The check runner exports both scanner reports in the same session and records
-successful exports as GitHub step outputs. The job uploads those reports and
-enforces scan policy even after an application check fails. On main, it also exports
+The same job exports Datadog results, uploads SARIF and enforces scan policy.
+These steps still run after an application check fails. On main, it also exports
 the production image for Trivy and uploads its findings. Scanner or upload failures
 fail the job; an earlier failed check remains a failure after reports are uploaded.
 OpenGrep uses the same report/export/policy pattern in this job. Reports cover the

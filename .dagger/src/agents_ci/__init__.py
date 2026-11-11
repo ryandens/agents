@@ -219,38 +219,6 @@ class AgentsCi:
 
     @check
     @function
-    async def check_runner_test(self) -> None:
-        """Check discovery, failure aggregation and report export must fail closed."""
-        version = (await self.source.file(".python-version").contents()).strip()
-        await (
-            core()
-            .container()
-            .from_(f"python:{version}-slim")
-            .with_workdir("/src")
-            .with_directory(
-                "/src",
-                _source(
-                    self.source,
-                    ["scripts/dagger_check.py", "scripts/test_dagger_check.py"],
-                ),
-            )
-            .with_exec(
-                [
-                    "python",
-                    "-m",
-                    "unittest",
-                    "discover",
-                    "-s",
-                    "scripts",
-                    "-p",
-                    "test_dagger_check.py",
-                ]
-            )
-            .stdout()
-        )
-
-    @check
-    @function
     async def actionlint(self) -> None:
         """Validate all GitHub Actions workflows and their embedded scripts."""
         await actionlint().check(_source(self.source, [".github/**"]))
