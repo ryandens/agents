@@ -22,7 +22,7 @@ jobs:
         uses: DeterminateSystems/determinate-nix-action@d96678350ffd6a456235832eb11e1c491589b7bb # v3.21.8
 
       - name: Verify release
-        run: nix develop --no-write-lock-file --command dagger check -j 2 --progress report
+        run: nix develop --no-write-lock-file --command dagger api with-session --progress report python scripts/dagger_check.py -j 2
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6
