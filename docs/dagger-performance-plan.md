@@ -340,3 +340,75 @@ Full GitHub Actions validation and real report export remain pending. The previo
 23–32s second-scan baseline does not translate directly into wall-clock savings:
 checks overlap, and this change keeps the report scan while removing the batch
 scan. Measure the complete run after CI finishes; do not claim a speedup yet.
+
+## Native CI prototype (November 11, 2026)
+
+User approved implementing the combined execution/report operation as a native
+Dagger module function. PR #570 now invokes `dagger api call ci export` once.
+The module discovers checks using native Artifacts/Check APIs, limits concurrency
+to two, records pass/error outcomes, and resolves both report directories through
+the same filtered Workspace. Following GitHub steps consume saved files only.
+No Just recipe or standalone host runner is involved.
+
+Validation so far:
+
+- Native discovery still lists exactly the original 20 checks. Ruff and actionlint
+  pass. Local/release `dagger check` is unchanged.
+- Focused success run exported status 0 and valid Datadog/OpenGrep reports:
+  [trace a294b7f](https://dagger.cloud/ryandens/traces/a294b7fcedb6d6760ed40d09b80e8e76).
+- Temporarily inserting an invalid Renovate option made the selected Renovate
+  check fail while OpenGrep passed. Export completed with both valid SARIF files
+  and saved overall status 1. Original configuration was restored in `finally`.
+  [Trace 379b4538](https://dagger.cloud/ryandens/traces/379b4538a3395c4a8952f86ec547343d)
+  expanded with `dagger cloud traces view -vv` contains exactly one
+  `withExec opengrep scan` and one `OPENGREP_SCAN_RUN` value; report resolution
+  reused that scan and completed in 0.5 seconds.
+- Full GitHub CI passed, including saved-status enforcement and both SARIF uploads, at
+  [run 43151330039](https://github.com/ryandens/agents/actions/runs/43151330039).
+  Do not treat the earlier skip-selector CI success as validation of this
+  implementation.
+- A temporary Datadog report exception exported overall status 1, its error, and
+  a valid OpenGrep SARIF report. The original module source was restored in
+  `finally`. [Trace a69c1908](https://dagger.cloud/ryandens/traces/a69c1908b7c943938f2758a5d558da01)
+  confirms one report failure does not prevent the other report from exporting.
+
+The CLI export intentionally returns success when captured check outcomes fail;
+`reports/exit-code` is the authoritative gate. Execution/export failures still fail
+the invocation. GitHub uses `!cancelled()` plus file existence to upload available
+SARIF after failures, and export uses `--wipe` to avoid stale reports.
+
+### Review against official Dagger guidance
+
+Checked the current 1.0-beta documentation and the pinned generated client:
+
+- [Python SDK](https://docs.dagger.io/reference/sdks/python/) explicitly supports
+  async module functions, `asyncio.gather`, Workspace inputs, and filtered reads.
+- [Check API](https://docs.dagger.io/reference/api/check/) supports `sync` to retain
+  a result and `pass`/`error` to inspect it. This implementation uses those native
+  checks rather than converting application failures into successful checks.
+- [Checking](https://docs.dagger.io/using/checking/) recommends `dagger check` as
+  the default CI entry point. Our report-producing aggregate is a repository
+  adaptation, not an officially recommended replacement. It deliberately exports
+  failures as data; callers MUST enforce the exported status. GitHub does so.
+- [Workspace API](https://docs.dagger.io/reference/api/workspace/) provides
+  `configRead(effective: true)` for selected environments and user overrides.
+  The prototype instead parses the raw root TOML, then constructs a synthetic
+  workspace. This is a portability limitation: selected environments, user config,
+  alternative config paths and Git metadata are not automatically preserved.
+  Current CI uses the default root config and all 20 checks pass, but do not
+  present this function as fully equivalent to every `dagger check` configuration.
+  Before broadening reuse, preserve effective configuration through native APIs
+  and add a selected-environment contract; avoid more handwritten config logic.
+- `Artifacts.asChecks` does not apply command filters itself, per its
+  [API reference](https://docs.dagger.io/reference/api/artifacts/). Our explicit
+  check selection is intentionally narrower than the native CLI's full flag set.
+  Keep that scope documented; do not grow a parallel CLI filtering framework.
+- `cache="never"` affects only the aggregate function result, not cached build
+  operations. Session caching could be sufficient for the aggregate; the existing
+  fresh scanner/Socket contracts must remain intact whichever policy is used.
+
+Assessment: native composition is valid and scan reuse is proven. The main costs
+are the explicit saved-status contract and the repository-specific workspace
+workaround, rather than `asyncio.gather` or returning a Directory. Keep the PR
+in draft while deciding whether those constraints are acceptable or addressing
+configuration portability within this iteration.
