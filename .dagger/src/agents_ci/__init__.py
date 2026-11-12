@@ -168,7 +168,9 @@ def _run_python(ctr: Container, package: str, args: list[str]) -> Container:
     return ctr.with_exec(["uv", "run", "--no-sync", "--package", package, *args])
 
 
+# Dagger turns this class into a dataclass and generates its __init__.
 @object_type
+# no-dd-sa:python-best-practices/init-method-required
 class AgentsCi:
     """Portable application checks, reports, images and release publishing."""
 
