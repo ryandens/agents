@@ -3,7 +3,7 @@
 Started November 9, 2026. Preserve fresh Socket policy enforcement, full-source
 security analysis, generated-code checks and both production architectures.
 
-## Handoff: direct Dagger entry points required
+## Current work: direct Dagger entry points required
 
 **User decision:** invoke `dagger check` and other Dagger commands directly.
 Do not delegate Dagger to Just and do not introduce a separate Python/GraphQL
@@ -15,12 +15,16 @@ local database administration and Safari permissions.
 
 - [PR #569](https://github.com/ryandens/agents/pull/569) is merged. Main commit
   `10979eda97de2200ac8ddeda502ce2b6217bdc1f` shares the Dockerfile frontend stage.
-- [PR #570](https://github.com/ryandens/agents/pull/570) is a draft handoff. The
-  custom-runner implementation was rejected for duplicating Dagger orchestration.
+- [PR #570](https://github.com/ryandens/agents/pull/570) is being resumed with a
+  minimal native CI change: exclude the duplicate OpenGrep check from the batch
+  because the existing report/export/policy steps perform that validation once.
+  Local and release `dagger check` still discover all 20 checks. No application,
+  scanner, Socket, engine or SDK code changes are needed for this iteration.
+  The custom-runner implementation was rejected for duplicating Dagger orchestration.
   It has been removed from the branch tip, including its Just recipe, runner tests,
   extra Dagger test check and workflow changes. The tip keeps direct native CLI
-  invocation and the baseline 20 discovered checks. This PR now changes only this
-  plan; it does not ship the next performance fix.
+  invocation and the baseline 20 discovered checks. The old prototype remains
+  rejected; the resumed change uses the native `--skip` selector only in CI.
 - Prototype commit `d95fbc0077cd6885ebf327c6446ccb3282fe6647` remains in Git history
   for experimental evidence. Do not restore its architecture as the solution.
 - Branch: `codex/dagger-filtered-check-session`; worktree:
@@ -34,18 +38,15 @@ local database administration and Safari permissions.
   through 1Password; signing previously waited for its approval prompt. Do not
   disable signing to bypass it. `op` shell login is a separate issue.
 
-### Next agent: outstanding work
+### Outstanding work
 
 1. Keep the native CLI architecture. Investigate a small Dagger-native or upstream
    fix for nested local module loading; more workspace ignore patterns alone do
    not fix the identified engine path. Verify a newer engine actually fixes it
    before changing pins. Do not hand-edit generated clients or clear user caches.
-2. Complete iteration 2 with native Dagger capabilities: share an OpenGrep scan
-   between check and SARIF export while retaining fresh rules per invocation and
-   report export after application/policy failures. Core `Check.report` exists,
-   but producing/exporting it through the pinned SDK/CLI has not been investigated.
-   This is an investigation lead, not a validated implementation. A shell wrapper
-   invoking multiple Dagger commands does not establish a shared session.
+2. Finish CI validation of the resumed native iteration 2 below. Its goal is one OpenGrep scan
+   per CI run, not a shared session for its own sake. Keep the existing report
+   export and required policy step. The local import bottleneck remains separate.
 3. Preserve the full baseline check set: application tests, both image architectures,
    smoke, module contracts, Socket gates, Ruff and SDK generated-code staleness.
    Verify native discovery with `dagger check --list --format link`. Baseline links
@@ -138,15 +139,15 @@ Dockerfile's native BUILDPLATFORM frontend behavior or making image checks optio
 
 ### 2. Scan OpenGrep once per CI run
 
-- [ ] Find an acceptable Dagger-native way to run checks and export their reports in
-      one Dagger session, retaining the same scanner result and fresh remote rules.
-- [ ] Preserve SARIF export after findings and unrelated application failures,
+- [x] Use native CLI selection to avoid the duplicate CI check; the mandatory
+      report/export/policy steps run the full-source scan with fresh rules.
+- [x] Preserve SARIF export after findings and unrelated application failures,
       scanner-error failures, and GitHub upload failure behavior.
 - [ ] Verify one real scanner execution, valid SARIF, and failure cases in the native replacement.
 
 Do not remove the per-session scan key or cache mutable registry rules indefinitely
-to avoid duplicate work. A shell wrapper alone may still create separate sessions;
-prove reuse before changing CI.
+to avoid duplicate work. CI enforces the report's policy result instead of running
+both the check and the report in separate sessions. Local/release checks stay full.
 
 ### 3. Narrow function cache invalidation
 
@@ -303,3 +304,37 @@ Validation so far:
 This prototype is superseded by the handoff above. Iteration 2 remains open for
 a native Dagger implementation. Keep subsequent cache invalidation and compilation
 cache changes separate. No merge or deployment is part of this work.
+
+### Resumed iteration 2: one native CI scan
+
+The accepted implementation keeps direct Dagger CLI calls. CI's batch uses
+`dagger check -j 2 --skip 'dag://?check=opengrep' --progress report`; the existing
+OpenGrep report export runs once and its required policy step reads the same
+`exit-code` that the check would enforce. Local and release validation retain the
+full unfiltered `dagger check` suite. There is no new runner, Just recipe, helper
+script, module API, SDK pin or cross-session caching change.
+
+This deliberately removes a duplicate invocation rather than trying to reuse a
+mutable-rule scan across sessions. The report-export failure still fails the job;
+findings/scanner errors still fail policy, upload failures still fail the job, and
+`!cancelled()` keeps report processing available after unrelated check failures.
+The local unfiltered nested-module import remains a separate upstream issue:
+current upstream `hostTreeModuleSource` was rechecked and still excludes only
+`.git`. No engine upgrade is proposed without a verified fix.
+
+Validation before push:
+
+- Native discovery returned 20 default checks and 19 with the CI selector. Set
+  comparison confirmed that only `dag+check://?check=opengrep` was excluded; all
+  image, application, generated-code, Socket and smoke checks remain selected.
+- Native `actionlint` and `module-contracts` checks passed (37.2s overall). The
+  existing module contracts cover active findings, suppressed findings, fatal
+  scanner statuses and missing reports, as well as fresh-policy gates.
+- `git diff --check` passed. No new tests mirror the one-line workflow selector.
+- Docker Desktop had been stopped; it was started for this validation. The shared
+  engine and cache were preserved.
+
+Full GitHub Actions validation and real report export remain pending. The previous
+23–32s second-scan baseline does not translate directly into wall-clock savings:
+checks overlap, and this change keeps the report scan while removing the batch
+scan. Measure the complete run after CI finishes; do not claim a speedup yet.

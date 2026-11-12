@@ -93,15 +93,23 @@ Publishing explicitly disables function caching.
 
 ## CI and releases
 
-One `dagger` CI job runs the same suite used locally:
+One `dagger` CI job uses native Dagger check discovery:
 
 ```sh
-nix develop --no-write-lock-file --command dagger check -j 2 --progress report
+nix develop --no-write-lock-file --command dagger check -j 2 \
+  --skip 'dag://?check=opengrep' --progress report
 ```
 
 Dagger discovers application, image, pipeline and generated-code checks, shares
-their dependency graph, and reports individual results. Adding a
-check does not require another GitHub job or another filter list in YAML.
+their dependency graph, and reports individual results. New checks are discovered
+automatically; OpenGrep is the explicit CI exception described below.
+
+OpenGrep is the one CI-only exclusion from this batch: the existing report export
+runs its full-source scan once, and `Enforce OpenGrep policy` fails the job on its
+reported status. Export, scanner and upload failures also remain fatal. Running
+the check here would start a second fresh scan in another session. Local
+`dagger check` and release validation run the full discovered suite, including
+OpenGrep, because they do not have the additional CI report-export step.
 
 The same job exports Datadog results, uploads SARIF and enforces scan policy.
 These steps still run after an application check fails. On main, it also exports

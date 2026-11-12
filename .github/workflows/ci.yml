@@ -27,9 +27,10 @@ jobs:
         uses: DeterminateSystems/determinate-nix-action@d96678350ffd6a456235832eb11e1c491589b7bb # v3.21.8
 
       # Dagger discovers checks, shares dependencies and reports each result.
+      # OpenGrep runs once in the report/export/policy steps below.
       - name: Check
         id: checks
-        run: nix develop --no-write-lock-file --command dagger check -j 2 --progress report
+        run: nix develop --no-write-lock-file --command dagger check -j 2 --skip 'dag://?check=opengrep' --progress report
 
       # Publish security results even when an application check failed.
       - name: Run static analysis and export report
