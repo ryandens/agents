@@ -39,7 +39,9 @@ COPY frontend/ /src
 
 # No build args: sign-in is driven entirely by the backend's /api/auth endpoints, so the
 # export carries no client ID and is identical for every environment.
-RUN pnpm run build
+# Preserve compiler state across source edits; static output remains in /src/out.
+RUN --mount=type=cache,id=agents-nextjs-build,target=/src/.next/cache,sharing=locked \
+    pnpm run build
 
 
 # Build with the same Python minor and distribution as the runtime image.

@@ -80,6 +80,11 @@ publishing. Failure contracts exercise these dependency edges.
 build check and both release images use the same filtered Docker build context,
 allowing the engine to reuse that stage instead of compiling a separate Dagger
 frontend build. Frontend lint and tests retain their shared native test container.
+The Dockerfile preserves `/src/.next/cache` in a BuildKit cache mount for source-edit
+rebuilds. Next.js 16.4.5 enables its Turbopack filesystem cache by default. Only
+compiler state is mounted: `/src/out` stays in the build layer for export and image
+assembly. Concurrent builds sharing this cache serialize access. Reuse requires
+the same persistent builder; a fresh CI engine starts with an empty cache mount.
 
 Every uv/pnpm install also runs through Socket, including production Dockerfile
 installs. These gates cover application registry dependencies; base images, OS
