@@ -185,6 +185,15 @@
     }
   },
   "packageRules": [
+    // This rule controls automation; the manager-specific rules below retain their release-age gates.
+    // nosemgrep: package_managers.renovate.renovate-missing-minimum-release-age.renovate-missing-minimum-release-age
+    {
+      "description": "Automatically approve and merge minor and patch upgrades after required checks pass.",
+      "matchUpdateTypes": ["minor", "patch"],
+      // GitHub requires a Renovate approval helper app or a permitted review bypass.
+      "autoApprove": true,
+      "automerge": true
+    },
     {
       "description": "Review tested Dagger beta engine upgrades explicitly.",
       "matchPackageNames": [
@@ -194,6 +203,7 @@
       // One hour is the deliberate build-tool release window, matching uv below.
       // nosemgrep: package_managers.renovate.renovate-missing-minimum-release-age.renovate-missing-minimum-release-age
       "minimumReleaseAge": "1 hour",
+      "autoApprove": false,
       "automerge": false
     },
     {
@@ -205,6 +215,7 @@
       // Apply the same one-hour tool release window to Socket's binaries and digests.
       // nosemgrep: package_managers.renovate.renovate-missing-minimum-release-age.renovate-missing-minimum-release-age
       "minimumReleaseAge": "1 hour",
+      "autoApprove": false,
       "automerge": false
     },
     {
@@ -248,6 +259,7 @@
     {
       "description": "Review AMI updates explicitly because applying them replaces the app instance.",
       "matchDatasources": ["aws-machine-image"],
+      "autoApprove": false,
       "automerge": false
     },
     // This rule only groups the two Chainguard image updates; it does not control package release timing.
