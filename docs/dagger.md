@@ -93,22 +93,29 @@ Publishing explicitly disables function caching.
 
 ## CI and releases
 
-One `dagger` CI job runs the same suite used locally:
+One `dagger` CI job runs checks and exports security reports in one session:
 
 ```sh
-nix develop --no-write-lock-file --command dagger check -j 2 --progress report
+nix develop --no-write-lock-file --command dagger api call ci export \
+  --path reports --wipe --progress report
 ```
 
-Dagger discovers application, image, pipeline and generated-code checks, shares
-their dependency graph, and reports individual results. Adding a
-check does not require another GitHub job or another filter list in YAML.
+The module's `ci` function uses native check discovery and runs every discovered
+check with concurrency two. It resolves Datadog and OpenGrep reports through the
+same workspace, so exports reuse the scans performed by checks. There is no
+CI-only check exclusion. Local and release `dagger check` remain available.
 
-The same job exports Datadog results, uploads SARIF and enforces scan policy.
-These steps still run after an application check fails. On main, it also exports
-the production image for Trivy and uploads its findings. Scanner or upload failures
-fail the job; an earlier failed check remains a failure after reports are uploaded.
-OpenGrep uses the same report/export/policy pattern in this job. Reports cover the
-same full source as the default checks, so unchanged-file findings are also uploaded.
+The exported directory contains `results.json`, an overall `exit-code`, and
+`datadog/` and `opengrep/` report directories. Failed checks are recorded as data
+so both report exports can still be attempted. GitHub then enforces the saved
+status and uploads available SARIF, including after failures. A scanner execution
+or report export failure fails the overall status; an export invocation failure
+also fails the job. `--wipe` prevents stale reports from being uploaded.
+
+For focused local diagnosis, `ci --checks renovate-config` selects native checks;
+security reports are still collected and their policy statuses still enforced.
+`--parallel` controls check concurrency. On main, the job additionally exports
+the production image for Trivy and uploads its findings.
 Actionlint and Renovate config validation are discovered checks in the main
 suite. Promptfoo retains its own workflow. The first adoption layer's shadow status
 is temporary. CI and release jobs pass the repository's `DAGGER_CLOUD_TOKEN` secret
