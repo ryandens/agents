@@ -15,16 +15,14 @@ local database administration and Safari permissions.
 
 - [PR #569](https://github.com/ryandens/agents/pull/569) is merged. Main commit
   `10979eda97de2200ac8ddeda502ce2b6217bdc1f` shares the Dockerfile frontend stage.
-- [PR #570](https://github.com/ryandens/agents/pull/570) is being resumed with a
-  minimal native CI change: exclude the duplicate OpenGrep check from the batch
-  because the existing report/export/policy steps perform that validation once.
-  Local and release `dagger check` still discover all 20 checks. No application,
-  scanner, Socket, engine or SDK code changes are needed for this iteration.
-  The custom-runner implementation was rejected for duplicating Dagger orchestration.
-  It has been removed from the branch tip, including its Just recipe, runner tests,
-  extra Dagger test check and workflow changes. The tip keeps direct native CLI
-  invocation and the baseline 20 discovered checks. The old prototype remains
-  rejected; the resumed change uses the native `--skip` selector only in CI.
+- [PR #570](https://github.com/ryandens/agents/pull/570) now prototypes the
+  user-approved module-native `dagger api call ci` entry point. It discovers and
+  executes all native checks in one session, then exports saved check outcomes
+  and both scanner reports. GitHub only enforces saved results and uploads SARIF.
+  The prior CI-only OpenGrep exclusion is superseded. No Just wrapper or host-side
+  runner is involved. Keep the PR draft until failure export, single scan reuse,
+  and the full CI suite are proven.
+  The rejected custom runner remains removed; do not restore it.
 - Prototype commit `d95fbc0077cd6885ebf327c6446ccb3282fe6647` remains in Git history
   for experimental evidence. Do not restore its architecture as the solution.
 - Branch: `codex/dagger-filtered-check-session`; worktree:
@@ -44,9 +42,13 @@ local database administration and Safari permissions.
    fix for nested local module loading; more workspace ignore patterns alone do
    not fix the identified engine path. Verify a newer engine actually fixes it
    before changing pins. Do not hand-edit generated clients or clear user caches.
-2. Finish CI validation of the resumed native iteration 2 below. Its goal is one OpenGrep scan
-   per CI run, not a shared session for its own sake. Keep the existing report
-   export and required policy step. The local import bottleneck remains separate.
+2. Validate the native `ci` prototype: a failed check must export overall status 1
+   and both reports; scanner/export errors must fail status without preventing the
+   other report; check and report resolution must execute OpenGrep only once.
+   Run all 20 checks and CI, inspect the trace, and update PR #570 before marking
+   ready. Optional `--checks` selects checks, but report policy still applies.
+   The native function uses a Directory-backed filtered Workspace to also avoid
+   the identified nested local module upload bottleneck.
 3. Preserve the full baseline check set: application tests, both image architectures,
    smoke, module contracts, Socket gates, Ruff and SDK generated-code staleness.
    Verify native discovery with `dagger check --list --format link`. Baseline links

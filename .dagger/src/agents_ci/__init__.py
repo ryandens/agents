@@ -1,4 +1,7 @@
+import asyncio
+import json
 import re
+import tomllib
 import uuid
 from typing import Self
 
@@ -216,6 +219,68 @@ class AgentsCi:
     async def _frontend(self) -> Container:
         await self.socket_frontend()
         return await _frontend(self.source)
+
+    @function(cache="never")
+    async def ci(
+        self, ws: Workspace, checks: list[str] | None = None, parallel: int = 2
+    ) -> Directory:
+        """Run native checks once and export outcomes and security reports together."""
+        if parallel < 1:
+            raise ValueError("parallel must be positive")
+        config = tomllib.loads(await ws.file("dagger.toml").contents())
+        # Directory-backed discovery honors ignores when loading nested modules.
+        snapshot = ws.directory(
+            "/", exclude=config.get("ignore", []), gitignore=True
+        ).as_workspace()
+        artifacts = snapshot.artifacts().filter_types(["Check"])
+        if checks is not None:
+            available = await artifacts.dimension_keys("check")
+            unknown = set(checks) - set(available)
+            if unknown or not checks:
+                raise ValueError(
+                    f"invalid check selection: {checks}; available: {available}"
+                )
+            artifacts = artifacts.filter_dimension_keys("check", checks)
+        items = await artifacts.items()
+        if not items:
+            raise ValueError("no checks discovered")
+        semaphore = asyncio.Semaphore(parallel)
+
+        async def run_check(uri: str) -> dict:
+            async with semaphore:
+                try:
+                    [native_check] = (
+                        await snapshot.artifacts().filter_uri(uri).as_checks()
+                    )
+                    completed = native_check.sync()
+                    passed = await completed.pass_()
+                    error = "" if passed else await completed.error().message()
+                except (QueryError, ExecError) as failure:
+                    passed, error = False, str(failure)
+                return {"check": uri, "passed": passed, "error": error}
+
+        uris = [await item.uri() for item in items]
+        outcomes = await asyncio.gather(*(run_check(uri) for uri in uris))
+        output = core().directory()
+        reports = []
+        # Resolve through the same workspace so checks and exports share scans.
+        # Attempt both exports even when checks or the other scanner failed.
+        for name in ("datadog", "opengrep"):
+            try:
+                report = snapshot.resolve(f"dag://?directory={name}-report").directory()
+                report = await report.sync()
+                status = int(await report.file("exit-code").contents())
+                output = output.with_directory(name, report)
+                reports.append({"scanner": name, "passed": status == 0, "error": ""})
+            except (QueryError, ExecError, ValueError) as failure:
+                reports.append(
+                    {"scanner": name, "passed": False, "error": str(failure)}
+                )
+        passed = all(result["passed"] for result in [*outcomes, *reports])
+        return output.with_new_file(
+            "results.json",
+            json.dumps({"checks": outcomes, "reports": reports}, indent=2),
+        ).with_new_file("exit-code", "0\n" if passed else "1\n")
 
     @check
     @function
@@ -572,8 +637,6 @@ class AgentsCi:
             )
         result = datadog_static_analyzer().scan(source)
         # Force report validation before returning an exportable directory.
-        import json
-
         report = result.sarif()
         parsed = json.loads(await report.contents())
         if parsed.get("version") != "2.1.0" or not isinstance(parsed.get("runs"), list):
@@ -597,8 +660,6 @@ class AgentsCi:
     @function(cache="session")
     async def opengrep_report(self, source: Directory | None = None) -> Directory:
         """Export portable OpenGrep findings before enforcing scan policy."""
-        import json
-
         result = opengrep().scan(source if source is not None else self.source)
         parsed = json.loads(await result.sarif().contents())
         if parsed.get("version") != "2.1.0" or not isinstance(parsed.get("runs"), list):
