@@ -13,7 +13,7 @@
   "dependencies": {
     "@ai-sdk/react": "^4.0.174",
     "ai": "^7.0.170",
-    "next": "16.4.5",
+    "next": "16.4.6",
     "react": "19.3.1",
     "react-dom": "19.3.1"
   },
@@ -27,7 +27,7 @@
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.3.0",
     "eslint": "^9.39.5",
-    "eslint-config-next": "16.4.5",
+    "eslint-config-next": "16.4.6",
     "jsdom": "^31.0.0",
     "tailwindcss": "^4.3.5",
     "typescript": "^6.0.3",
