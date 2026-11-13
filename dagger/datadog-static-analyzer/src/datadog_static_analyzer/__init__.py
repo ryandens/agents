@@ -5,7 +5,7 @@ from dagger_clients.core import Container, Directory, File, ReturnType, core
 from dagger import field, function, object_type
 
 # renovate: datasource=docker depName=ghcr.io/datadog/datadog-static-analyzer
-IMAGE = "ghcr.io/datadog/datadog-static-analyzer:0.9.12@sha256:93addf4560f39f3bf0dbc8413331c5786c06bc60c3721677da21843dc5802a58"
+IMAGE = "ghcr.io/datadog/datadog-static-analyzer:0.9.13@sha256:61aa4e65bf7b1407fb4288da163b7310013cd14f3ad3c603d8a3a82982f4f416"
 
 
 @object_type
