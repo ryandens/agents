@@ -3,7 +3,7 @@ from dagger_clients.core import Container, Directory, core
 from dagger import function, object_type
 
 # renovate: datasource=docker depName=ghcr.io/renovatebot/renovate
-IMAGE = "ghcr.io/renovatebot/renovate:44.242.0@sha256:0123dd7efea6978a8347732aac8be14745cebb6b8653e77bc9ee290698d97e89"
+IMAGE = "ghcr.io/renovatebot/renovate:44.246.2@sha256:18a3700d2d1535d56375cde676d59d5fb0826aae22c5b9def2d8eae7b2086ca6"
 
 
 @object_type
