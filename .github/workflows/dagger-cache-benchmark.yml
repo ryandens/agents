@@ -1,0 +1,47 @@
+name: Dagger cache benchmark
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/dagger-cache-benchmark.yml
+
+permissions:
+  contents: read
+
+jobs:
+  cache-baseline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        sample: [1, 2]
+    env:
+      DAGGER_CLOUD_TOKEN: ${{ secrets.DAGGER_CLOUD_TOKEN }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Install Nix
+        uses: DeterminateSystems/determinate-nix-action@16f94ba7aae399b9f9077c254b6719ec6de7e3e3 # v3.24.2
+      - name: Prepare CLI and record runner resources
+        run: |
+          nix develop --no-write-lock-file --command dagger version
+          nproc
+          free -m
+          docker ps --format '{{.ID}} {{.Image}} {{.Names}}'
+      - name: First check session
+        run: |
+          nix develop --no-write-lock-file --command dagger api call ci export --path "$RUNNER_TEMP/reports-first" --wipe --progress plain -vv
+          cat "$RUNNER_TEMP/reports-first/results.json"
+          exit "$(cat "$RUNNER_TEMP/reports-first/exit-code")"
+      - name: Record engine after first session
+        if: ${{ !cancelled() }}
+        run: docker ps --format '{{.ID}} {{.Image}} {{.Names}}'
+      - name: Repeat check session on same engine
+        if: ${{ !cancelled() }}
+        run: |
+          nix develop --no-write-lock-file --command dagger api call ci export --path "$RUNNER_TEMP/reports-repeat" --wipe --progress plain -vv
+          cat "$RUNNER_TEMP/reports-repeat/results.json"
+          exit "$(cat "$RUNNER_TEMP/reports-repeat/exit-code")"
