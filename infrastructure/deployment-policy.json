@@ -1,0 +1,58 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReadRdsDeploymentState",
+      "Effect": "Allow",
+      "Action": [
+        "rds:DescribeDBClusters",
+        "rds:DescribeDBInstances",
+        "rds:DescribeDBSubnetGroups",
+        "rds:DescribeDBClusterSnapshots",
+        "rds:DescribeDBEngineVersions",
+        "rds:DescribeOrderableDBInstanceOptions"
+      ],
+      "Resource": "*",
+      "Condition": {"StringEquals": {"aws:RequestedRegion": "us-east-1"}}
+    },
+    {
+      "Sid": "ManageAgentsDatabase",
+      "Effect": "Allow",
+      "Action": [
+        "rds:CreateDBCluster",
+        "rds:ModifyDBCluster",
+        "rds:DeleteDBCluster",
+        "rds:CreateDBInstance",
+        "rds:ModifyDBInstance",
+        "rds:DeleteDBInstance",
+        "rds:CreateDBSubnetGroup",
+        "rds:ModifyDBSubnetGroup",
+        "rds:DeleteDBSubnetGroup",
+        "rds:CreateDBClusterSnapshot",
+        "rds:AddTagsToResource",
+        "rds:RemoveTagsFromResource",
+        "rds:ListTagsForResource"
+      ],
+      "Resource": [
+        "arn:aws:rds:us-east-1:749549498353:cluster:agents",
+        "arn:aws:rds:us-east-1:749549498353:db:agents-1",
+        "arn:aws:rds:us-east-1:749549498353:subgrp:agents",
+        "arn:aws:rds:us-east-1:749549498353:cluster-snapshot:agents-final-*",
+        "arn:aws:rds:us-east-1:749549498353:cluster-pg:default.aurora-postgresql17",
+        "arn:aws:rds:us-east-1:749549498353:pg:default.aurora-postgresql17"
+      ]
+    },
+    {
+      "Sid": "CreateRdsManagedMasterSecret",
+      "Effect": "Allow",
+      "Action": ["secretsmanager:CreateSecret", "secretsmanager:TagResource"],
+      "Resource": "arn:aws:secretsmanager:us-east-1:749549498353:secret:rds!cluster-*"
+    },
+    {
+      "Sid": "DescribeRegionalEncryptionKeys",
+      "Effect": "Allow",
+      "Action": "kms:DescribeKey",
+      "Resource": "arn:aws:kms:us-east-1:749549498353:key/*"
+    }
+  ]
+}
