@@ -38,7 +38,11 @@ points and Dagger-native composition. Do not add a host runner or Just wrapper.
 | 5 | Revisit duplicate main-only image orchestration and native check portability | Trace proves avoidable repeated work; preserve Trivy, fresh gates, report status and effective workspace configuration. |
 
 The [November 16 CI baseline and cache experiment](dagger-performance-baseline.md)
-records the same-runner speedup and the remaining cross-job verification.
+and its November 17 follow-ups record the same-runner speedup and the cache
+probes that missed on a later GitHub runner. Keep `parallel=2` based on the
+small whole-job improvement and consistently longer ARM64 checks at four.
+Use the current runner configuration as the baseline for future cache backend
+evaluations and source-filtering experiments.
 
 **1. Measure before choosing cache infrastructure.** Record the full job, Nix/setup,
 Dagger initialization/discovery, checks/report export, image export and Trivy times.

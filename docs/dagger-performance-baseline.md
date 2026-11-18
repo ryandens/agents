@@ -1,6 +1,7 @@
 # Dagger CI baseline and cache investigation
 
-Measured November 16, 2026 (America/Los_Angeles; run timestamps are November 17 UTC).
+Baseline measured November 16, 2026, with follow-up benchmarks on November 17
+(America/Los_Angeles).
 Related performance plan: [PR #620](https://github.com/ryandens/agents/pull/620).
 
 ## Recent successful runs
@@ -73,4 +74,66 @@ later job can import cache entries populated by a completed job. The console log
 did not identify operation-level cache hits, backend configuration, or mutable
 cache-volume reuse, and the linked Cloud spans could not be inspected. A sequential
 same-revision run with operation-level trace evidence is still needed to establish
-which cache data can persist across jobs.
+which cache data can persist across jobs. The sequential experiment below tests
+execution results and mutable volumes directly.
+
+## Cache reuse between sequential runners
+
+[Benchmark run 44243697560](https://github.com/ryandens/agents/actions/runs/44243697560)
+ran the same aggregate at merge revision `cd37db7` on two independent Ubuntu
+26.04 runners. The second job waited for the first to complete. Both passed
+the same 20 checks and both report exports with the existing Cloud token
+configuration. Each started a distinct local Dagger beta.25 Docker container
+with a Docker volume mounted at `/var/lib/dagger`.
+
+| Job | Engine | Checks/report step | Whole job |
+| --- | --- | --- | --- |
+| Seed | `a45f56b3e226` | [279s](https://dagger.cloud/ryandens/traces/87a427596f6b35df7e09fd1409a9ef24) | 311s |
+| Observe | `65cf79f63252` | [296s](https://dagger.cloud/ryandens/traces/2126e1edda9b9af68d6272dab06b1bfa) | 331s |
+
+After the aggregate in each job, a direct engine query generated a random UUID
+using the same run-specific cache key. Repeating the query in a new session on
+the seed runner returned the original UUID and logged `withExec CACHED`. The
+observe runner logged a fresh execution and returned a different UUID.
+[Seed repeat trace](https://dagger.cloud/ryandens/traces/e7a648fd3f6208235d93819847697c8d),
+[observe execution trace](https://dagger.cloud/ryandens/traces/fe209ae7ab4230b0f2dbf9bf70e4e6f1).
+
+A separate probe wrote the seed UUID into a named cache volume and recovered it
+in a new local session. The observe job used the same volume key and a distinct
+execution environment to force a fresh read. The marker was absent.
+[Seed read trace](https://dagger.cloud/ryandens/traces/a9cf74cbad02abbbad6e5be6f30e0d7f),
+[observe read trace](https://dagger.cloud/ryandens/traces/5571b64712f6acaa16ed5b0f0dd5c1d9).
+
+The existing GitHub runner configuration did not carry either probed cache entry
+between jobs. These results cover one execution operation and one mutable volume.
+They leave base-image transfer and other cache classes unmeasured.
+
+## Aggregate concurrency on fresh runners
+
+[Benchmark run 44242340883](https://github.com/ryandens/agents/actions/runs/44242340883)
+tested three independent jobs per setting at merge revision `296073f`. Each job
+used a fresh Ubuntu 26.04 x86-64 runner with four vCPUs, about 16 GiB RAM and a
+separate local Dagger beta.25 engine. The CLI was prepared before measurement.
+The aggregate command used `ci --parallel N export` and enforced the saved result.
+All six invocations passed the same 20 checks and both report exports.
+
+| Parallel | Sample | Aggregate | Whole job | ARM64 image check | Mean host CPU busy |
+| --- | --- | --- | --- | --- | --- |
+| 2 | 1 | [299.83s](https://dagger.cloud/ryandens/traces/902881eb2c12374ffcaa815322ae9417) | 336s | 76s | 54% |
+| 2 | 2 | [230.57s](https://dagger.cloud/ryandens/traces/74c9da2e040c5a55bc51f9692890885d) | 256s | 58.6s | 56% |
+| 2 | 3 | [266.83s](https://dagger.cloud/ryandens/traces/730f46eab5d7e1b61a125ef733721efb) | 297s | 74s | 61% |
+| 4 | 1 | [255.46s](https://dagger.cloud/ryandens/traces/741f25b3ac57d70082f7d513fc3410a2) | 293s | 116s | 73% |
+| 4 | 2 | [271.27s](https://dagger.cloud/ryandens/traces/ea4e0da7fbffc127f67babf1a698cf19) | 300s | 150s | 91% |
+| 4 | 3 | [208.17s](https://dagger.cloud/ryandens/traces/b0f082dcb121efb59a90f997521f7750) | 233s | 97s | 74% |
+
+The aggregate median fell from 266.83s to 255.46s (11.37s, or 4.3%). The
+slowest sample fell from 299.83s to 271.27s. Whole-job medians were 297s and
+293s. Linux memory-pressure totals rose by less than 0.65s per job and
+one-second `vmstat` samples showed no swap-ins. CPU figures sum user and
+system time from those samples. The ARM64 check duration
+includes shared work, so it cannot isolate time spent in emulation.
+
+Keep the default at two. The aggregate ranges overlap substantially, while
+all three runs at four increased CPU utilization and the ARM64 check took
+longer than in any run at two. The measured whole-job median gain was four
+seconds.
