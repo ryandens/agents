@@ -28,7 +28,7 @@ jobs:
 
       - name: Run Promptfoo Code Scan
         id: promptfoo-code-scan
-        uses: promptfoo/code-scan-action@11b7322013b2ba70a311b596c90dad5bcbea8634 # v0.2.2
+        uses: promptfoo/code-scan-action@df9da1d43e7de641d3d77d643190227172eb14cb # v0.2.3
         with:
           min-severity: medium
           sarif-output-path: promptfoo-code-scan.sarif
