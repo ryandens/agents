@@ -48,7 +48,7 @@ RUN --mount=type=cache,id=agents-nextjs-build,target=/src/.next/cache,sharing=lo
 FROM cgr.dev/chainguard/python:latest-dev@sha256:8958df827fe8c29dc26627fd9f05eee3947bfcb31b57ecf06e1bc04a23c1c941 AS builder
 
 USER root
-COPY --from=ghcr.io/astral-sh/uv:0.13.8@sha256:5cc1805e2426484abca4ad46ea783bab281fdb225fd82d8ce6d66a81254bac85 /uv /usr/local/bin/uv
+COPY --from=ghcr.io/astral-sh/uv:0.13.9@sha256:d3b601f0c7b118bc1753febf7c41cc80981df678445e0254284eecf84db79a7d /uv /usr/local/bin/uv
 COPY --from=socket-target --chmod=0755 /sfw /usr/local/bin/sfw
 COPY dagger/socket-firewall/src/socket_firewall/checksums.sha256 /tmp/sfw-checksums
 
