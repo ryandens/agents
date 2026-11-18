@@ -2,8 +2,8 @@ locals {
   # Regional pin for the kernel 6.18 image. Renovate proposes upgrades;
   # publishing a new Amazon Linux image must not change an unrelated release plan.
   # amiFilter=[{"Name":"owner-alias","Values":["amazon"]},{"Name":"name","Values":["al2023-ami-2023*-kernel-6.18-arm64"]},{"Name":"architecture","Values":["arm64"]},{"Name":"state","Values":["available"]},{"region":"us-east-1"}]
-  # currentImageName=al2023-ami-2023.12.20261112.0-kernel-6.18-arm64
-  al2023_arm64_ami_id = "ami-04bde3808fe5f70cf"
+  # currentImageName=al2023-ami-2023.12.20261117.0-kernel-6.18-arm64
+  al2023_arm64_ami_id = "ami-0c79d740d6667195a"
 }
 
 data "aws_ami" "al2023_arm64" {
