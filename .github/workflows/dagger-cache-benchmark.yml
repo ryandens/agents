@@ -76,7 +76,7 @@ jobs:
           )
           if [[ "$PROBE_ROLE" == seed ]]; then
             query --var "cache=$cache_id" --var "marker=$result" <<'GRAPHQL'
-          query($cache: CacheVolumeID!, $marker: String!) {
+          query($cache: ID!, $marker: String!) {
             container {
               from(address: "alpine:3.22") {
                 withMountedCache(path: "/probe", cache: $cache) {
@@ -92,7 +92,7 @@ jobs:
 
           # Distinct execution environments ensure the second job reads the mount itself.
           marker=$(query --var "cache=$cache_id" --var "role=$PROBE_ROLE" <<'GRAPHQL' | jq -er '.container.from.withMountedCache.withEnvVariable.withExec.stdout'
-          query($cache: CacheVolumeID!, $role: String!) {
+          query($cache: ID!, $role: String!) {
             container {
               from(address: "alpine:3.22") {
                 withMountedCache(path: "/probe", cache: $cache) {
