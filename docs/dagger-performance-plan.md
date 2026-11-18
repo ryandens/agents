@@ -83,6 +83,33 @@ compiler/download caches optional accelerators; an empty cache must produce the
 same correct output. Namespace incompatible toolchains/platforms where needed,
 and measure lock contention before broadening locked cache mounts.
 
+### Frontend context benchmark (November 17, 2026)
+
+[Run 44245943386](https://github.com/ryandens/agents/actions/runs/44245943386)
+compared the original frontend export with the narrower context from
+[PR #631](https://github.com/ryandens/agents/pull/631). Each variant ran three
+jobs on separate four-vCPU Ubuntu runners with the pinned Dagger CLI and the
+same checkout. The control restored the original Dagger module from the PR
+base. Each job ran the full aggregate first, then exported the frontend
+from the same engine three times.
+
+| Measurement | Original median (range) | Narrower context median (range) |
+| --- | --- | --- |
+| Aggregate on a fresh engine | 290.19s (288.68–291.68s) | 272.84s (229.02–278.15s) |
+| First warm frontend export | 37.66s (37.22–37.70s) | 33.42s (28.06–34.15s) |
+| Export after a backend-only edit | 17.06s (17.03–17.90s) | 14.26s (12.08–14.62s) |
+| Export after adding a frontend asset | 22.52s (22.43–23.21s) | 19.76s (19.40–21.96s) |
+
+All six jobs passed all 20 checks and both report exports. The candidate
+module contract verified that the context digest stayed stable after a backend
+edit and changed after a frontend edit. Both variants produced byte-identical
+output after the backend edit and included the added frontend asset. The
+candidate saved 17.35s at the median for the aggregate and 2.80s after the
+backend edit. The logs give elapsed times but do not isolate Docker operation
+cache hits from runner variation or policy and export overhead.
+[Representative control trace](https://dagger.cloud/ryandens/traces/b1caa6127c114a2344ede20d066de6dc),
+[representative candidate trace](https://dagger.cloud/ryandens/traces/858dbfb594873b54c173c8260ffd64eb).
+
 **4. Use an edit matrix, not only unchanged builds.** Compare no change, frontend
 source, backend source, lockfile and Dagger configuration changes. For frontend
 edits, measure `pnpm run build` separately from policy and upload overhead; for
