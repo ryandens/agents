@@ -1,0 +1,56 @@
+name: Dagger aggregate concurrency benchmark
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/dagger-concurrency-benchmark.yml
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark:
+    name: "parallel=${{ matrix.parallel }}, sample ${{ matrix.sample }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        parallel: [2, 4]
+        sample: [1, 2, 3]
+    env:
+      DAGGER_CLOUD_TOKEN: ${{ secrets.DAGGER_CLOUD_TOKEN }}
+      CHECK_PARALLEL: ${{ matrix.parallel }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: DeterminateSystems/determinate-nix-action@16f94ba7aae399b9f9077c254b6719ec6de7e3e3 # v3.24.2
+      - name: Prepare CLI and record runner resources
+        run: |
+          git rev-parse HEAD
+          uname -m
+          nproc
+          free -m
+          nix develop --no-write-lock-file --command dagger version
+          docker ps --format '{{.ID}} {{.Image}} {{.Names}}'
+      - name: Measure checks and enforce saved status
+        shell: bash
+        run: |
+          vmstat -w -t 1 > "$RUNNER_TEMP/vmstat.log" &
+          sampler=$!
+          trap 'kill "$sampler" 2>/dev/null || true' EXIT
+          cat /proc/pressure/memory
+          /usr/bin/time -f 'Aggregate elapsed seconds: %e' \
+            nix develop --no-write-lock-file --command dagger api call ci --parallel "$CHECK_PARALLEL" export --path "$RUNNER_TEMP/reports" --wipe --progress report
+          cat /proc/pressure/memory
+          cat "$RUNNER_TEMP/reports/results.json"
+          exit "$(cat "$RUNNER_TEMP/reports/exit-code")"
+      - name: Record resource samples and engine identity
+        if: ${{ !cancelled() }}
+        run: |
+          if [[ -f "$RUNNER_TEMP/vmstat.log" ]]; then
+            cat "$RUNNER_TEMP/vmstat.log"
+          fi
+          docker ps --format '{{.ID}} {{.Image}} {{.Names}}'
