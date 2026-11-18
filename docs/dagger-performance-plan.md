@@ -3,7 +3,140 @@
 Started November 9, 2026. Preserve fresh Socket policy enforcement, full-source
 security analysis, generated-code checks and both production architectures.
 
-## Current work: direct Dagger entry points required
+## Current priorities (reviewed November 16, 2026)
+
+Optimize measured CI wall time while preserving every check, fresh policy gates,
+report exports and both production architectures. Keep direct Dagger CLI entry
+points and Dagger-native composition. Do not add a host runner or Just wrapper.
+
+### Repository state verified in this review
+
+- Clean checkout on `main`, reviewed at `5771735`; the detached-checkout and active
+  worktree instructions below are historical, not current working instructions.
+- `.dagger-version` still pins beta.25. `dagger.toml` now selects Python SDK v1.8.0;
+  the previous SDK v1.7.0 statement is historical. No pins changed in this review.
+- CI already runs `dagger api call ci export` once for checks and both reports.
+  It enforces `reports/exit-code` separately and uploads available SARIF after
+  failures. Preserve this contract. Main also exports an AMD64 image in a second
+  invocation for Trivy; account for that time separately from PR validation.
+- `backend/Dockerfile` already mounts `agents-nextjs-build` at `.next/cache` with
+  `sharing=locked`. The local benchmark below is evidence of a small source-edit
+  gain; this review did not run CI or establish cross-job reuse.
+- The aggregate defaults to `parallel=2`, enforced by an asyncio semaphore.
+  Changing `dagger check -j` will not tune this CI entry point.
+- CI supplies `DAGGER_CLOUD_TOKEN`, but the workflow alone does not establish
+  which engine/cache service is active or whether cache volumes survive jobs.
+
+### Ordered experiments and acceptance criteria
+
+| Priority | Change or experiment | Evidence required to proceed |
+| --- | --- | --- |
+| 1 | Establish a current baseline and verify cross-job engine/cache persistence | Two separate jobs on the same revision; trace engine identity, cache configuration and representative reused operations. Distinguish layer/function hits from mutable cache-volume reuse. |
+| 2 | Benchmark aggregate `parallel=2` versus `4` on the same runner class | At least three comparable runs per setting; lower median wall time without memory pressure, failures or a worse slowest run. Record CPU/memory and ARM emulation time. |
+| 3 | Narrow deterministic inputs and isolate fresh policy evaluation | Unrelated edits reuse deterministic work; a newly blocked policy still rejects an otherwise warm workload at every public entry point. |
+| 4 | Finish validation of the existing Next.js cache mount | Separate-job source-edit results, complete exported content, both architectures, smoke and policy contracts. Keep the modest local result in perspective. |
+| 5 | Revisit duplicate main-only image orchestration and native check portability | Trace proves avoidable repeated work; preserve Trivy, fresh gates, report status and effective workspace configuration. |
+
+The [November 16 CI baseline and cache experiment](dagger-performance-baseline.md)
+records the same-runner speedup and the remaining cross-job verification.
+
+**1. Measure before choosing cache infrastructure.** Record the full job, Nix/setup,
+Dagger initialization/discovery, checks/report export, image export and Trivy times.
+Inspect the critical path rather than summing overlapping check durations. Capture
+three current successful PR baselines and main separately; the November 9 baseline
+predates later changes. Record revision, runner resources, engine/CLI/SDK versions,
+cache state, trace/run links and check identities with every result.
+
+Compare an unchanged repeat in the same job with an unchanged run in a separate
+job. If reuse disappears across jobs, investigate the configured cache backend
+before changing build code. Evaluate supported Cloud Engines or a persistent
+self-hosted engine only against the pinned CLI's supported configuration. Compare
+setup, network transfer and compute costs as well as build time; do not enable a
+paid service or move credentials as part of a benchmark without agreed scope.
+Do not restore a live engine directory using a generic Actions cache or clear the
+shared engine to manufacture a cold run. Use an isolated benchmark engine/cache.
+
+**2. Tune the scheduler actually used by CI.** Pass the `parallel` argument to
+`ci` using syntax confirmed by the pinned CLI's help. The semaphore caps active
+checks, not all dependency operations inside them. More concurrency can duplicate
+resource contention, especially for Next.js, scanner processes and emulated ARM64
+builds. Retain `BUILDPLATFORM` frontend compilation and both image checks. Consider
+native ARM capacity only if traces show emulation on the critical path; splitting
+jobs can lose shared work and introduce new cold engines.
+
+**3. Design around Dagger's cache keys.** `AgentsCi` currently holds a broad source
+Directory and a random `policy_run`. Filtering inside a function can preserve lower
+container-layer hits while its receiver still invalidates the module-function
+result. Move deterministic operations toward narrowly filtered inputs at function
+boundaries or filtered Workspace reads at the leaves. Keep manifests and dependency
+installation before application source; this is already implemented in several
+paths and should not be rewritten without a demonstrated miss.
+
+Use `cache="never"` or session freshness only where semantics require it. Removing
+`policy_run` alone is unsafe: a cached outer application function could bypass an
+inner fresh Socket gate. Design the uncached/session policy boundary first, then
+prove blocked-policy behavior through image, export/publish, frontend, backend,
+CLI and smoke entry points. Keep OpenGrep's mutable-rule freshness and single-scan
+session reuse. Measure orchestration savings independently of compilation savings.
+
+Audit read-only lint/test source copies for mounts where outputs need not persist
+in the container. Do not mechanically replace copies: `.venv`, generated output,
+static exports and production images must retain their intended contents. Keep
+compiler/download caches optional accelerators; an empty cache must produce the
+same correct output. Namespace incompatible toolchains/platforms where needed,
+and measure lock contention before broadening locked cache mounts.
+
+**4. Use an edit matrix, not only unchanged builds.** Compare no change, frontend
+source, backend source, lockfile and Dagger configuration changes. For frontend
+edits, measure `pnpm run build` separately from policy and upload overhead; for
+backend-only edits, check whether the frontend stage is actually reused. Verify
+changed content appears in outputs and stale markers disappear. Do not infer a
+cross-job compiler-cache hit merely from a cached build layer.
+
+**5. Preserve native semantics while reducing orchestration.** The current CI
+aggregate is a deliberate adaptation of Dagger's normal `dagger check` entry point.
+Its raw TOML parsing and synthetic Workspace have the portability limits described
+below. Prefer effective configuration/native APIs, validated on beta.25, before
+supporting selected environments or additional CLI filtering. Do not resurrect the
+rejected Python/GraphQL host runner. Consider same-session main image export only
+if traces show savings beyond unavoidable tar export and fresh policy evaluation.
+Keep export/upload failures and saved check status authoritative.
+
+### Definition of an improvement
+
+For each small implementation PR, record before/after median, range and absolute
+seconds across at least three comparable runs, plus trace evidence explaining the
+change. Keep PR and main results separate. Check discovery must match the baseline
+identities (previously 20), with full-source security analysis, generated staleness,
+policy contracts and both images intact. Compare selected checks first, then run
+the full suite for behavioral changes. Documentation-only reviews need no builds.
+No CI speedup is claimed by this plan revision.
+
+### Official guidance used in this review
+
+- [Python SDK](https://docs.dagger.io/reference/sdks/python/): filtered Workspace
+  reads and async composition; apply these to reduce unnecessary inputs.
+- [Directory API](https://docs.dagger.io/reference/api/directory/): pre/post-call
+  filtering and mounts; evaluate read-only mounts where output semantics allow.
+- [Module cache control](https://dagger.io/blog/cache-control-for-modules/):
+  distinguish module-function caching from underlying operation caching and
+  explicitly model side effects/freshness.
+- [Checking your code](https://docs.dagger.io/using/checking/) and
+  [Workspace API](https://docs.dagger.io/reference/api/workspace/): retain native
+  discovery and configuration semantics as the aggregate evolves.
+- [Dagger's cross-CI cache discussion](https://dagger.io/learn/share-go-build-cache-ci/):
+  persistent/shared engine caching is distinct from per-run reuse. This Go example
+  informs the experiment, not a recommendation to copy its module or commands.
+
+Current online guidance may exceed beta.25's API. Confirm signatures and engine
+options against the pinned generated clients/CLI before implementing any change.
+
+## Previous handoff (November 11; historical)
+
+The November 16 review above supersedes checkout, version and next-step details
+in this handoff. Keep the experiment evidence below.
+
+### Direct Dagger entry points required
 
 **User decision:** invoke `dagger check` and other Dagger commands directly.
 Do not delegate Dagger to Just and do not introduce a separate Python/GraphQL
