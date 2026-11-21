@@ -76,10 +76,10 @@ the fresh installs within the invocation. A newly blocked policy therefore stops
 cached workloads before they execute. The same gates apply to image export and
 publishing. Failure contracts exercise these dependency edges.
 
-`frontend-dist` exports the production Dockerfile's `frontend` stage. The frontend
-build check and both release images use the same filtered Docker build context,
-allowing the engine to reuse that stage instead of compiling a separate Dagger
-frontend build. Frontend lint and tests retain their shared native test container.
+`frontend-dist` exports the production Dockerfile's `frontend` stage using the
+frontend tree, Dockerfile, Docker ignore file and Socket checksums. The release
+images use the same Dockerfile with the backend and Python workspace inputs
+included in their context. Frontend lint and tests share a native test container.
 The Dockerfile preserves `/src/.next/cache` in a BuildKit cache mount for source-edit
 rebuilds. Next.js 16.4.5 enables its Turbopack filesystem cache by default. Only
 compiler state is mounted: `/src/out` stays in the build layer for export and image

@@ -46,24 +46,32 @@ _MANIFESTS = [
 ]
 
 
+_FRONTEND_BUILD_INPUTS = [
+    "frontend/**",
+    ".dockerignore",
+    "dagger/socket-firewall/src/socket_firewall/checksums.sha256",
+]
+
+
 def _source(source: Directory, include: list[str]) -> Directory:
     return (
         source.filter(include=include, exclude=_EXCLUDE).as_workspace().directory("/")
     )
 
 
+def _frontend_build_source(source: Directory) -> Directory:
+    return _source(source, ["backend/Dockerfile", *_FRONTEND_BUILD_INPUTS])
+
+
 def _production_source(source: Directory) -> Directory:
-    """Share the Dockerfile context between frontend exports and release images."""
     return _source(
         source,
         [
             "backend/**",
-            "frontend/**",
             "pyproject.toml",
             "uv.lock",
             "cli/pyproject.toml",
-            ".dockerignore",
-            "dagger/socket-firewall/src/socket_firewall/checksums.sha256",
+            *_FRONTEND_BUILD_INPUTS,
         ],
     )
 
@@ -301,6 +309,7 @@ class AgentsCi:
     async def module_contracts(self) -> None:
         """Blocked installs and failed scans must preserve failure and report semantics."""
         await self._assert_policy_gates()
+        await self._assert_frontend_build_context()
         base = core().container().from_("alpine:3.22").with_workdir("/work")
         fake_socket = _source(self.source, ["dagger/socket-firewall/tests/**"]).file(
             "dagger/socket-firewall/tests/fake-sfw.sh"
@@ -448,6 +457,24 @@ class AgentsCi:
         else:
             raise AssertionError("OpenGrep crash fabricated a report")
 
+    async def _assert_frontend_build_context(self) -> None:
+        source = (
+            core()
+            .directory()
+            .with_new_file("backend/Dockerfile", "FROM scratch")
+            .with_new_file("backend/main.py", "original backend")
+            .with_new_file("frontend/app/page.tsx", "original frontend")
+        )
+        backend_edit = source.with_new_file("backend/main.py", "edited backend")
+        frontend_edit = source.with_new_file("frontend/app/page.tsx", "edited frontend")
+        original, after_backend_edit, after_frontend_edit = await asyncio.gather(
+            _frontend_build_source(source).digest(),
+            _frontend_build_source(backend_edit).digest(),
+            _frontend_build_source(frontend_edit).digest(),
+        )
+        assert original == after_backend_edit
+        assert original != after_frontend_edit
+
     async def _assert_policy_gates(self) -> None:
         """A newly blocked policy must stop even an otherwise cached workload."""
 
@@ -566,7 +593,7 @@ class AgentsCi:
         """The static export consumed by the production image."""
         await self.socket_frontend()
         return (
-            _production_source(self.source)
+            _frontend_build_source(self.source)
             .docker_build(dockerfile="backend/Dockerfile", target="frontend")
             .directory("/src/out")
         )
