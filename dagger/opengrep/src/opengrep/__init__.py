@@ -9,7 +9,7 @@ from dagger import field, function, object_type
 VERSION = "v1.33.1"
 SHA256 = "sha256:46e8133cc490f9f50518061590ce2f6be5a08afaeda034471c0ceda4b3899808"
 # renovate: datasource=docker depName=debian
-BASE_IMAGE = "debian:bookworm-slim@sha256:734a72b3d6142a71993b4bc580ca01d8ca687f77a2c422d96a961d3376b179bc"
+BASE_IMAGE = "debian:bookworm-slim@sha256:e67eeead736ff7bbe258ef088bff683635c561b1fcfefad0806c1df4ab49ce0e"
 
 
 @object_type
