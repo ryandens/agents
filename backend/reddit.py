@@ -3,6 +3,7 @@
 from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
+from psycopg import sql
 from psycopg_pool import ConnectionPool
 from pydantic import BaseModel
 
@@ -101,9 +102,11 @@ def reddit_report(
     params = _params(start, end, tz, subreddit)
     with pool.connection() as conn:
         daily = conn.execute(
-            _BASE
-            + _SEQUENCE
-            + """
+            sql.SQL("").join(
+                [
+                    sql.SQL(_BASE),
+                    sql.SQL(_SEQUENCE),
+                    sql.SQL("""
             , totals AS (
                 SELECT day, count(*) AS raw_visits,
                        count(*) FILTER (WHERE is_visit) AS visits,
@@ -116,19 +119,25 @@ def reddit_report(
                    coalesce(totals.unique_posts, 0) AS unique_posts
             FROM (SELECT DISTINCT day FROM history) history
             LEFT JOIN totals USING (day) ORDER BY history.day
-            """,
+            """),
+                ]
+            ),
             params,
         ).fetchall()
         # Keep all communities available while drilling into a single one.
         communities = conn.execute(
-            _BASE
-            + _SEQUENCE
-            + """
+            sql.SQL("").join(
+                [
+                    sql.SQL(_BASE),
+                    sql.SQL(_SEQUENCE),
+                    sql.SQL("""
             SELECT subreddit, count(*) FILTER (WHERE is_visit) AS visits,
                    count(*) AS raw_visits
             FROM counted GROUP BY subreddit
             ORDER BY visits DESC, subreddit NULLS LAST
-            """,
+            """),
+                ]
+            ),
             {**params, "subreddit": None},
         ).fetchall()
     by_day = {row["day"]: RedditDay.model_validate(row) for row in daily}
@@ -154,16 +163,27 @@ def reddit_visits(
     offset: int,
 ) -> RedditVisits:
     params = {**_params(start, end, tz, subreddit), "day": day}
-    where = " WHERE (%(day)s::date IS NULL OR day = %(day)s::date)"
+    where = sql.SQL(" WHERE (%(day)s::date IS NULL OR day = %(day)s::date)")
     with pool.connection() as conn:
         total = conn.execute(
-            _BASE + "SELECT count(*) AS total FROM scoped" + where, params
+            sql.SQL("").join(
+                [sql.SQL(_BASE), sql.SQL("SELECT count(*) AS total FROM scoped"), where]
+            ),
+            params,
         ).fetchone()["total"]
         rows = conn.execute(
-            _BASE
-            + "SELECT visited_at AS timestamp, url, title, subreddit FROM scoped"
-            + where
-            + " ORDER BY visited_at DESC, url_digest DESC LIMIT %(limit)s OFFSET %(offset)s",
+            sql.SQL("").join(
+                [
+                    sql.SQL(_BASE),
+                    sql.SQL(
+                        "SELECT visited_at AS timestamp, url, title, subreddit FROM scoped"
+                    ),
+                    where,
+                    sql.SQL(
+                        " ORDER BY visited_at DESC, url_digest DESC LIMIT %(limit)s OFFSET %(offset)s"
+                    ),
+                ]
+            ),
             {**params, "limit": limit, "offset": offset},
         ).fetchall()
     return RedditVisits(

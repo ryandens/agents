@@ -35,14 +35,14 @@ const report: RedditReport = {
 };
 
 function mockFetch(
-  options: { total?: number; fail?: boolean; data?: RedditReport } = {},
+  options: { total?: number; hasFailed?: boolean; data?: RedditReport } = {},
 ) {
   const fetch = vi.fn(async (input: string) => {
     const url = new URL(input, "https://agents.example");
     const raw = url.pathname.endsWith("/visits");
     return {
-      ok: !options.fail,
-      status: options.fail ? 500 : 200,
+      ok: !options.hasFailed,
+      status: options.hasFailed ? 500 : 200,
       json: async () =>
         raw
           ? {
@@ -232,11 +232,11 @@ describe("Reddit tracker", () => {
 
   it("offers retry when history fails to load", async () => {
     const user = userEvent.setup();
-    const options = { fail: true };
+    const options = { hasFailed: true };
     mockFetch(options);
     render(<RedditPage />);
     await screen.findAllByRole("alert");
-    options.fail = false;
+    options.hasFailed = false;
     await user.click(screen.getAllByRole("button", { name: "Retry" })[0]);
     expect(
       await screen.findByRole("heading", { name: /Page opens per day/ }),
@@ -263,7 +263,9 @@ describe("Reddit tracker", () => {
 
   it("discards an old raw-record response after changing the subreddit", async () => {
     const user = userEvent.setup();
-    let resolveOld: (value: unknown) => void = () => {};
+    let resolveOld: (value: unknown) => void = () => {
+      throw new Error("The initial request has not started");
+    };
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: string) => {
