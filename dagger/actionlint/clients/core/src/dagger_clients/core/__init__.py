@@ -524,6 +524,8 @@ class BuildArg(_Input):
         if not (isinstance(self.value, str)):
             raise _type_error("BuildArg.__init__", "value", self.value, "str")
 
+    _graphql_names = (('name', 'name'), ('value', 'value'))
+
 
 @_dataclass(slots=True)
 class LLMContentBlockInput(_Input):
@@ -586,6 +588,8 @@ class LLMContentBlockInput(_Input):
         if not (self.tool_name is None or isinstance(self.tool_name, str)):
             raise _type_error("LLMContentBlockInput.__init__", "tool_name", self.tool_name, "str | None")
 
+    _graphql_names = (('kind', 'kind'), ('arguments', 'arguments'), ('call_id', 'callId'), ('content', 'content'), ('data', 'data'), ('errored', 'errored'), ('file', 'file'), ('mime_type', 'mimeType'), ('signature', 'signature'), ('text', 'text'), ('tool_name', 'toolName'))
+
 
 @_dataclass(slots=True)
 class LLMMessageOriginInput(_Input):
@@ -614,6 +618,8 @@ class LLMMessageOriginInput(_Input):
         if not (self.reply_to is None or isinstance(self.reply_to, str)):
             raise _type_error("LLMMessageOriginInput.__init__", "reply_to", self.reply_to, "str | None")
 
+    _graphql_names = (('kind', 'kind'), ('agent_name', 'agentName'), ('ref', 'ref'), ('reply_to', 'replyTo'))
+
 
 @_dataclass(slots=True)
 class PipelineLabel(_Input):
@@ -630,6 +636,8 @@ class PipelineLabel(_Input):
             raise _type_error("PipelineLabel.__init__", "name", self.name, "str")
         if not (isinstance(self.value, str)):
             raise _type_error("PipelineLabel.__init__", "value", self.value, "str")
+
+    _graphql_names = (('name', 'name'), ('value', 'value'))
 
 
 @_dataclass(slots=True)
@@ -652,6 +660,8 @@ class PortForward(_Input):
             raise _type_error("PortForward.__init__", "frontend", self.frontend, "int | None")
         if not (self.protocol is None or isinstance(self.protocol, NetworkProtocol)):
             raise _type_error("PortForward.__init__", "protocol", self.protocol, "NetworkProtocol | None")
+
+    _graphql_names = (('backend', 'backend'), ('frontend', 'frontend'), ('protocol', 'protocol'))
 
 
 @_runtime_checkable
@@ -3732,7 +3742,7 @@ class Container(_Type):
         _ctx = self._select("exitCode", _args)
         return await _ctx.execute(int)
 
-    def experimental_with_all_gp_us(self) -> _Self:
+    def experimental_with_all_gpus(self) -> _Self:
         """Configures all available GPUs on the host to be accessible to this
         container.
 
@@ -3742,7 +3752,7 @@ class Container(_Type):
             Use "withGPU" instead.
         """
         _warnings.warn(
-            "Method \"experimental_with_all_gp_us\" is deprecated: Use \"withGPU\" instead.",
+            "Method \"experimental_with_all_gpus\" is deprecated: Use \"withGPU\" instead.",
             DeprecationWarning,
             stacklevel=4,
         )                
@@ -10244,7 +10254,7 @@ class GitBundle(_Type):
         _ctx = self._select("objectFormat", _args)
         return await _ctx.execute(str)
 
-    async def prerequisite_sh_as(self) -> list[str]:
+    async def prerequisite_shas(self) -> list[str]:
         """Commits that must already exist wherever this bundle is applied.
 
         Returns
