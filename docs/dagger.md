@@ -19,6 +19,10 @@ that Dagger matches `.dagger-version`; review CLI-pin and lockfile updates toget
 The Python SDK is separately pinned in `dagger.toml`, and `dagger.lock` records
 resolved module sources and images. Standard SDK generation selects the native
 Python runtime; the legacy generated Dang entrypoints have been removed.
+The module manifests pin that runtime to `v1.8.0`, which supports the pinned
+beta.25 engine. Keep these pins explicit: newer `runtime@v1` releases require
+`ModuleNaming`, introduced in beta.26, and can break nested client generation
+even when the workspace SDK and lockfile are pinned.
 
 From the shell:
 
