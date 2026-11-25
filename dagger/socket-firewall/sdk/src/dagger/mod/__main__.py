@@ -1,10 +1,13 @@
 """Commands the generated entrypoint runs in the module's container."""
 
 import argparse
+import atexit
 import json
 import logging
+import os
 import pathlib
 import sys
+import threading
 from typing import Any
 
 import anyio
@@ -12,7 +15,14 @@ import anyio
 from dagger import telemetry
 from dagger._exceptions import QueryError
 from dagger.client._session import mark_module_runtime
-from dagger.mod._exceptions import ModuleError
+from dagger.mod._exceptions import (
+    FUNCTION_ERROR_PATH_ENV,
+    ErrorOriginFilter,
+    ModuleError,
+    function_error_message,
+    report_function_error,
+    write_function_error,
+)
 
 logger = logging.getLogger(__package__)
 
@@ -59,15 +69,40 @@ def main(argv: list[str] | None = None) -> int:
     call.set_defaults(run=_call)
 
     args = parser.parse_args(argv)
+    if _error_file(args):
+        # The engine reads an error's origin from the file.
+        logger.addFilter(ErrorOriginFilter())
     try:
         args.run(args)
     except (ModuleError, QueryError) as e:
-        logger.error(str(e))  # noqa: TRY400 - the message is the whole story
+        # The engine shows an error it is given in a file; logging it
+        # would show it twice.
+        if not _error_file(args):
+            logger.error(str(e))  # noqa: TRY400 - the message is the whole story
+        _report(args, e)
         return 2
-    except Exception:
+    except Exception as e:
         logger.exception("Unhandled exception")
+        _report(args, e)
         return 1
     return 0
+
+
+def _error_file(args: argparse.Namespace) -> str:
+    """The file the engine gives a call's process for its error, if any."""
+    if args.run is not _call:
+        return ""
+    return os.environ.get(FUNCTION_ERROR_PATH_ENV, "")
+
+
+def _report(args: argparse.Namespace, exc: Exception) -> None:
+    """Give the engine a failed call's error, after everything it logged."""
+    if args.run is not _call:
+        return
+    if path := _error_file(args):
+        write_function_error(path, exc)
+    else:
+        report_function_error(function_error_message(exc))
 
 
 def _entrypoint(args: argparse.Namespace) -> None:
@@ -101,18 +136,39 @@ def _call(args: argparse.Namespace) -> None:
     request = json.load(sys.stdin)
     telemetry.initialize()
     try:
-        result = anyio.run(_dispatch, request)
+        result = anyio.run(_dispatch, request, bool(_error_file(args)))
     finally:
         telemetry.shutdown()
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(result))
 
 
-async def _dispatch(request: dict[str, Any]) -> Any:
+async def _dispatch(request: dict[str, Any], error_file: bool) -> Any:
     from dagger.mod.cli import load_module
 
-    return await load_module().dispatch(request)
+    # The file keeps the error's whole traceback: the logs show the user's
+    # code, and nothing of an API error the engine shows the origin of, the
+    # call that failed with its logs.
+    mod = load_module(short_tracebacks=error_file)
+    mod.short_tracebacks = error_file
+    return await mod.dispatch(request)
+
+
+def _exit(code: int) -> None:
+    """Exit as a normal exit does, but skip tearing the interpreter down.
+
+    The teardown frees every object the imports made, about 50 ms per call,
+    and nothing reads the process after it: the result is written and closed,
+    and telemetry is flushed.
+    """
+    for thread in threading.enumerate():
+        if thread is not threading.main_thread() and not thread.daemon:
+            thread.join()
+    atexit._run_exitfuncs()  # noqa: SLF001 - os._exit skips atexit handlers
+    sys.stdout.flush()
+    sys.stderr.flush()
+    os._exit(code)
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    _exit(main())

@@ -100,7 +100,7 @@
     },
     {
       "customType": "regex",
-      "description": "Update the Python SDK; regenerate clients when reviewing its PR.",
+      "description": "Track the Python SDK pin; upgrades are disabled below because generated files must be committed together.",
       "managerFilePatterns": [
         "/^dagger\\.toml$/"
       ],
@@ -185,6 +185,11 @@
     }
   },
   "packageRules": [
+    {
+      "description": "Upgrade the Dagger Python SDK manually with dagger generate -y and commit the generated SDK, clients and lockfile together.",
+      "matchPackageNames": ["dagger/python-sdk"],
+      "enabled": false
+    },
     // This rule controls automation; the manager-specific rules below retain their release-age gates.
     // nosemgrep: package_managers.renovate.renovate-missing-minimum-release-age.renovate-missing-minimum-release-age
     {
