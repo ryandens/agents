@@ -1,3 +1,21 @@
+# Before opening or updating a pull request
+
+Run the complete local CI pipeline in the PR's worktree using the same pinned Nix
+and Dagger entry point as `.github/workflows/ci.yml`:
+
+```sh
+nix develop --no-write-lock-file --command dagger api call ci export --path "$PWD/reports" --wipe --progress report
+```
+
+Inspect `reports/results.json` and the Datadog/OpenGrep scanner logs, and require
+`reports/exit-code` to contain `0` before opening or updating a PR. A successful
+report export alone does not mean the checks passed. Fix failures before submitting;
+do not disable checks, suppress findings without justification, or substitute focused
+tests, a host-only build, or checks with generated-file validation disabled for this
+full run. The complete pipeline covers locked dependencies, scanners, both image
+architectures, smoke tests and generated-file staleness. Revalidate the final changes
+before pushing the PR update.
+
 # Releases and infrastructure
 
 Use `just deploy` to apply the full Terraform configuration and restart the app.
