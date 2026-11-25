@@ -1,8 +1,8 @@
 """Posting visits to the API as a Google service account.
 
 The backend accepts two credentials: a browser session cookie, and a Google-signed ID
-token presented as a bearer token (see backend/auth.py). A launchd job has no browser to
-complete a redirect with, so it takes the second path.
+token presented as a bearer token (see backend/auth.py). The CLI uses the second path so
+uploads do not require an interactive browser login.
 
 The exchange is the JWT-bearer flow. This tool signs a short-lived assertion with the
 service account's private key, hands it to Google, and gets back an ID token that Google
@@ -136,7 +136,7 @@ def _post_batch(
             last_error = f"HTTP {response.status_code}: {body}"
 
         if attempt < MAX_ATTEMPTS:
-            # A plain backoff. This runs once a night against one service; anything
+            # A plain backoff. This runs on demand against one service; anything
             # cleverer would be more machinery than the problem deserves.
             time.sleep(2**attempt)
 

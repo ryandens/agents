@@ -16,8 +16,8 @@ visited_at,title,url
 2026-07-29T08:15:03-04:00,"Ruby, Rails and rest",https://example.org/post
 ```
 
-Run nightly by a LaunchAgent, it exports yesterday, catches up on any days the Mac was
-asleep or switched off for, and uploads each day to `POST /api/browser-history`.
+Run it manually with `just cli-run` to export through yesterday, catch up on missed
+days, and upload each day to `POST /api/browser-history`. Nothing runs in the background.
 
 The first run, with no state yet, backfills from a fixed start date — `FIRST_EXPORT_DATE`
 in `src/safari_history/state.py`, currently **2026-07-01** — rather than from yesterday.
@@ -36,7 +36,7 @@ Days before the start date are still reachable by naming them: `export-safari-hi
 ## How it works
 
 ```
-launchd (00:15 daily)
+just cli-run (on demand)
   └── ~/Library/Application Support/safari-history-export/venv/bin/export-safari-history
         ├── 1. copy  ~/Library/Safari/History.db (+ -wal, -shm) to a temp dir   ← needs FDA
         ├── 2. query history_visits ⋈ history_items for one local day
@@ -58,8 +58,8 @@ no visits, and even legacy header-only CSVs are never posted or acknowledged.
 
 Every export run also retries pending uploads, including when there are no new days.
 If a Tailscale host cannot be reached, the upload sweep stops and leaves the CSVs
-pending for another day. These deferrals exit successfully; configuration, credential,
-and API errors still report failures.
+pending for a later manual run. These deferrals exit successfully; configuration,
+credential, and API errors still report failures.
 
 Timestamps come out of SQLite as `CFAbsoluteTime` — seconds since 2001-01-01 UTC — and
 are converted to local time with an explicit UTC offset, so a visit at 23:30 belongs to
@@ -73,7 +73,7 @@ Two independent records live in
 | `last_exported_date` | how far through the calendar the exporter has got |
 | `uploads` | which days the API has acknowledged, and the digest of the CSV it saw |
 
-Keeping them separate is what lets an API outage leave the nightly export running and be
+Keeping them separate is what lets an API outage leave exports running and be
 repaired later with `export-safari-history upload`, rather than stalling the whole
 pipeline behind the network.
 
@@ -111,7 +111,7 @@ uvx --from ./cli export-safari-history upload
 uvx --from ./cli export-safari-history status
 ```
 
-It is the wrong tool for the scheduled export, because `uvx` runs your code with a
+Use the dedicated virtualenv for exports, because `uvx` runs your code with a
 shared interpreter from uv's cache — a path that changes when the Python version does,
 and that every other `uvx` tool also runs under. Granting Full Disk Access there would
 hand it to all of them, and the grant would break on the next Python upgrade.
@@ -201,11 +201,11 @@ CLI="$HOME/Library/Application Support/safari-history-export/venv/bin/export-saf
 "$CLI" 2026-07-29 --no-upload          # export one day, write no network traffic
 "$CLI" upload --dry-run                # what would be sent, without sending
 "$CLI" 2026-07-29                      # export and upload one day
-"$CLI"                                 # what the LaunchAgent runs: catch up
+"$CLI"                                 # catch up through yesterday
 ```
 
 Exporting an explicit date never moves the catch-up high-water mark, so re-exporting last
-Tuesday to fix something will not make the next scheduled run re-do everything since.
+Tuesday to fix something will not make the next manual run re-do everything since.
 
 Exit codes, for scripting around it:
 
@@ -219,62 +219,40 @@ Exit codes, for scripting around it:
 | 5 | history database unreadable or locked |
 | 6 | upload or credential failure |
 
-## LaunchAgent
+## Manual workflow
+
+Configure `SAFARI_HISTORY_API_URL` and `GOOGLE_APPLICATION_CREDENTIALS` in the
+repository's ignored `.env` file (loaded by Just), or export them in your shell.
+Direct CLI invocations do not load `.env`.
 
 ```sh
-just cli-install-agent    # render the plist with your paths, then load it
+just cli-status                  # configuration, permissions, pending work
+just cli-run                     # catch up through yesterday and retry uploads
+just cli-run --max-catchup-days 365  # larger catch-up after a long gap
+just cli-run 2026-07-29           # export and upload a specific day
+just cli-upload --dry-run        # inspect pending uploads
+just cli-upload                  # retry uploads; no Safari database access needed
 ```
 
-That writes `~/Library/LaunchAgents/com.ryandens.safari-history-export.plist` from
-[`launchd/com.ryandens.safari-history-export.plist`](launchd/com.ryandens.safari-history-export.plist)
-and loads it. `launchd` does not expand `~`, so the template's placeholders are replaced
-with absolute paths at install time.
+The existing CSVs and upload ledger are reused. Header-only legacy CSVs remain
+pending because the tool refuses to upload or acknowledge empty days; a pending
+count alone does not prove that populated history failed to upload.
 
-By hand — the substitution is deliberately not `sed`. In a `sed` replacement `&` means
-"the text that matched", so an API URL carrying a query string (`...?a=1&b=2`) writes
-the `__API_URL__` placeholder back into the plist instead of the URL, and `|` or a
-backslash breaks the expression outright. The result is a plist `launchctl` rejects with
-a message that points nowhere near the cause. The values also land inside XML, so `&`
-and `<` need escaping there too:
+### Migrate from the former scheduled task
+
+Before removing an existing agent, copy its `SAFARI_HISTORY_API_URL` and
+`GOOGLE_APPLICATION_CREDENTIALS` settings from
+`~/Library/LaunchAgents/com.ryandens.safari-history-export.plist` into `.env`
+or your shell environment. The agent's configuration was a snapshot and may be
+the only place those settings were stored.
 
 ```sh
-venv="$HOME/Library/Application Support/safari-history-export/venv"
-
-AGENT_HOME="$HOME" \
-AGENT_API_URL="$SAFARI_HISTORY_API_URL" \
-AGENT_CREDENTIALS="$GOOGLE_APPLICATION_CREDENTIALS" \
-  "$venv/bin/python" -m safari_history.launch_agent \
-  cli/launchd/com.ryandens.safari-history-export.plist \
-  > ~/Library/LaunchAgents/com.ryandens.safari-history-export.plist
-
-plutil -lint ~/Library/LaunchAgents/com.ryandens.safari-history-export.plist
-launchctl bootstrap "gui/$(id -u)" ~/Library/LaunchAgents/com.ryandens.safari-history-export.plist
+just cli-uninstall-agent
 ```
 
-Managing it:
-
-```sh
-launchctl print "gui/$(id -u)/com.ryandens.safari-history-export"   # state, last exit code
-launchctl kickstart -p "gui/$(id -u)/com.ryandens.safari-history-export"   # run it now
-launchctl bootout "gui/$(id -u)/com.ryandens.safari-history-export"        # unload
-```
-
-`bootstrap`/`bootout` are the current verbs; `launchctl load`/`unload` still work but are
-deprecated and report less.
-
-The job runs at **00:15** local time. If the Mac is asleep, `launchd` runs it once on
-wake; if it was switched off, at next login. Either way the run catches up every day it
-missed, up to 30 per run (`--max-catchup-days` to go further back in one go).
-
-### Logs
-
-```sh
-tail -f ~/Library/Logs/safari-history-export.log
-tail -f ~/Library/Logs/safari-history-export.error.log
-```
-
-Every line is timestamped, because the only question anyone asks of this log is "did last
-night's run happen?".
+This unloads the former job and removes its plist, preserving the dedicated
+interpreter, state, exports, and historical logs. Installing or updating the CLI
+never schedules a background task.
 
 ## Uninstall
 
@@ -304,12 +282,6 @@ Exported CSVs in `~/Safari-History-Exports/` are left alone; delete them yoursel
 The interpreter has no Full Disk Access. Run `status`, and add exactly the path it
 prints. If it is already listed and enabled, remove the entry with **−** and add it
 again — reinstalling the virtualenv replaces the binary the grant was keyed to.
-
-**It works in Terminal but fails under launchd**
-Terminal's own Full Disk Access covers anything you run from it, which masks a missing
-grant on the interpreter. Test the way `launchd` runs it, with
-`launchctl kickstart -p gui/$(id -u)/com.ryandens.safari-history-export`, and read the
-error log.
 
 **`no Safari history database` (exit 4)**
 Safari has not been used on this account, or the path differs — pass `--database`. macOS
@@ -346,8 +318,9 @@ audience being used; it must be the scheme and host only, with no trailing path.
 deduplicates on (timestamp, url), so re-uploading a day is safe and stores nothing twice.
 
 **Yesterday's CSV is missing entirely**
-An empty or stale day is deferred without creating a CSV. Check the log for a deferral
-message; if there is no run logged, check `launchctl print` and the error log.
+An empty or stale day is deferred without creating a CSV. Check the command output
+for a deferral message. Run `just cli-run` after history has synced; the CLI does not
+open Safari or force synchronization.
 
 ## Development
 

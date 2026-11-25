@@ -4,7 +4,7 @@ These messages end up in a log file nobody reads until the export has been quiet
 broken for a week, so each one says what failed, where, and what to do about it.
 "Operation not permitted" on its own has cost enough people an afternoon.
 
-Exit codes are distinct per failure class so a launchd log or a shell caller can tell
+Exit codes are distinct per failure class so a shell caller can tell
 them apart without grepping message text.
 """
 

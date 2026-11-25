@@ -355,20 +355,21 @@ production while working on every developer machine.
 ### Safari history export (`cli/`)
 
 A macOS command line tool that exports Safari's browsing history to one CSV per day in
-`~/Safari-History-Exports/`, then posts it to the endpoint above as a service account. A
-LaunchAgent runs it nightly; it catches up on any days the Mac was asleep or switched
-off. Private Browsing is never exported — Safari does not record it.
+`~/Safari-History-Exports/`, then posts it to the endpoint above as a service account.
+Run it manually to catch up through yesterday. Private Browsing is never exported —
+Safari does not record it.
 
 ```sh
 just cli-install         # install into its own virtualenv, then grant Full Disk Access
-just cli-install-agent   # render the LaunchAgent plist and load it
+just cli-run             # export and upload through yesterday
+just cli-upload          # retry pending uploads without reading Safari
 just cli-status          # configuration, permissions, pending work
 ```
 
 Reading `~/Library/Safari/History.db` requires Full Disk Access, which is granted to the
 interpreter rather than to the script. That is why this installs into a dedicated
 virtualenv instead of running through `uvx` — see [cli/README.md](cli/README.md) for the
-full explanation, the LaunchAgent, and troubleshooting.
+full explanation, configuration, and troubleshooting.
 
 ## Deployment
 
