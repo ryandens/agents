@@ -40,7 +40,7 @@ export default function RootLayout({
           reach the session for the sign-out button. */}
       <body className="min-h-full flex flex-col">
         <AuthProvider>
-          <nav className="shrink-0 flex items-center gap-1 px-4 py-2 bg-white dark:bg-stone-900 border-b border-stone-200 dark:border-stone-800">
+          <nav aria-label="Main navigation" className="overflow-x-auto shrink-0 flex items-center gap-1 px-4 py-2 bg-white dark:bg-stone-900 border-b border-stone-200 dark:border-stone-800">
             <span className="text-lg mr-2">🥗</span>
             <Link
               href="/"
@@ -59,6 +59,12 @@ export default function RootLayout({
               className="px-3 py-1.5 text-sm font-medium rounded-lg text-stone-700 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors"
             >
               Shorts
+            </Link>
+            <Link
+              href="/reddit"
+              className="px-3 py-1.5 text-sm font-medium rounded-lg text-stone-700 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors"
+            >
+              Reddit
             </Link>
             <a href="/fitness/" className="px-3 py-1.5 text-sm font-medium rounded-lg hover:bg-stone-100 dark:hover:bg-stone-800">Fitness</a>
             <UserMenu />

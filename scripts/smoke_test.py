@@ -143,17 +143,20 @@ def hashed_assets_are_served(base_url):
 
 @check
 def nested_route_is_served(base_url):
-    """/pantry/ resolves to the exported pantry/index.html"""
-    status, headers, body = fetch(f"{base_url}/pantry/")
-    assert status == 200, f"expected 200, got {status}"
-    assert "text/html" in headers.get("Content-Type", ""), "expected html"
-    assert b"<title>Kitchen Agent</title>" in body, "app title missing from /pantry/"
+    """Nested tabs resolve to their exported index.html."""
+    for route in ("/pantry/", "/reddit/"):
+        status, headers, body = fetch(f"{base_url}{route}")
+        assert status == 200, f"{route}: expected 200, got {status}"
+        assert "text/html" in headers.get("Content-Type", ""), "expected html"
+        assert b"<title>Kitchen Agent</title>" in body, (
+            f"app title missing from {route}"
+        )
 
 
 @check
 def nested_routes_redirect_to_trailing_slash(base_url):
-    """/pantry and /shorts redirect to their trailing-slash form, as the export needs"""
-    for route in ("/pantry", "/shorts"):
+    """Nested tabs redirect to their trailing-slash form, as the export needs."""
+    for route in ("/pantry", "/shorts", "/reddit"):
         status, headers, _ = fetch(f"{base_url}{route}", follow_redirects=False)
         assert status in (301, 307, 308), f"{route}: expected a redirect, got {status}"
         location = headers.get("Location", "")
@@ -179,6 +182,8 @@ def api_is_not_shadowed_by_static_files(base_url):
         # most likely to be answered by a 404 page from the static mount instead of by
         # FastAPI — and it would look like an empty graph rather than like an error.
         ("GET", "/api/youtube-shorts/daily", None),
+        ("GET", "/api/reddit/daily", None),
+        ("GET", "/api/reddit/visits", None),
     ):
         status, headers, payload = fetch(
             f"{base_url}{path}", method=method, body=body, follow_redirects=False

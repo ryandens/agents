@@ -352,6 +352,40 @@ Note that `tzdata` is a backend dependency for this: the deployed image is distr
 and carries no `/usr/share/zoneinfo`, so without it every zone but UTC would fail in
 production while working on every developer machine.
 
+### Reddit tracker
+
+The **Reddit** tab derives activity from existing `browser_visits`, including history
+uploaded before this feature. No migration, Reddit API credentials, or re-upload is
+needed. It follows the Shorts tab's ranges, local calendar dates, chart/table views,
+and missing-history treatment, with neutral language aimed at reducing browsing
+rather than eliminating it.
+
+- Switch between **estimated page opens** and **raw site visits** on the daily graph.
+  Repeat records for the same post/page in the same subreddit, within two minutes of
+  the previous record on that local day, count as one estimated open. Post IDs collapse
+  comment links and changing slugs; hosts and query strings do not create new opens.
+- Select a subreddit from the breakdown or filter to scope the graph and raw records.
+  Community names are case-insensitive. Home, search, profiles, multi-community URLs,
+  and post URLs without an explicit subreddit stay under **Other Reddit pages**.
+- Select a chart column or daily-table date to inspect original stored records, with
+  titles, URLs, local timestamps, and pagination. Raw counts include reloads/redirects
+  stored by the existing ingestion API, after its `(timestamp, URL)` deduplication.
+- The recent trend compares two equally long periods of completed calendar days in
+  the selected range, excluding today. It appears only with history on every compared
+  day and a nonzero baseline. A day with any Safari history is not a guarantee that
+  the whole day has synced. Missing days do not count as zero-use achievements.
+
+Authenticated endpoints are `GET /api/reddit/daily` and `GET /api/reddit/visits`.
+Both accept `days` (1–365, default 30), `tz` (IANA zone), and optional `subreddit`;
+`__none__` selects unattributed pages. The daily response contains `days` and an
+all-community `subreddits` breakdown. Raw visits additionally accept a local `day`
+within the window, `limit` (1–200, default 50), and `offset` (0–1,000,000), and return
+`visits`, `total`, `limit`, and `offset`. Only HTTP(S) URLs on `reddit.com` or its
+subdomains count; `redd.it` redirects count only if Safari also recorded a Reddit URL.
+
+History measures page visits, not reliable minutes spent, votes, comments authored,
+or activity inside the Reddit app. Private Browsing is never recorded.
+
 ### Safari history export (`cli/`)
 
 A macOS command line tool that exports Safari's browsing history to one CSV per day in

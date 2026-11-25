@@ -5,7 +5,7 @@ import os
 import secrets
 from collections.abc import AsyncGenerator, AsyncIterator
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from typing import Annotated, Any, Literal, cast
 from uuid import UUID
@@ -34,6 +34,7 @@ from fitness_api import router as fitness_router
 from fitness_store import FitnessStore
 from pantry import PantryItem, PantryItemCreate, PantryItemUpdate, StorageLocation
 from pantry_store import PantryStore
+from reddit import RedditReport, RedditVisits
 from youtube_shorts import DEFAULT_DAYS, MAX_DAYS, ShortsDay, fill_gaps, window
 
 # Search from this file's location up through the repo root
@@ -527,6 +528,54 @@ def daily_youtube_shorts(
     # is the day in progress rather than a UTC day that may have already rolled over.
     start, end = window(days, datetime.now(zone).date())
     return fill_gaps(history.daily_shorts(start, end, tz), start, end)
+
+
+def reddit_window(days: int, tz: str) -> tuple[date, date]:
+    try:
+        zone = ZoneInfo(tz)
+    except ZoneInfoNotFoundError, ValueError:
+        raise HTTPException(
+            status_code=400, detail=f"unknown time zone: {tz!r}"
+        ) from None
+    return window(days, datetime.now(zone).date())
+
+
+SubredditFilter = Annotated[
+    str | None, Query(pattern=r"^[A-Za-z0-9_]+$", max_length=100)
+]
+
+
+@app.get("/api/reddit/daily", response_model=RedditReport)
+def daily_reddit(
+    _: AuthenticatedUser,
+    history: History,
+    days: Annotated[int, Query(ge=1, le=MAX_DAYS)] = DEFAULT_DAYS,
+    tz: str = "UTC",
+    subreddit: SubredditFilter = None,
+) -> RedditReport:
+    """Daily page opens and raw records; missing history is unknown, not zero."""
+    start, end = reddit_window(days, tz)
+    return history.reddit_report(start, end, tz, subreddit)
+
+
+@app.get("/api/reddit/visits", response_model=RedditVisits)
+def list_reddit_visits(
+    _: AuthenticatedUser,
+    history: History,
+    days: Annotated[int, Query(ge=1, le=MAX_DAYS)] = DEFAULT_DAYS,
+    tz: str = "UTC",
+    subreddit: SubredditFilter = None,
+    day: date | None = None,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    offset: Annotated[int, Query(ge=0, le=1_000_000)] = 0,
+) -> RedditVisits:
+    """Paginated original Reddit records, optionally scoped to one local day."""
+    start, end = reddit_window(days, tz)
+    if day is not None and not start <= day <= end:
+        raise HTTPException(
+            status_code=400, detail="day is outside the requested range"
+        )
+    return history.reddit_visits(start, end, tz, subreddit, day, limit, offset)
 
 
 # Register the export as low-priority routes so API paths continue to take precedence.

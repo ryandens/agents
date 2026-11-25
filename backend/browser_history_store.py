@@ -23,6 +23,7 @@ from zoneinfo import ZoneInfo
 from psycopg_pool import ConnectionPool
 
 from browser_history import SiteVisit
+from reddit import RedditReport, RedditVisits, reddit_report, reddit_visits
 from youtube_shorts import SHORTS_URL_PATTERN, ShortsDay
 
 # RETURNING reports only the rows that were actually inserted, so its length is the
@@ -182,6 +183,23 @@ class BrowserHistoryStore:
                 },
             ).fetchall()
         return [ShortsDay.model_validate(row) for row in rows]
+
+    def reddit_report(
+        self, start: date, end: date, tz: str, subreddit: str | None = None
+    ) -> RedditReport:
+        return reddit_report(self._pool, start, end, tz, subreddit)
+
+    def reddit_visits(
+        self,
+        start: date,
+        end: date,
+        tz: str,
+        subreddit: str | None = None,
+        day: date | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> RedditVisits:
+        return reddit_visits(self._pool, start, end, tz, subreddit, day, limit, offset)
 
     def count(self) -> int:
         with self._pool.connection() as conn:
