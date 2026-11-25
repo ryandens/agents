@@ -54,7 +54,7 @@ syntax. The beta version is an explicit compatibility choice to validate.
 | Existing behavior | Proposed Dagger responsibility | Integration that stays outside |
 | --- | --- | --- |
 | Backend Ruff, formatting, pytest | Named checks; disposable Postgres 17 bound through `TEST_DATABASE_URL` | GitHub triggers and aggregate check policy |
-| CLI Ruff, formatting, pytest | Independent checks using synthetic Safari fixtures | macOS installation, Full Disk Access and launchd |
+| CLI Ruff, formatting, pytest | Independent checks using synthetic Safari fixtures | macOS installation, Full Disk Access and manual exports |
 | Frontend lint, build, Vitest | Shared frozen install; independent checks; static output as a Directory | Developer hot reload can keep current recipes |
 | Datadog analysis | Pinned tool, report object and policy check | SARIF upload permissions and GitHub upload action |
 | Actionlint and OpenGrep | Reusable portable checks and report generation | GitHub event context and report upload |

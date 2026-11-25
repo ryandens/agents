@@ -4,6 +4,10 @@ This document records durable engineering and operational lessons from diagnosin
 stale-history incident and extending the exporter. Examples deliberately avoid personal
 paths, service URLs, account identifiers, and browsing details.
 
+The exporter now runs manually via `just cli-run` and `just cli-upload`. References
+to LaunchAgents below describe past incidents. See [the migration guide](README.md#migrate-from-the-former-scheduled-task)
+to remove an existing scheduled installation.
+
 ## Incident runbook: missing history
 
 Start by identifying the first layer where data disappears. Do not rewind state or

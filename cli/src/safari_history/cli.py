@@ -366,7 +366,7 @@ def command_export(args: argparse.Namespace) -> int:
             last_good = day
 
     # An explicit date never moves the mark: re-exporting last Tuesday is a repair job,
-    # and letting it rewrite the high-water mark would make the next scheduled run
+    # and letting it rewrite the high-water mark would make the next catch-up run
     # re-export every day since.
     if last_good is not None and args.day is None and not args.no_state:
         state.last_exported_date = last_good

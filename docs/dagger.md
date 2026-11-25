@@ -48,7 +48,7 @@ Terraform state and agent worktrees. No temporary checkout or generated-file
 copy-back is involved.
 
 Local `uv`/pnpm installs remain available for hot reload and editing. Safari's
-dedicated virtualenv, Full Disk Access and launchd operations remain host tasks.
+dedicated virtualenv, Full Disk Access and manual exports remain host tasks.
 Linux tests use synthetic Safari databases and need no privacy permissions.
 
 ## What the pipeline checks
@@ -158,7 +158,7 @@ See [Dagger secrets](https://devel.docs.dagger.io/config/secrets/).
 
 Just retains operations that manage persistent host state: hot reload and local
 installs, local database administration, SSH/SSM tunnels, Safari permissions and
-launchd, and the full Terraform deployment. `just env-sync` merges 1Password values
+manual exports, and the full Terraform deployment. `just env-sync` merges 1Password values
 into host `.env` and `terraform.tfvars`, preserving local settings and restrictive
 permissions. Its host-file merge is distinct from passing a secret into a container;
 1Password support itself is not a reason to keep a pipeline task in Just.

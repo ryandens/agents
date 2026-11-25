@@ -920,68 +920,11 @@ cli-status:
 cli-run *args:
     "{{ cli_bin }}" {{ args }}
 
-# Render the LaunchAgent plist with absolute paths and load it
-cli-install-agent:
-    #!/usr/bin/env bash
-    set -euo pipefail
+# Retry pending uploads without reading Safari's protected database
+cli-upload *args:
+    "{{ cli_bin }}" upload {{ args }}
 
-    if [ ! -x "{{ cli_bin }}" ]; then
-        echo "error: {{ cli_bin }} is not installed — run 'just cli-install' first" >&2
-        exit 1
-    fi
-
-    api_url="${SAFARI_HISTORY_API_URL:-}"
-    credentials="${GOOGLE_APPLICATION_CREDENTIALS:-}"
-    for name in api_url credentials; do
-        if [ -z "${!name}" ]; then
-            echo "error: set SAFARI_HISTORY_API_URL and GOOGLE_APPLICATION_CREDENTIALS" >&2
-            echo "       (in .env, which just loads, or in the environment)" >&2
-            exit 1
-        fi
-    done
-
-    mkdir -p "$HOME/Library/LaunchAgents"
-    # launchd never expands ~ or reads a shell profile, so every path in the plist has
-    # to be absolute before it is written.
-    #
-    # Rendered by safari_history.launch_agent rather than sed: sed reads `&` in a
-    # replacement as "the text that matched", so an API URL with a query string would
-    # write the __API_URL__ placeholder back into the plist instead of the URL. See that
-    # module for the rest of the reasoning.
-    rendered="$(mktemp)"
-    trap 'rm -f "$rendered"' EXIT
-    AGENT_HOME="$HOME" AGENT_API_URL="$api_url" AGENT_CREDENTIALS="$credentials" \
-        "{{ cli_venv }}/bin/python" -m safari_history.launch_agent \
-        cli/launchd/{{ cli_label }}.plist > "$rendered"
-
-    # Catches a malformed plist here, with a line number, rather than as launchctl's
-    # much vaguer "Bootstrap failed: 5: Input/output error".
-    plutil -lint "$rendered" >/dev/null
-    mv "$rendered" "{{ cli_plist }}"
-    trap - EXIT
-
-    # bootout first so re-running this picks up an edited plist; ignore "not loaded".
-    launchctl bootout "gui/$(id -u)/{{ cli_label }}" 2>/dev/null || true
-    launchctl bootstrap "gui/$(id -u)" "{{ cli_plist }}"
-
-    echo "loaded {{ cli_label }} — runs daily at 00:15"
-    echo "  just cli-agent-run     run it now"
-    echo "  just cli-logs          watch the log"
-
-# Run the LaunchAgent job now, the way launchd would
-cli-agent-run:
-    launchctl kickstart -p "gui/$(id -u)/{{ cli_label }}"
-
-# Show the LaunchAgent's state and last exit code
-cli-agent-status:
-    launchctl print "gui/$(id -u)/{{ cli_label }}"
-
-# Follow the exporter's logs
-cli-logs:
-    tail -f "$HOME/Library/Logs/safari-history-export.log" \
-            "$HOME/Library/Logs/safari-history-export.error.log"
-
-# Unload the LaunchAgent, leaving the install in place
+# Remove a legacy LaunchAgent, preserving the CLI, state, and exported CSVs
 cli-uninstall-agent:
     #!/usr/bin/env bash
     set -euo pipefail
