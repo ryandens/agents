@@ -185,6 +185,8 @@
     }
   },
   "packageRules": [
+    // Disabled updates have no release-age policy to enforce.
+    // nosemgrep: package_managers.renovate.renovate-missing-minimum-release-age.renovate-missing-minimum-release-age
     {
       "description": "Upgrade the Dagger Python SDK manually with dagger generate -y and commit the generated SDK, clients and lockfile together.",
       "matchPackageNames": ["dagger/python-sdk"],
