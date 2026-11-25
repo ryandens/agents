@@ -15,7 +15,7 @@ FROM socket-${TARGETARCH} AS socket-target
 
 # Static output is platform-independent, so pin to BUILDPLATFORM and build it once
 # rather than emulating the whole Node toolchain for each target architecture.
-FROM --platform=$BUILDPLATFORM ghcr.io/pnpm/pnpm:12.21.0@sha256:168feba88e6a1684c99a62cbf4fe361d4e683e2a6c920d3b0acde7e15a28b62d AS pnpm
+FROM --platform=$BUILDPLATFORM ghcr.io/pnpm/pnpm:12.23.0@sha256:349c846c6c9dab76b2f6fbf4b2df14d5a8c9b2a0fce92fc7e5c2eec3f437e801 AS pnpm
 
 FROM --platform=$BUILDPLATFORM node:26.13.1-slim@sha256:abe7e5a82b61a8ef67b315b85497c9e65173387ccf2f4a029248184b8e020be5 AS frontend
 
