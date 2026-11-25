@@ -3,4 +3,4 @@
 NAME = "actionlint"
 REF = "/dagger/actionlint"
 PIN = None
-CORE_DIGEST = "sha256:6b6c03a2af52ab8825fb72723ebdf5e501f6cf7411e76081507dee008171d4ed"
+CORE_DIGEST = "sha256:6d9f6dcba9f8e659cf25babf5eb24a7764ee0ca833be7cd5b3debe07bc5910a8"
