@@ -869,16 +869,15 @@ frontend-build:
 # ── CLI (Safari history export) ────────────────────────────────────────────────
 
 # Where the dedicated virtualenv lives. It is dedicated, rather than shared or run
-# through uvx, because Full Disk Access is granted to the interpreter behind the
-# console script — see cli/README.md. Anything else would extend that grant to every
-# script the same interpreter runs.
+# through uvx, to keep a stable local interpreter for any direct Full Disk Access
+# grant. Access may instead be attributed to the launcher — see cli/README.md.
 cli_home := join(env('HOME'), "Library/Application Support/safari-history-export")
-cli_venv := join(cli_home, "venv")
-cli_bin := join(cli_venv, "bin/export-safari-history")
+cli_venv := join(justfile_directory(), "cli/.venv")
+cli_python := join(cli_venv, "bin/python3")
 cli_label := "com.ryandens.safari-history-export"
 cli_plist := join(env('HOME'), "Library/LaunchAgents", cli_label + ".plist")
 
-# Install the exporter into its own virtualenv, then print the path to grant FDA to
+# Install this checkout editably into a local virtualenv and show access guidance
 cli-install:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -888,41 +887,52 @@ cli-install:
     # version, and the install fails several steps later on requires-python with a
     # message that never mentions the pin.
     version="$(cat .python-version)"
-    if ! interpreter="$(uv python find "$version" 2>/dev/null)"; then
+    if ! interpreter="$(uv python find --no-config --no-project --system "$version" 2>/dev/null)"; then
         echo "error: no Python $version found — install one with 'uv python install $version'" >&2
         exit 1
     fi
 
     # --copies gives the virtualenv its own copy of the python binary at a stable path
     # nothing else uses. A symlinked venv would point Full Disk Access back at the
-    # shared interpreter it was created from, which is the thing this avoids.
-    "$interpreter" -m venv --copies "{{ cli_venv }}"
+    # shared interpreter it was created from. This does not narrow a launcher grant.
+    # Reuse the binary so package updates do not invalidate its privacy grant.
+    if [ ! -x "{{ cli_venv }}/bin/python" ]; then
+        "$interpreter" -m venv --copies "{{ cli_venv }}"
+    fi
+    "{{ cli_venv }}/bin/python" -c '
+    import pathlib, sys
+    expected = sys.argv[1]
+    actual = f"{sys.version_info.major}.{sys.version_info.minor}"
+    if actual != expected or pathlib.Path(sys.executable).is_symlink():
+        sys.exit("error: recreate cli/.venv with the pinned Python and --copies, then renew Full Disk Access")
+    ' "$version"
     sfw "{{ cli_venv }}/bin/pip" install --quiet --upgrade pip
-    sfw "{{ cli_venv }}/bin/pip" install --quiet --upgrade ./cli
+    sfw "{{ cli_venv }}/bin/pip" install --quiet --upgrade --editable ./cli
 
-    # The virtualenv holds a Full Disk Access grant; anything that can write into it
-    # can run code under that grant.
-    chmod -R go-rwx "{{ cli_home }}"
+    # If the interpreter holds a Full Disk Access grant, code installed here can
+    # use it. A launcher grant can also authorize other commands it runs.
+    chmod -R go-rwx "{{ cli_venv }}"
 
     echo
-    echo "installed: {{ cli_bin }}"
+    echo "installed: {{ cli_python }} -m safari_history"
     echo
-    "{{ cli_bin }}" status || true
+    "{{ cli_python }}" -m safari_history status || true
     echo
-    echo "Grant Full Disk Access to the interpreter printed above:"
-    echo "  System Settings → Privacy & Security → Full Disk Access → + (⌘⇧G to paste)"
+    echo "Check Full Disk Access for Rex Server or your terminal app first:"
+    echo "  System Settings → Privacy & Security → Full Disk Access"
+    echo "  Run just cli-status from the same launcher; see cli/README.md."
 
 # Show configuration, permissions, and pending work
 cli-status:
-    "{{ cli_bin }}" status
+    "{{ cli_python }}" -m safari_history status
 
 # Export and upload; pass a date to do one specific day (e.g. `just cli-run 2026-07-29`)
 cli-run *args:
-    "{{ cli_bin }}" {{ args }}
+    "{{ cli_python }}" -m safari_history {{ args }}
 
 # Retry pending uploads without reading Safari's protected database
 cli-upload *args:
-    "{{ cli_bin }}" upload {{ args }}
+    "{{ cli_python }}" -m safari_history upload {{ args }}
 
 # Remove a legacy LaunchAgent, preserving the CLI, state, and exported CSVs
 cli-uninstall-agent:
@@ -932,11 +942,11 @@ cli-uninstall-agent:
     rm -f "{{ cli_plist }}"
     echo "unloaded {{ cli_label }}"
 
-# Remove the LaunchAgent, the virtualenv, and the state (exported CSVs are kept)
+# Remove the local virtualenv and legacy installation/state (exported CSVs are kept)
 cli-uninstall: cli-uninstall-agent
     #!/usr/bin/env bash
     set -euo pipefail
-    rm -rf "{{ cli_home }}"
+    rm -rf "{{ cli_venv }}" "{{ cli_home }}"
     rm -f "$HOME/Library/Logs/safari-history-export.log" \
           "$HOME/Library/Logs/safari-history-export.error.log"
     echo "removed {{ cli_home }}"

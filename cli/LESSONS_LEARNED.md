@@ -172,21 +172,28 @@ successfully return zero rows even though browsing occurred.
 The exporter no longer opens Safari or attempts to force history synchronization.
 Empty and stale days are deferred, and empty payloads are never sent to the server.
 
-## Full Disk Access belongs to an exact executable
+## Full Disk Access depends on the responsible code
 
-macOS privacy protection is more specific than ordinary Unix permissions.
+macOS privacy protection is more specific than ordinary Unix permissions, and access
+can be attributed to the app launching a command rather than its Python interpreter.
 
-- Grant Full Disk Access to the dedicated virtual environment's exact versioned Python
-  executable, not the console script, an unversioned launcher, Terminal, or a shared
-  interpreter.
-- A command working from one execution context does not prove it will work under
-  `launchd`, and the reverse is also true. Test the same path and context used in
-  production.
-- Recreating the virtual environment can replace the executable and invalidate its
-  privacy grant. To deploy package-only changes, reinstall the local package into the
-  existing environment without replacing the interpreter.
-- Temporary diagnostics that need protected history must also use the exact granted
-  executable. A neighboring `python` symlink may still be denied.
+- During debugging, Python's Full Disk Access toggle was enabled but Safari access
+  was denied. The privacy logs identified Rex Server as responsible; enabling Rex
+  Server's grant resolved the denial.
+- When Rex Server or a terminal app authorizes access, Python generally needs no
+  separate grant. Disable the Python entry and verify `just cli-status` still reports
+  `database: readable` from the same launcher before treating that entry as redundant.
+- A copied interpreter does not isolate the exporter's access when the launcher's
+  broader grant is what authorizes it. Other commands launched by that app can also
+  receive access.
+- When an interpreter-specific grant is needed, use the exact binary invoked by the
+  recipes (`cli/.venv/bin/python3`), not the console script or a shared interpreter.
+  Recreating the environment may invalidate that grant; package-only updates reuse
+  the existing binary.
+- Test the actual execution context. Success from Rex, Warp, or another terminal
+  does not establish access under `launchd` or a different launcher.
+
+See [Full Disk Access](README.md#full-disk-access) for the current setup procedure.
 
 ## LaunchAgent configuration is a snapshot
 

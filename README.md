@@ -84,12 +84,15 @@ uv lock                        # Refresh the shared lock after manifest edits
 
 The existing `just` recipes select the appropriate member. Member-specific syncs
 can remove packages used only by the other member; use `--all-packages` when working
-on both together. Commit the root lockfile with dependency changes. Old
-`backend/.venv` and `cli/.venv` directories can be removed after migrating.
+on both together. Commit the root lockfile with dependency changes. The old
+`backend/.venv` can be removed after migrating; keep `cli/.venv` when using the
+manual export recipes below.
 
 The Docker image installs only backend runtime dependencies. `just cli-install`
-still creates a dedicated environment with a copied interpreter for macOS Full
-Disk Access; do not grant that permission to the shared development environment.
+still creates a dedicated environment with a copied interpreter. Full Disk Access
+may come from the launcher, such as Rex Server or your terminal app; a separate Python
+grant is generally unnecessary in that case. Avoid granting access directly to the
+shared development interpreter. See [the CLI guidance](cli/README.md#full-disk-access).
 
 ## Setup
 
@@ -394,16 +397,17 @@ Run it manually to catch up through yesterday. Private Browsing is never exporte
 Safari does not record it.
 
 ```sh
-just cli-install         # install into its own virtualenv, then grant Full Disk Access
+just cli-install         # install into its own virtualenv; see access guidance below
 just cli-run             # export and upload through yesterday
 just cli-upload          # retry pending uploads without reading Safari
 just cli-status          # configuration, permissions, pending work
 ```
 
-Reading `~/Library/Safari/History.db` requires Full Disk Access, which is granted to the
-interpreter rather than to the script. That is why this installs into a dedicated
-virtualenv instead of running through `uvx` — see [cli/README.md](cli/README.md) for the
-full explanation, configuration, and troubleshooting.
+Reading `~/Library/Safari/History.db` requires Full Disk Access. macOS may attribute
+access to Rex Server or the terminal app launching the command; when that app’s grant
+authorizes access, Python generally needs no separate grant. Verify with
+`just cli-status` from the launcher you use. See [cli/README.md](cli/README.md) for
+configuration, access guidance, and troubleshooting.
 
 ## Deployment
 

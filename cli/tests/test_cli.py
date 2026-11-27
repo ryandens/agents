@@ -381,12 +381,12 @@ def test_a_denied_database_exits_three(workspace, uploads, monkeypatch, capsys) 
 # --- Status ---
 
 
-def test_status_names_the_interpreter_to_grant(workspace, capsys) -> None:
+def test_status_names_interpreter_and_launcher_access(workspace, capsys) -> None:
     import sys
 
     assert run(workspace, "status") == 0
     output = capsys.readouterr().out
-    assert "needs Full Disk Access" in output
+    assert "Full Disk Access may come from Rex Server or your terminal app" in output
     assert str(Path(sys.executable).resolve()) in output
 
 

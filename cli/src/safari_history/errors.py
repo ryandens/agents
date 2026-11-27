@@ -33,25 +33,23 @@ class FullDiskAccessRequired(SafariHistoryError):
 
     @classmethod
     def for_path(cls, path: Path) -> FullDiskAccessRequired:
-        # The grant is keyed to the executable that opens the file. For a Python
-        # program that executable is the interpreter, not the script — naming the
-        # script here would send someone to add a file macOS ignores.
+        # TCC may attribute access to the launcher rather than the interpreter.
         interpreter = Path(sys.executable).resolve()
         return cls(
             f"cannot read {path}: permission denied by macOS privacy protection (TCC).\n"
             "\n"
-            "Safari's history is protected by Full Disk Access, which ordinary file\n"
-            "permissions do not satisfy. Grant it to the interpreter running this tool:\n"
+            "Safari's history requires Full Disk Access. macOS may attribute access to\n"
+            "the launcher (Rex Server or your terminal app), rather than Python.\n"
             "\n"
             "  1. System Settings -> Privacy & Security -> Full Disk Access\n"
-            "  2. Click +, press Cmd-Shift-G, and enter:\n"
-            f"       {interpreter}\n"
-            "  3. Make sure its toggle is on, then run this command again.\n"
+            "  2. Enable the responsible launcher; restart it if requested.\n"
+            "  3. Run status from that same launcher and check for database: readable.\n"
             "\n"
-            "That path should be this tool's own dedicated virtualenv. If it points at a\n"
-            "shared interpreter (Homebrew, python.org, /usr/bin/python3, or a uv cache),\n"
-            "granting it would give every script run by that interpreter the same access\n"
-            "-- see `export-safari-history status` and the install section of the README."
+            "If the launcher's grant authorizes access, Python generally needs no separate\n"
+            "grant. If access is attributed to Python itself, use this interpreter:\n"
+            f"  {interpreter}\n"
+            "Avoid granting access to a shared interpreter: every script it runs can use\n"
+            "that access. See the Full Disk Access section of cli/README.md."
         )
 
 
