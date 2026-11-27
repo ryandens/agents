@@ -30,14 +30,14 @@ Days before the start date are still reachable by naming them: `export-safari-hi
   history database at all, so there is nothing here to filter and no way for this tool
   to leak them.
 - **No administrator privileges.** Everything installs under your home directory.
-- **One grant.** Full Disk Access goes to a dedicated interpreter this tool owns — see
-  [Full Disk Access](#full-disk-access), which is the only fiddly part of the setup.
+- **Full Disk Access depends on the launcher.** macOS may attribute access to Rex Server
+  or your terminal app. See [Full Disk Access](#full-disk-access) for setup and verification.
 
 ## How it works
 
 ```
 just cli-run (on demand)
-  └── ~/Library/Application Support/safari-history-export/venv/bin/export-safari-history
+  └── cli/.venv/bin/python3 -m safari_history
         ├── 1. copy  ~/Library/Safari/History.db (+ -wal, -shm) to a temp dir   ← needs FDA
         ├── 2. query history_visits ⋈ history_items for one local day
         ├── 3. write ~/Safari-History-Exports/Safari History - YYYY-MM-DD.csv   (atomic)
@@ -85,36 +85,40 @@ Requires macOS and Python 3.15+. From the repo root:
 just cli-install
 ```
 
-That is the whole install. It creates a dedicated virtualenv at
-`~/Library/Application Support/safari-history-export/venv` and installs this package
-into it, giving you `.../venv/bin/export-safari-history`.
+This creates a dedicated virtualenv at `cli/.venv` in this checkout and installs
+the package editably. `just cli-run`, `just cli-upload`, and `just cli-status` use
+that environment and the current source, so Python edits need no reinstall.
+Re-run `just cli-install` after dependency changes; it preserves the interpreter
+binary and any interpreter-specific Full Disk Access grant. The state and CSV locations
+are unchanged.
 
 The equivalent by hand:
 
 ```sh
-VENV="$HOME/Library/Application Support/safari-history-export/venv"
-python3 -m venv --copies "$VENV"
-"$VENV/bin/pip" install --upgrade ./cli
+VENV="$PWD/cli/.venv"
+# Create once; reuse this interpreter on subsequent package installs.
+"$(uv python find --no-config --no-project --system "$(cat .python-version)")" -m venv --copies "$VENV"
+"$VENV/bin/pip" install --upgrade --editable ./cli
 ```
 
-`--copies` matters, and is the reason this is not a `uvx` one-liner. It gives the
-virtualenv its own copy of the Python binary at a stable path that nothing else uses,
-which is the thing that receives Full Disk Access below. See
+`--copies` gives the virtualenv its own Python binary at a stable path. This is
+useful when macOS attributes access to the interpreter itself; it does not isolate
+access granted through Rex Server or a terminal app. See
 [Why a dedicated virtualenv](#why-a-dedicated-virtualenv).
 
 ### uvx
 
-`uvx` is fine for the subcommands that do not touch Safari's database:
+`uvx` can run the CLI without installing it into this checkout:
 
 ```sh
 uvx --from ./cli export-safari-history upload
 uvx --from ./cli export-safari-history status
 ```
 
-Use the dedicated virtualenv for exports, because `uvx` runs your code with a
-shared interpreter from uv's cache — a path that changes when the Python version does,
-and that every other `uvx` tool also runs under. Granting Full Disk Access there would
-hand it to all of them, and the grant would break on the next Python upgrade.
+Exports still require Full Disk Access in the execution context used. An authorized
+launcher may provide that access, but avoid granting it directly to uv's shared cache
+interpreter: other tools use that interpreter, and its path can change on upgrades.
+The Just recipes use the dedicated editable environment for a stable local setup.
 
 ## Full Disk Access
 
@@ -126,48 +130,57 @@ $ sqlite3 ~/Library/Safari/History.db "select count(*) from history_items"
 Error: unable to open database "…/History.db": authorization denied
 ```
 
-The grant is keyed to **the executable that opens the file**. For a Python program that
-executable is the interpreter, not the script — adding `export-safari-history` to the
-Full Disk Access list does nothing at all, because macOS never sees that path.
+macOS attributes access to the **responsible code**, which can be the app that
+launched the command rather than Python itself. Apple describes this attribution in
+[On File System Permissions](https://developer.apple.com/forums/thread/678819).
+For commands launched through Rex, the chain is typically:
 
-Grant it to this tool's own interpreter:
-
-```sh
-"$HOME/Library/Application Support/safari-history-export/venv/bin/export-safari-history" status
-# interpreter (needs Full Disk Access): /Users/you/Library/Application Support/safari-history-export/venv/bin/python3.15
+```text
+Rex Server → shell → just → Python → Safari History.db
 ```
 
-1. **System Settings → Privacy & Security → Full Disk Access**
-2. Click **+**, press **⌘⇧G**, and paste the path `status` printed.
-3. Make sure the toggle is on.
+During debugging on this machine, macOS attributed the denied access to **Rex Server**.
+Enabling Python's grant alone did not resolve it; enabling Rex Server's grant did.
+Commands launched from Warp or another terminal can instead use that app's grant.
 
-`status` prints that path precisely so there is no guessing, and warns if it resolves to
-a shared interpreter instead of this tool's own.
+1. Open **System Settings → Privacy & Security → Full Disk Access**.
+2. Enable **Rex Server** when running through Rex, or the terminal app used to run
+   the command. Restart the launcher if macOS requests it.
+3. Run `just cli-status` from that same launcher and check for `database: readable`.
+
+If the launcher's grant authorizes access, Python generally needs no separate grant.
+To verify, disable the Python entry and run `just cli-status` again from the same
+launcher. If it still reports `readable`, the Python entry is redundant. Test each
+execution context you use; success in a terminal does not establish access under
+`launchd` or another launcher.
+
+If macOS attributes access to Python itself, grant the exact interpreter used by the
+Just recipes: `cli/.venv/bin/python3`. Click **+**, press **⌘⇧G**, and paste its absolute
+path. Choose `python3`; the picker may disable the versioned `python3.15` file.
+Adding the `export-safari-history` script does not identify the Python interpreter.
+
+`just cli-status` prints the interpreter path and checks database readability. It does
+not identify the responsible app or establish that a separate Python grant is required.
 
 ### Why a dedicated virtualenv
 
-Full Disk Access on an interpreter extends to every script that interpreter runs. Granted
-to `/opt/homebrew/bin/python3.15`, `/usr/bin/python3`, or a `uvx` cache binary, any
-Python script anyone runs — including one downloaded and executed by mistake — inherits
-the ability to read every file on the machine, silently. That is the same objection as
-granting it to `/bin/zsh`.
+The dedicated environment provides a stable interpreter and an editable install of
+this checkout. When access is granted directly to that interpreter, a copied binary
+avoids granting it to a shared system or uv interpreter. Any code run by the granted
+interpreter can use its access; the grant is not limited to this exporter.
 
-A `--copies` virtualenv gives this tool a private copy of the interpreter binary at a
-path nothing else uses, so the grant covers this one program. It is a real reduction in
-blast radius, and it is the best available in Python.
-
-It is not as tight as a compiled, signed binary would be, and the difference is worth
-being explicit about: anything that can write into that virtualenv — your user account,
-without a password prompt — can run code under the grant. A compiled executable's grant
-is bound to its code signature, so modifying the binary invalidates the grant instead of
-inheriting it. If that difference matters more than staying in Python, a small Swift
-executable is the stronger option.
+When Rex Server or a terminal app supplies Full Disk Access, the dedicated Python copy
+does **not** narrow that app's permission. Other commands launched by the authorized
+app can also receive access. Choose the launcher you intend to trust with that access.
 
 Keep the virtualenv's permissions tight (`just cli-install` does this):
 
 ```sh
-chmod -R go-rwx "$HOME/Library/Application Support/safari-history-export"
+chmod -R go-rwx cli/.venv
 ```
+
+This limits other users' ability to modify the environment. It does not restrict
+commands launched by an app with Full Disk Access, or code run by your own account.
 
 ## Configure
 
@@ -195,13 +208,13 @@ against another service the same account can reach.
 ## Test it
 
 ```sh
-CLI="$HOME/Library/Application Support/safari-history-export/venv/bin/export-safari-history"
+CLI="$PWD/cli/.venv/bin/python3"
 
-"$CLI" status                          # config, permissions, pending work
-"$CLI" 2026-07-29 --no-upload          # export one day, write no network traffic
-"$CLI" upload --dry-run                # what would be sent, without sending
-"$CLI" 2026-07-29                      # export and upload one day
-"$CLI"                                 # catch up through yesterday
+"$CLI" -m safari_history status                          # config, permissions, pending work
+"$CLI" -m safari_history 2026-07-29 --no-upload          # export one day, write no network traffic
+"$CLI" -m safari_history upload --dry-run                # what would be sent, without sending
+"$CLI" -m safari_history 2026-07-29                      # export and upload one day
+"$CLI" -m safari_history               # catch up through yesterday
 ```
 
 Exporting an explicit date never moves the catch-up high-water mark, so re-exporting last
@@ -265,23 +278,25 @@ Or by hand:
 ```sh
 launchctl bootout "gui/$(id -u)/com.ryandens.safari-history-export"
 rm ~/Library/LaunchAgents/com.ryandens.safari-history-export.plist
-rm -rf "$HOME/Library/Application Support/safari-history-export"     # venv + state
+rm -rf cli/.venv
+rm -rf "$HOME/Library/Application Support/safari-history-export"     # legacy install + state
 rm -f ~/Library/Logs/safari-history-export*.log
 ```
 
-Then remove the Full Disk Access entry: **System Settings → Privacy & Security → Full
-Disk Access**, select the interpreter, click **−**. macOS keeps the grant keyed to the
-path, so deleting the virtualenv without removing the entry leaves a stale grant that a
-future virtualenv at the same path would inherit.
+Remove any exporter-specific Python Full Disk Access entry in **System Settings →
+Privacy & Security → Full Disk Access**. Review a Rex Server or terminal app grant
+separately: it may also be used by other commands.
 
 Exported CSVs in `~/Safari-History-Exports/` are left alone; delete them yourself.
 
 ## Troubleshooting
 
 **`permission denied by macOS privacy protection (TCC)` (exit 3)**
-The interpreter has no Full Disk Access. Run `status`, and add exactly the path it
-prints. If it is already listed and enabled, remove the entry with **−** and add it
-again — reinstalling the virtualenv replaces the binary the grant was keyed to.
+macOS denied access in the current execution context. Follow
+[Full Disk Access](#full-disk-access): check the responsible launcher (Rex Server or
+your terminal app) before adding a Python grant. Run `just cli-status` from the same
+launcher to verify access. If an interpreter-specific grant stopped working after
+recreating the virtualenv, remove that Python entry and add the current binary again.
 
 **`no Safari history database` (exit 4)**
 Safari has not been used on this account, or the path differs — pass `--database`. macOS

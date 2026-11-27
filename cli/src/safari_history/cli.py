@@ -392,11 +392,13 @@ def command_upload(args: argparse.Namespace) -> int:
 
 def command_status(args: argparse.Namespace) -> int:
     interpreter = Path(sys.executable).resolve()
-    print(f"interpreter (needs Full Disk Access): {interpreter}")
+    print(f"interpreter: {interpreter}")
+    print(
+        "  Full Disk Access may come from Rex Server or your terminal app; see the README."
+    )
 
-    # The whole point of the dedicated virtualenv is that this specific interpreter is
-    # the only thing holding the grant. If it is a shared one, the grant would extend to
-    # every script anyone runs with it, which is worth saying out loud.
+    # A direct interpreter grant covers every script it runs. Launcher-provided
+    # access is broader and is not narrowed by a dedicated virtualenv.
     shared_markers = ("/usr/bin/", "/opt/homebrew/", "/usr/local/", "/.pyenv/", "/uv/")
     if any(marker in str(interpreter) for marker in shared_markers):
         print(

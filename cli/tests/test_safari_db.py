@@ -178,7 +178,7 @@ def test_a_missing_database_says_so(tmp_path: Path) -> None:
 
 
 def test_a_denied_read_names_full_disk_access(tmp_path: Path, monkeypatch) -> None:
-    """The message has to name the interpreter, not the script — TCC keys on the binary."""
+    """Explain launcher attribution before suggesting an interpreter grant."""
     database = tmp_path / "History.db"
     database.write_bytes(b"")
 
@@ -197,6 +197,8 @@ def test_a_denied_read_names_full_disk_access(tmp_path: Path, monkeypatch) -> No
     assert caught.value.exit_code == 3
     assert "Full Disk Access" in caught.value.message
     assert "System Settings" in caught.value.message
+    assert "Rex Server or your terminal app" in caught.value.message
+    assert "Python generally needs no separate" in caught.value.message
 
 
 def test_a_file_that_is_not_a_database_says_so(tmp_path: Path) -> None:
