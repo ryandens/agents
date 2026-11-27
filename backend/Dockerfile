@@ -45,7 +45,7 @@ RUN --mount=type=cache,id=agents-nextjs-build,target=/src/.next/cache,sharing=lo
 
 
 # Build with the same Python minor and distribution as the runtime image.
-FROM cgr.dev/chainguard/python:latest-dev@sha256:768ee36ee9f4b8c882634c07d0b889425bc8e100886a3f742b83b1c647cc2d4b AS builder
+FROM cgr.dev/chainguard/python:latest-dev@sha256:08141c5166ee89eac4b79d1ab4dc284c1796b5f264d66f0675742819ac511655 AS builder
 
 USER root
 COPY --from=ghcr.io/astral-sh/uv:0.13.10@sha256:a3ea1357342c1a4bf9a0c53a3deb1b55379aefa037338d8113d5771efa01774f /uv /usr/local/bin/uv
@@ -68,7 +68,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     awk '{print $1}' /tmp/sfw-checksums | grep -Fx "$checksum" && \
     sfw uv sync --locked --package agents --no-dev --no-install-workspace
 
-FROM cgr.dev/chainguard/python:latest@sha256:f522a16f34c8aa60f831e6476e396ef3951830a1b9059d19bc531a544d0f1579
+FROM cgr.dev/chainguard/python:latest@sha256:884deb80d867bc984df53f9f2e2a205b9c2922c53ec992fcbeeb1ad7aad711c3
 
 WORKDIR /app
 
