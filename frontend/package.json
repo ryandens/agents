@@ -11,8 +11,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@ai-sdk/react": "^4.0.188",
-    "ai": "^7.0.183",
+    "@ai-sdk/react": "^4.0.189",
+    "ai": "^7.0.184",
     "next": "16.4.6",
     "react": "19.3.1",
     "react-dom": "19.3.1"
